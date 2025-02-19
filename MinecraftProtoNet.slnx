@@ -1,0 +1,4 @@
+﻿<Solution>
+  <Project Path="Bot\Bot.csproj" Type="Classic C#" />
+  <Project Path="MinecraftProtoNet\MinecraftProtoNet.csproj" Type="Classic C#" />
+</Solution>
