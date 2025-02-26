@@ -18,7 +18,8 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
     public async Task ConnectAsync(string host, int port)
     {
-        AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{State.ToString()}[/]");
+        AnsiConsole.MarkupLine(
+            $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{State.ToString()}[/]");
 
         await connection.ConnectAsync(host, port);
 
@@ -30,7 +31,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             ProtocolVersion = 769, //ProtocolVersion, // Automate the protocol version from Status response.
             ServerAddress = host,
             ServerPort = (ushort)port,
-            NextState = intention // This should be intention dependant by the caller
+            NextState = intention // TODO: This should be intention dependant by the caller
         };
         await SendPacketAsync(handshakePacket);
         State = intention switch
@@ -40,16 +41,17 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             _ => ProtocolState.Transfer
         };
 
-        AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{State.ToString()}[/]");
+        AnsiConsole.MarkupLine(
+            $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{State.ToString()}[/]");
 
         switch (State)
         {
             case ProtocolState.Status:
                 await SendPacketAsync(new StatusRequestPacket());
                 break;
-            case ProtocolState.Login:
+            case ProtocolState.Login: // TODO: MSAL requires abstracting
                 await SendPacketAsync(new LoginStartPacket
-                    { Username = "JeffMaxxing", Uuid = new Guid("6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0") });
+                    { Username = "MyNameDave", Uuid = new Guid("6f29c8b4-f0e7-40a3-a432-2ce0b97cebf0") });
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
@@ -81,9 +83,10 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                 await packetService.HandlePacketAsync(packet, this);
             }
         }
-        catch (EndOfStreamException)
+        catch (EndOfStreamException ex)
         {
             AnsiConsole.MarkupLine("\n[deepskyblue1]Connection closed by server.[/]");
+            AnsiConsole.WriteException(ex);
         }
         catch (IOException ex) when (ex.InnerException is SocketException
                                      {
@@ -91,10 +94,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                                      })
         {
             AnsiConsole.MarkupLine("[deepskyblue1]Connection forcibly closed by the remote host.[/]");
+            AnsiConsole.WriteException(ex);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             AnsiConsole.MarkupLine("[red]Listening for packets cancelled.[/]");
+            AnsiConsole.WriteException(ex);
         }
         catch (Exception ex)
         {

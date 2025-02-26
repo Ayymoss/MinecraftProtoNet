@@ -12,7 +12,8 @@ public class PingRequestPacket : Packet
 
     public override void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(PacketId);
+        base.Serialize(ref buffer);
+
         var payloadBytes = BitConverter.GetBytes(Payload);
         if (BitConverter.IsLittleEndian) Array.Reverse(payloadBytes);
         buffer.WriteBuffer(payloadBytes);

@@ -8,9 +8,4 @@ public class LoginAcknowledgedPacket : Packet
 {
     public override int PacketId => 0x03;
     public override PacketDirection Direction => PacketDirection.Serverbound;
-
-    public override void Serialize(ref PacketBufferWriter buffer)
-    {
-        buffer.WriteVarInt(PacketId);
-    }
 }

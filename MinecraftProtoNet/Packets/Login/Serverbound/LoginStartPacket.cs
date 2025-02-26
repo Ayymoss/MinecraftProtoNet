@@ -14,7 +14,8 @@ public class LoginStartPacket : Packet
 
     public override void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(PacketId);
+        base.Serialize(ref buffer);
+
         buffer.WriteString(Username);
 
         if (Uuid.HasValue)

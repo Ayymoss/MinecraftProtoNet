@@ -39,4 +39,16 @@ public static class DataTypeHelper
             } while (value != 0);
         }
     }
+
+    /// <summary>
+    /// Used for internal packet namespaces. Will not work for other namespaces.
+    /// </summary>
+    /// <param name="fullname"></param>
+    /// <returns></returns>
+    public static string NamespaceToPrettyString(this string fullname)
+    {
+        var parts = fullname.Split('.');
+        if (parts.Length < 5) return fullname;
+        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/][cyan]{parts[4]}[/][white]]][/]";
+    }
 }

@@ -15,7 +15,8 @@ public class HandshakePacket : Packet
 
     public override void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(PacketId);
+        base.Serialize(ref buffer);
+
         buffer.WriteVarInt(ProtocolVersion);
         buffer.WriteString(ServerAddress);
         buffer.WriteUnsignedShort(ServerPort);

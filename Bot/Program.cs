@@ -17,7 +17,7 @@ public static class Program
 
         var client = serviceProvider.GetRequiredService<IMinecraftClient>();
 
-        await client.ConnectAsync("10.10.1.20", 25565);
+        await client.ConnectAsync("10.10.1.20", 25555);
 
         //Console.WriteLine("Press Enter to disconnect...");
         Console.ReadKey();

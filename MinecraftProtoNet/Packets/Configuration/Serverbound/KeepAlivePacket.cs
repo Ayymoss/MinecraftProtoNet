@@ -13,7 +13,7 @@ public class KeepAlivePacket : Packet
 
     public override void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(PacketId);
+        base.Serialize(ref buffer);
         buffer.WriteSignedLong(Payload);
     }
 }

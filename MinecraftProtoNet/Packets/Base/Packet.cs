@@ -12,7 +12,12 @@ public abstract class Packet : IIncomingPacket, IOutgoingPacket
     {
     }
 
+    /// <summary>
+    /// Requires calling base at the START of the method for PacketId serialisation.
+    /// </summary>
+    /// <param name="buffer"></param>
     public virtual void Serialize(ref PacketBufferWriter buffer)
     {
+        buffer.WriteVarInt(PacketId);
     }
 }

@@ -1,0 +1,12 @@
+﻿using MinecraftProtoNet.NBT.Tags;
+
+namespace MinecraftProtoNet.Models.World.Meta;
+
+public readonly struct ChunkBlockEntity(byte x, short y, byte z, int type, NbtTag nbt)
+{
+    public byte X { get; } = x;
+    public short Y { get; } = y;
+    public byte Z { get; } = z;
+    public int Type { get; } = type;
+    public NbtTag Nbt { get; } = nbt;
+}

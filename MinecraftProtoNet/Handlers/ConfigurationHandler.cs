@@ -38,7 +38,14 @@ namespace MinecraftProtoNet.Handlers
                 case FinishConfigurationPacket finishConfigurationPacket:
                     await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
                     client.State = ProtocolState.Play;
-                    AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");
+                    AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");
+                    break;
+                case RegistryDataPacket registryDataPacket:
+                    Console.WriteLine($"Received {registryDataPacket.Tags.Count} NBT tags");
+
+                    break;
+                case UpdateTagsPacket updateTagsPacket:
+                    Console.WriteLine($"Received {updateTagsPacket.Tags.Count} update tags");
                     break;
             }
         }

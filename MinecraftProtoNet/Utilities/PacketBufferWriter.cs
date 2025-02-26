@@ -184,4 +184,18 @@ public ref struct PacketBufferWriter
     {
         return _buffer[.._writePosition].ToArray();
     }
+
+    public void WriteFloat(float value)
+    {
+        EnsureCapacity(sizeof(float));
+        BinaryPrimitives.WriteSingleBigEndian(_buffer[_writePosition..], value);
+        _writePosition += sizeof(float);
+    }
+
+    public void WriteDouble(double value)
+    {
+        EnsureCapacity(sizeof(double));
+        BinaryPrimitives.WriteDoubleBigEndian(_buffer[_writePosition..], value);
+        _writePosition += sizeof(double);
+    }
 }

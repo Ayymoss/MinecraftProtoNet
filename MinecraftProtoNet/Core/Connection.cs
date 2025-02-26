@@ -9,6 +9,7 @@ namespace MinecraftProtoNet.Core;
 
 public class Connection : IDisposable
 {
+    public const bool Debug = false;
     private readonly TcpClient _client = new();
     private NetworkStream? _stream;
 
@@ -53,10 +54,13 @@ public class Connection : IDisposable
         }
 
         // Debug
-        AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [blue][[->CLIENT]][/] [white]BYTES:[/] {BitConverter.ToString(packetData)}");
-        var bytesAsString = Regex.Replace(Encoding.UTF8.GetString(packetData), @"\p{C}+", " ");
-        AnsiConsole.Markup("[grey][[DEBUG]][/] [blue][[->CLIENT]][/] [white]AS STRING:[/] ");
-        AnsiConsole.WriteLine(bytesAsString);
+        if (Debug)
+        {
+            AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [blue][[->CLIENT]][/] [white]BYTES:[/] {BitConverter.ToString(packetData)}");
+            var bytesAsString = Regex.Replace(Encoding.UTF8.GetString(packetData), @"\p{C}+", " ");
+            AnsiConsole.Markup("[grey][[DEBUG]][/] [blue][[->CLIENT]][/] [white]AS STRING:[/] ");
+            AnsiConsole.WriteLine(bytesAsString);
+        }
         // Debug
 
         return packetData;
@@ -92,13 +96,22 @@ public class Connection : IDisposable
         DataTypeHelper.VarInt.Write(lengthBytes, packetData.Length, out var varIntLength); // Get VarInt length
 
         // Debug
-        var fullPacket = new byte[varIntLength + packetData.Length];
-        Array.Copy(lengthBytes, 0, fullPacket, 0, varIntLength);
-        Array.Copy(packetData, 0, fullPacket, varIntLength, packetData.Length);
-        AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [green][[->SERVER]][/] [cyan][[{packet.GetType().Name}]][/] [white]BYTES:[/] {BitConverter.ToString(fullPacket)}"); // Debugging
-        var bytesAsString = Regex.Replace(Encoding.UTF8.GetString(fullPacket), @"\p{C}+", " ");
-        AnsiConsole.Markup($"[grey][[DEBUG]][/] [green][[->SERVER]][/] [cyan][[{packet.GetType().Name}]][/] [white]AS STRING:[/] ");
-        AnsiConsole.WriteLine(bytesAsString);
+        if (Debug)
+        {
+            var fullPacket = new byte[varIntLength + packetData.Length];
+            Array.Copy(lengthBytes, 0, fullPacket, 0, varIntLength);
+            Array.Copy(packetData, 0, fullPacket, varIntLength, packetData.Length);
+            AnsiConsole.MarkupLine(
+                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} [white]BYTES:[/] {BitConverter.ToString(fullPacket)}"); // Debugging
+            var bytesAsString = Regex.Replace(Encoding.UTF8.GetString(fullPacket), @"\p{C}+", " ");
+            AnsiConsole.Markup(
+                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} [white]AS STRING:[/] ");
+            AnsiConsole.WriteLine(bytesAsString);
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
+        }
         // Debug
 
         await _stream.WriteAsync(lengthBytes.AsMemory(0, varIntLength), cancellationToken); // Write VarInt length

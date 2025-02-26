@@ -1,7 +1,10 @@
-﻿using fNbt;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
+using Spectre.Console;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
@@ -11,30 +14,19 @@ public class RegistryDataPacket : Packet
     public override PacketDirection Direction => PacketDirection.Clientbound;
 
     public string RegistryId { get; set; }
-    public List<RegistryEntry> Entries { get; set; }
 
-    
-    // TODO: This packet needs to be revised. The Key is including data that it should not.
+    public Dictionary<string, NbtTag?> Tags { get; set; } = new();
+
     public override void Deserialize(ref PacketBufferReader buffer)
     {
         RegistryId = buffer.ReadString();
-
         var count = buffer.ReadVarInt();
-        Entries = new List<RegistryEntry>(count);
 
         for (var i = 0; i < count; i++)
         {
-            Entries.Add(new RegistryEntry
-            {
-                Key = buffer.ReadString(),
-                //Value = buffer.ReadOptionalNbtTag(readRootTag: false)
-            });
+            var key = buffer.ReadString();
+            var tag = buffer.ReadOptionalNbtTag();
+            Tags.Add(key, tag);
         }
-    }
-
-    public class RegistryEntry
-    {
-        public string Key { get; set; }
-        public NbtTag? Value { get; set; }
     }
 }

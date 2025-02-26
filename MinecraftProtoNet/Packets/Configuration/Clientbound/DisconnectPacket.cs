@@ -14,7 +14,6 @@ public class DisconnectPacket : Packet
 
     public override void Deserialize(ref PacketBufferReader buffer)
     {
-        // TODO: Support full NBT deserialization
         Reason = Encoding.UTF8.GetString(buffer.ReadRestBuffer());
     }
 }

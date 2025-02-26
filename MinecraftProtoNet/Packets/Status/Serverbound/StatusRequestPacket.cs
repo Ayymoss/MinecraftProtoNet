@@ -8,9 +8,4 @@ public class StatusRequestPacket : Packet
 {
     public override int PacketId => 0x00;
     public override PacketDirection Direction => PacketDirection.Serverbound;
-
-    public override void Serialize(ref PacketBufferWriter buffer)
-    {
-        buffer.WriteVarInt(PacketId);
-    }
 }
