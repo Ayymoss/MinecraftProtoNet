@@ -9,7 +9,7 @@ using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
-public class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
+public class MinecraftClient(Connection connection, IPacketService packetService, MinecraftClientState clientState) : IMinecraftClient
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
@@ -111,4 +111,6 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             Environment.Exit(1);
         }
     }
+
+    public MinecraftClientState ClientState => clientState;
 }
