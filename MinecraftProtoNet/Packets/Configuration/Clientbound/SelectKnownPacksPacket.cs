@@ -1,16 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class SelectKnownPacksPacket : Packet
+[Packet(0x0E, ProtocolState.Configuration)]
+public class SelectKnownPacksPacket : IClientPacket
 {
-    public override int PacketId => 0x0E;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
     public Packs[] KnownPacks { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         var count = buffer.ReadVarInt();
         var packs = new Packs[count];

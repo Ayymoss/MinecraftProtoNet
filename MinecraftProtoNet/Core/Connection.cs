@@ -82,7 +82,7 @@ public class Connection : IDisposable
         }
     }
 
-    public async Task SendPacketAsync(IOutgoingPacket packet, CancellationToken cancellationToken = default)
+    public async Task SendPacketAsync(IServerPacket packet, CancellationToken cancellationToken = default)
     {
         if (_stream is null) throw new InvalidOperationException("Not connected.");
 
@@ -110,7 +110,8 @@ public class Connection : IDisposable
         }
         else
         {
-            AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
+            AnsiConsole.MarkupLine(
+                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
         }
         // Debug
 

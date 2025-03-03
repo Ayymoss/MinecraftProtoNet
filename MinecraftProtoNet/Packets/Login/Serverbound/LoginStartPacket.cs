@@ -1,20 +1,21 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Login.Serverbound;
 
-public class LoginStartPacket : Packet
+[Packet(0x00, ProtocolState.Login)]
+public class LoginStartPacket : IServerPacket
 {
-    public override int PacketId => 0x00;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
     [Length(3, 16)] public required string Username { get; set; } = string.Empty;
     public Guid? Uuid { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteString(Username);
 

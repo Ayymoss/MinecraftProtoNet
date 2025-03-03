@@ -1,26 +1,17 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class TickingStepPacket : Packet
+[Packet(0x79, ProtocolState.Play)]
+public class TickingStepPacket : IClientPacket
 {
-    public override int PacketId => 0x79;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
+    public int TickSteps { get; set; }
 
-    public TickingStep Payload { get; set; }
-
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = new TickingStep
-        {
-            TickSteps = buffer.ReadVarInt(),
-        };
-    }
-
-    public class TickingStep
-    {
-        public required int TickSteps { get; set; }
+        TickSteps = buffer.ReadVarInt();
     }
 }

@@ -1,19 +1,18 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class PlayerAbilitiesPacket : Packet
+[Packet(0x3A, ProtocolState.Play)]
+public class PlayerAbilitiesPacket : IClientPacket
 {
-    public override int PacketId => 0x3A;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public AbilityFlag Flag { get; set; }
     public float FlyingSpeed { get; set; }
     public float FieldOfViewerModifier { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         Flag = (AbilityFlag)buffer.ReadUnsignedByte();
         FlyingSpeed = buffer.ReadFloat();

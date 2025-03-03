@@ -1,19 +1,19 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-public class ClientCommandPacket : Packet
+[Packet(0x0A, ProtocolState.Play)]
+public class ClientCommandPacket : IServerPacket
 {
-    public override int PacketId => 0x0A;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
-
     public required Action ActionId { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteVarInt((int)ActionId);
     }

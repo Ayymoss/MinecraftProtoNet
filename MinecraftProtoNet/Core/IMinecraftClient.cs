@@ -9,5 +9,5 @@ public interface IMinecraftClient
     MinecraftClientState ClientState { get; }
     Task ConnectAsync(string host, int port);
     Task DisconnectAsync();
-    Task SendPacketAsync(IOutgoingPacket packet);
+    Task SendPacketAsync(IServerPacket packet);
 }

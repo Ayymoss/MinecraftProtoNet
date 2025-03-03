@@ -21,7 +21,7 @@ namespace MinecraftProtoNet.Handlers
             (ProtocolState.Configuration, 0x0E),
         ];
 
-        public async Task HandleAsync(Packet packet, IMinecraftClient client)
+        public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
         {
             switch (packet)
             {

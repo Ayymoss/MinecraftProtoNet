@@ -1,23 +1,18 @@
-﻿using System.Text;
-using System.Text.RegularExpressions;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
-using Spectre.Console;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class RegistryDataPacket : Packet
+[Packet(0x07, ProtocolState.Configuration)]
+public class RegistryDataPacket : IClientPacket
 {
-    public override int PacketId => 0x07;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public string RegistryId { get; set; }
-
     public Dictionary<string, NbtTag?> Tags { get; set; } = new();
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         RegistryId = buffer.ReadString();
         var count = buffer.ReadVarInt();

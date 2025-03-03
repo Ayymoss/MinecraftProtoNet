@@ -42,17 +42,17 @@ public class PacketService : IPacketService
         }
     }
 
-    public async Task HandlePacketAsync(Packet packet, IMinecraftClient client)
+    public async Task HandlePacketAsync(IClientPacket packet, IMinecraftClient client)
     {
-        if (_handlers.TryGetValue(client.State, out var stateHandlers) && stateHandlers.TryGetValue(packet.PacketId, out var handler))
+        if (_handlers.TryGetValue(client.State, out var stateHandlers) && stateHandlers.TryGetValue(packet.GetPacketId(), out var handler))
         {
             await handler.HandleAsync(packet, client);
         }
     }
 
-    public Packet CreateIncomingPacket(ProtocolState state, int packetId)
+    public IClientPacket CreateIncomingPacket(ProtocolState state, int packetId)
     {
-        Packet packet = state switch
+        IClientPacket packet = state switch
         {
             ProtocolState.Handshaking => packetId switch
             {
@@ -120,7 +120,7 @@ public class PacketService : IPacketService
             AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
                                    $"[red]Unknown packet for state {state} and ID {packetId} (0x{packetId:X2})[/]");
         }
-        else
+        else if (!packet.GetPacketSilentState())
         {
             AnsiConsole.MarkupLine(
                 $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} " +

@@ -1,17 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class UpdateTagsPacket : Packet
+[Packet(0x0D, ProtocolState.Configuration)]
+public class UpdateTagsPacket : IClientPacket
 {
-    public override int PacketId => 0x0D;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public Dictionary<string, Tag[]> Tags { get; set; } = new();
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         var count = buffer.ReadVarInt();
         for (var i = 0; i < count; i++)

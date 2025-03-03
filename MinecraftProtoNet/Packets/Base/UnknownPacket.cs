@@ -1,9 +1,13 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Base;
 
-public class UnknownPacket : Packet
+[Packet(-0x01, ProtocolState.Undefined)]
+public class UnknownPacket : IClientPacket
 {
-    public override int PacketId => -0x01;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
+    public void Deserialize(ref PacketBufferReader buffer)
+    {
+    }
 }

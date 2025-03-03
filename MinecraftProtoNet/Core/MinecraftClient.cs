@@ -64,7 +64,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         connection.Dispose();
     }
 
-    public async Task SendPacketAsync(IOutgoingPacket packet)
+    public async Task SendPacketAsync(IServerPacket packet)
     {
         await connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
     }
@@ -85,7 +85,8 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         }
         catch (EndOfStreamException ex)
         {
-            AnsiConsole.MarkupLine("\n[deepskyblue1]Connection closed by server.[/]");
+            AnsiConsole.MarkupLine(
+                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection closed by server.[/]");
             AnsiConsole.WriteException(ex);
         }
         catch (IOException ex) when (ex.InnerException is SocketException
@@ -93,17 +94,18 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                                          SocketErrorCode: SocketError.ConnectionReset or SocketError.ConnectionAborted
                                      })
         {
-            AnsiConsole.MarkupLine("[deepskyblue1]Connection forcibly closed by the remote host.[/]");
+            AnsiConsole.MarkupLine(
+                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host.[/]");
             AnsiConsole.WriteException(ex);
         }
         catch (OperationCanceledException ex)
         {
-            AnsiConsole.MarkupLine("[red]Listening for packets cancelled.[/]");
+            AnsiConsole.MarkupLine($"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Listening for packets cancelled.[/]");
             AnsiConsole.WriteException(ex);
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine("\n[red]Error while listening for packets:[/]");
+            AnsiConsole.MarkupLine($"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Error while listening for packets:[/]");
             AnsiConsole.WriteException(ex);
         }
         finally

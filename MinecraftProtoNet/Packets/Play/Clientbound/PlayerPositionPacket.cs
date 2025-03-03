@@ -1,22 +1,21 @@
 ﻿using System.Numerics;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class PlayerPositionPacket : Packet
+[Packet(0x42, ProtocolState.Play)]
+public class PlayerPositionPacket : IClientPacket
 {
-    public override int PacketId => 0x42;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public int TeleportId { get; set; }
     public Vector3 Position { get; set; }
     public Vector3 Velocity { get; set; }
     public Vector2 Rotation { get; set; }
     public PositionFlags Flags { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         TeleportId = buffer.ReadVarInt();
 

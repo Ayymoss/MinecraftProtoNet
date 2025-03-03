@@ -1,11 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Status.Serverbound;
 
-public class StatusRequestPacket : Packet
+[Packet(0x00, ProtocolState.Status)]
+public class StatusRequestPacket : IServerPacket
 {
-    public override int PacketId => 0x00;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
+    public void Serialize(ref PacketBufferWriter buffer)
+    {
+        buffer.WriteVarInt(this.GetPacketId());
+    }
 }

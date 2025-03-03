@@ -1,29 +1,20 @@
 ﻿using System.Numerics;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class SetDefaultSpawnPositionPacket : Packet
+[Packet(0x5B, ProtocolState.Play)]
+public class SetDefaultSpawnPositionPacket : IClientPacket
 {
-    public override int PacketId => 0x5B;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
+    public Vector3 Location { get; set; }
+    public float Angle { get; set; }
 
-    public SetDefaultSpawnPosition Payload { get; set; }
-
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = new SetDefaultSpawnPosition
-        {
-            Location = buffer.ReadPosition(),
-            Angle = buffer.ReadFloat()
-        };
-    }
-
-    public class SetDefaultSpawnPosition
-    {
-        public required Vector3 Location { get; set; }
-        public required float Angle { get; set; }
+        Location = buffer.ReadPosition();
+        Angle = buffer.ReadFloat();
     }
 }

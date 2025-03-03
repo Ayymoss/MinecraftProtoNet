@@ -1,19 +1,19 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Serverbound;
 
-public class SelectKnownPacksPacket : Packet
+[Packet(0x07, ProtocolState.Configuration)]
+public class SelectKnownPacksPacket : IServerPacket
 {
-    public override int PacketId => 0x07;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
-
     public required Packs[] KnownPacks { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteVarInt(KnownPacks.Length);
         foreach (var pack in KnownPacks)

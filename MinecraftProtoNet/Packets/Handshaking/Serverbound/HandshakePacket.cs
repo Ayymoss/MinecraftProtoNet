@@ -1,21 +1,22 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Handshaking.Serverbound;
 
-public class HandshakePacket : Packet
+[Packet(0x00, ProtocolState.Handshaking)]
+public class HandshakePacket : IServerPacket
 {
-    public override int PacketId => 0x00;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
     public int ProtocolVersion { get; set; }
     public string ServerAddress { get; set; } = string.Empty;
     public ushort ServerPort { get; set; }
     public int NextState { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteVarInt(ProtocolVersion);
         buffer.WriteString(ServerAddress);

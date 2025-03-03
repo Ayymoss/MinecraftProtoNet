@@ -15,7 +15,7 @@ public class StatusHandler : IPacketHandler
         (ProtocolState.Status, 0x01)
     ];
 
-    public async Task HandleAsync(Packet packet, IMinecraftClient client)
+    public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {

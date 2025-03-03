@@ -1,17 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class UpdateEnabledFeaturesPacket : Packet
+[Packet(0x0C, ProtocolState.Configuration)]
+public class UpdateEnabledFeaturesPacket : IClientPacket
 {
-    public override int PacketId => 0x0C;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public string[] FeatureFlags { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         var count = buffer.ReadVarInt();
         FeatureFlags = new string[count];

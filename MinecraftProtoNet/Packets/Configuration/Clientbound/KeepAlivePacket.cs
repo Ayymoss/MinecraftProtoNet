@@ -1,17 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class KeepAlivePacket : Packet
+[Packet(0x04, ProtocolState.Configuration)]
+public class KeepAlivePacket : IClientPacket
 {
-    public override int PacketId => 0x04;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public long Payload { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         Payload = buffer.ReadSignedLong();
     }

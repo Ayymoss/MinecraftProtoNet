@@ -1,30 +1,21 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class SetTimePacket : Packet
+[Packet(0x6B, ProtocolState.Play, false)]
+public class SetTimePacket : IClientPacket
 {
-    public override int PacketId => 0x6B;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
+    public long WorldAge { get; set; }
+    public long TimeOfDay { get; set; }
+    public bool TimeOfDayIncreasing { get; set; }
 
-    public SetTime Payload { get; set; }
-
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = new SetTime
-        {
-            WorldAge = buffer.ReadSignedLong(),
-            TimeOfDay = buffer.ReadSignedLong(),
-            TimeOfDayIncreasing = buffer.ReadBoolean()
-        };
-    }
-
-    public class SetTime
-    {
-        public required long WorldAge { get; set; }
-        public required long TimeOfDay { get; set; }
-        public required bool TimeOfDayIncreasing { get; set; }
+        WorldAge = buffer.ReadSignedLong();
+        TimeOfDay = buffer.ReadSignedLong();
+        TimeOfDayIncreasing = buffer.ReadBoolean();
     }
 }

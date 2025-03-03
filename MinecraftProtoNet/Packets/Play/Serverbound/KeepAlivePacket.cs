@@ -1,19 +1,19 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-public class KeepAlivePacket : Packet
+[Packet(0x1A, ProtocolState.Play)]
+public class KeepAlivePacket : IServerPacket
 {
-    public override int PacketId => 0x1A;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
-
     public required long Payload { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteSignedLong(Payload);
     }

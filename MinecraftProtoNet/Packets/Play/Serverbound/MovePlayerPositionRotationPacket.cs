@@ -1,19 +1,19 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-public class MovePlayerPositionRotationPacket : Packet
+[Packet(0x1D, ProtocolState.Play)]
+public class MovePlayerPositionRotationPacket : IServerPacket
 {
-    public override int PacketId => 0x1D;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public required MovePlayerPositionRotation Payload { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         buffer.WriteDouble(Payload.X);
         buffer.WriteDouble(Payload.Y);

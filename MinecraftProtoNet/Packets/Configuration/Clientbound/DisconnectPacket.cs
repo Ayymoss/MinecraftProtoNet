@@ -1,18 +1,17 @@
 ﻿using System.Text;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
-public class DisconnectPacket : Packet
+[Packet(0x02, ProtocolState.Configuration)]
+public class DisconnectPacket : IClientPacket
 {
-    public override int PacketId => 0x02;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public string Reason { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         Reason = Encoding.UTF8.GetString(buffer.ReadRestBuffer());
     }

@@ -1,18 +1,19 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Status.Serverbound;
 
-public class PingRequestPacket : Packet
+[Packet(0x01, ProtocolState.Status)]
+public class PingRequestPacket : IServerPacket
 {
-    public override int PacketId => 0x01;
-    public override PacketDirection Direction => PacketDirection.Serverbound;
     public required long Payload { get; set; }
 
-    public override void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        base.Serialize(ref buffer);
+        buffer.WriteVarInt(this.GetPacketId());
 
         var payloadBytes = BitConverter.GetBytes(Payload);
         if (BitConverter.IsLittleEndian) Array.Reverse(payloadBytes);

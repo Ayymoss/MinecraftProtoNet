@@ -1,18 +1,17 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class GameEventPacket : Packet
+[Packet(0x23, ProtocolState.Play)]
+public class GameEventPacket : IClientPacket
 {
-    public override int PacketId => 0x23;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public EventFlag Event { get; set; }
     public float Value { get; set; }
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         Event = (EventFlag)buffer.ReadUnsignedByte();
         Value = buffer.ReadFloat();

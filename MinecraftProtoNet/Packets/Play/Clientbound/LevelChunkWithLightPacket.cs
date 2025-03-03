@@ -1,4 +1,5 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.World;
 using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.NBT.Tags.Abstract;
@@ -7,14 +8,12 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class LevelChunkWithLightPacket : Packet
+[Packet(0x28, ProtocolState.Play)]
+public class LevelChunkWithLightPacket : IClientPacket
 {
-    public override int PacketId => 0x28;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-
     public Chunk Chunk { get; set; } = null!; // This should never be null at call site.
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         var chunkX = buffer.ReadSignedInt();
         var chunkZ = buffer.ReadSignedInt();

@@ -1,23 +1,17 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-public class DisconnectPacket : Packet
+[Packet(0x1D, ProtocolState.Play)]
+public class DisconnectPacket : IClientPacket
 {
-    public override int PacketId => 0x1D;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
+    public string DisconnectReason { get; set; } = string.Empty;
 
-    public Disconnect Payload { get; set; }
-
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = new Disconnect { DisconnectReason = buffer.ReadString() };
-    }
-
-    public class Disconnect
-    {
-        public required string DisconnectReason { get; set; }
+        DisconnectReason = buffer.ReadString();
     }
 }

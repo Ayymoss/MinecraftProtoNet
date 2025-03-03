@@ -28,16 +28,16 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
         (ProtocolState.Play, 0x1D),
     ];
 
-    public async Task HandleAsync(Packet packet, IMinecraftClient client)
+    public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {
             case LoginPacket loginPacket:
-                clientState.EntityId = loginPacket.Login.EntityId;
-                Console.WriteLine($"Login Packet Received from {loginPacket.Login.EntityId}");
+                clientState.EntityId = loginPacket.EntityId;
+                Console.WriteLine($"Login Packet Received from {loginPacket.EntityId}");
                 break;
             case DisconnectPacket disconnectPacket:
-                Console.WriteLine($"Disconnected from Server for: {disconnectPacket.Payload.DisconnectReason}");
+                Console.WriteLine($"Disconnected from Server for: {disconnectPacket.DisconnectReason}");
                 break;
             case PlayerPositionPacket playerPositionPacket: // TODO: Will fire on join or when moving too quickly or other teleport.
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
@@ -65,7 +65,7 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
             case MoveEntityPositionRotationPacket moveEntityPositionRotationPacket:
                 break;
             case MoveEntityPositionPacket moveEntityPositionPacket:
-                Console.WriteLine($"Entity {moveEntityPositionPacket.Payload.EntityId} on ground? {moveEntityPositionPacket.Payload.OnGround}");
+                Console.WriteLine($"Entity {moveEntityPositionPacket.EntityId} on ground? {moveEntityPositionPacket.OnGround}");
                 break;
         }
     }

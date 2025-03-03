@@ -1,16 +1,16 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Login.Clientbound;
 
-public class DisconnectLoginPacket : Packet
+[Packet(0x00, ProtocolState.Login)]
+public class DisconnectLoginPacket : IClientPacket
 {
-    public override int PacketId => 0x00;
-    public override PacketDirection Direction => PacketDirection.Clientbound;
-    public string Reason { get; set; } = string.Empty; // JSON formatted
+    public string Reason { get; set; } = string.Empty; // TODO: Review packet payload / NBT?
 
-    public override void Deserialize(ref PacketBufferReader buffer)
+    public void Deserialize(ref PacketBufferReader buffer)
     {
         Reason = buffer.ReadString();
     }
