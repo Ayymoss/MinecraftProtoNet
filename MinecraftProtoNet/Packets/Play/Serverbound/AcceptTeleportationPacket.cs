@@ -11,9 +11,9 @@ public class AcceptTeleportationPacket : IServerPacket
 {
     public required int TeleportId { get; set; }
 
-    public  void Serialize(ref PacketBufferWriter buffer)
+    public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketId());
+        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
 
         buffer.WriteVarInt(TeleportId);
     }

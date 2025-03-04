@@ -13,7 +13,7 @@ public class PingRequestPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketId());
+        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
 
         var payloadBytes = BitConverter.GetBytes(Payload);
         if (BitConverter.IsLittleEndian) Array.Reverse(payloadBytes);

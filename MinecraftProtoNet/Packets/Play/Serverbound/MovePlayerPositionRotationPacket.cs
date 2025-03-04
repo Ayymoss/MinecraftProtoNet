@@ -13,7 +13,7 @@ public class MovePlayerPositionRotationPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketId());
+        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
 
         buffer.WriteDouble(Payload.X);
         buffer.WriteDouble(Payload.Y);

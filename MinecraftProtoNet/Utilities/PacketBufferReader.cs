@@ -120,6 +120,18 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return bytes;
     }
 
+    public long[] ReadBitSet()
+    {
+        var length = ReadVarInt();
+        var bitSet = new long[length];
+        for (var i = 0; i < length; i++)
+        {
+            bitSet[i] = ReadSignedLong();
+        }
+
+        return bitSet;
+    }
+
     public Guid ReadUUID()
     {
         var bytes = ReadBuffer(16);

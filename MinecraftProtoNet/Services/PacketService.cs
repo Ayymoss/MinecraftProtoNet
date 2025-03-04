@@ -1,4 +1,5 @@
-﻿using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
@@ -44,7 +45,8 @@ public class PacketService : IPacketService
 
     public async Task HandlePacketAsync(IClientPacket packet, IMinecraftClient client)
     {
-        if (_handlers.TryGetValue(client.State, out var stateHandlers) && stateHandlers.TryGetValue(packet.GetPacketId(), out var handler))
+        var packetId = packet.GetPacketAttributeValue(p => p.PacketId);
+        if (_handlers.TryGetValue(client.State, out var stateHandlers) && stateHandlers.TryGetValue(packetId, out var handler))
         {
             await handler.HandleAsync(packet, client);
         }
@@ -89,6 +91,8 @@ public class PacketService : IPacketService
             },
             ProtocolState.Play => packetId switch
             {
+                0x00 => new Packets.Play.Clientbound.BundleDelimiterPacket(),
+                0x01 => new Packets.Play.Clientbound.AddEntityPacket(),
                 0x2C => new Packets.Play.Clientbound.LoginPacket(),
                 0x0B => new Packets.Play.Clientbound.ChangeDifficultyPacket(),
                 0x3A => new Packets.Play.Clientbound.PlayerAbilitiesPacket(),
@@ -108,6 +112,9 @@ public class PacketService : IPacketService
                 0x79 => new Packets.Play.Clientbound.TickingStepPacket(),
                 0x2F => new Packets.Play.Clientbound.MoveEntityPositionPacket(),
                 0x1D => new Packets.Play.Clientbound.DisconnectPacket(),
+                0x3B => new Packets.Play.Clientbound.PlayerChatPacket(),
+                0x73 => new Packets.Play.Clientbound.SystemChatPacket(),
+                0x47 => new Packets.Play.Clientbound.RemoveEntitiesPacket(),
                 _ => new UnknownPacket() // TODO: Remove when packets implemented.
                 //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
                 //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")
@@ -120,11 +127,10 @@ public class PacketService : IPacketService
             AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
                                    $"[red]Unknown packet for state {state} and ID {packetId} (0x{packetId:X2})[/]");
         }
-        else if (!packet.GetPacketSilentState())
+        else if (!packet.GetPacketAttributeValue(p => p.Silent))
         {
             AnsiConsole.MarkupLine(
-                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} " +
-                $"[white]Creating packet for state {state} and ID {packetId} (0x{packetId:X2})[/]");
+                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
         }
 
         return packet;

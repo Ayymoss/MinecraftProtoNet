@@ -94,8 +94,10 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                                          SocketErrorCode: SocketError.ConnectionReset or SocketError.ConnectionAborted
                                      })
         {
+            var socket = (SocketException)ex.InnerException;
+
             AnsiConsole.MarkupLine(
-                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host.[/]");
+                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host. EC: {socket.ErrorCode} - SEC: {socket.SocketErrorCode} - MSG: {socket.Message}[/]");
             AnsiConsole.WriteException(ex);
         }
         catch (OperationCanceledException ex)

@@ -1,4 +1,6 @@
-﻿namespace MinecraftProtoNet.Utilities;
+﻿using Humanizer;
+
+namespace MinecraftProtoNet.Utilities;
 
 public static class DataTypeHelper
 {
@@ -49,6 +51,6 @@ public static class DataTypeHelper
     {
         var parts = fullname.Split('.');
         if (parts.Length < 5) return fullname;
-        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/][cyan]{parts[4]}[/][white]]][/]";
+        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/][cyan]{parts[4].Replace("Packet", string.Empty).Titleize()}[/][white]]][/]";
     }
 }

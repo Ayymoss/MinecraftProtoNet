@@ -10,9 +10,12 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class MoveEntityPositionRotationPacket : IClientPacket
 {
     public int EntityId { get; set; }
-    public short DeltaX { get; set; }
-    public short DeltaY { get; set; }
-    public short DeltaZ { get; set; }
+    public short DeltaXRaw { get; set; }
+    public short DeltaYRaw { get; set; }
+    public short DeltaZRaw { get; set; }
+    public double DeltaX => DeltaXRaw / 4096.0;
+    public double DeltaY => DeltaYRaw / 4096.0;
+    public double DeltaZ => DeltaZRaw / 4096.0;
     public Vector<byte> Yaw { get; set; }
     public Vector<byte> Pitch { get; set; }
     public bool OnGround { get; set; }
@@ -20,9 +23,9 @@ public class MoveEntityPositionRotationPacket : IClientPacket
     public void Deserialize(ref PacketBufferReader buffer)
     {
         EntityId = buffer.ReadVarInt();
-        DeltaX = buffer.ReadSignedShort();
-        DeltaY = buffer.ReadSignedShort();
-        DeltaZ = buffer.ReadSignedShort();
+        DeltaXRaw = buffer.ReadSignedShort();
+        DeltaYRaw = buffer.ReadSignedShort();
+        DeltaZRaw = buffer.ReadSignedShort();
         Yaw = new Vector<byte>(buffer.ReadUnsignedByte());
         Pitch = new Vector<byte>(buffer.ReadUnsignedByte());
         OnGround = buffer.ReadBoolean();

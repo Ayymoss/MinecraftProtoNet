@@ -11,6 +11,6 @@ public class StatusRequestPacket : IServerPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketId());
+        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
     }
 }

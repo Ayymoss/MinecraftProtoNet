@@ -5,7 +5,7 @@ namespace MinecraftProtoNet.Core;
 public class MinecraftClientState
 {
     public int EntityId { get; set; }
-    public Vector3F Position { get; set; } = new();
-    public Vector3F Velocity { get; set; } = new();
-    public Vector2F Rotation { get; set; } = new();
+    public Vector3D Position { get; set; } = new();
+    public Vector3D Velocity { get; set; } = new();
+    public Vector2D Rotation { get; set; } = new();
 }

@@ -2,12 +2,12 @@
 
 namespace MinecraftProtoNet.Models.Core;
 
-public class Vector2F
+public class Vector2D
 {
-    public float X { get; set; }
-    public float Y { get; set; }
-    
-    public void Set(float x, float y)
+    public double X { get; set; }
+    public double Y { get; set; }
+
+    public void Set(double x, double y)
     {
         X = x;
         Y = y;
@@ -19,5 +19,5 @@ public class Vector2F
         Y = vector.Y;
     }
 
-    public Vector2 GetAsVector2() => new(X, Y);
+    public Vector2 GetAsVector2() => new((float)X, (float)Y);
 }

@@ -9,17 +9,20 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class MoveEntityPositionPacket : IClientPacket
 {
     public int EntityId { get; set; }
-    public short DeltaX { get; set; }
-    public short DeltaY { get; set; }
-    public short DeltaZ { get; set; }
+    public short DeltaXRaw { get; set; }
+    public short DeltaYRaw { get; set; }
+    public short DeltaZRaw { get; set; }
+    public double DeltaX => DeltaXRaw / 4096.0;
+    public double DeltaY => DeltaYRaw / 4096.0;
+    public double DeltaZ => DeltaZRaw / 4096.0;
     public bool OnGround { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
         EntityId = buffer.ReadVarInt();
-        DeltaX = buffer.ReadSignedShort();
-        DeltaY = buffer.ReadSignedShort();
-        DeltaZ = buffer.ReadSignedShort();
+        DeltaXRaw = buffer.ReadSignedShort();
+        DeltaYRaw = buffer.ReadSignedShort();
+        DeltaZRaw = buffer.ReadSignedShort();
         OnGround = buffer.ReadBoolean();
     }
 }
