@@ -115,23 +115,17 @@ public class PacketService : IPacketService
                 0x3B => new Packets.Play.Clientbound.PlayerChatPacket(),
                 0x73 => new Packets.Play.Clientbound.SystemChatPacket(),
                 0x47 => new Packets.Play.Clientbound.RemoveEntitiesPacket(),
+                0x20 => new Packets.Play.Clientbound.EntityPositionSyncPacket(),
+                0x4D => new Packets.Play.Clientbound.RotateHeadPacket(),
+                0x32 => new Packets.Play.Clientbound.MoveEntityRotationPacket(),
+                0x37 => new Packets.Play.Clientbound.PingPacket(),
+                0x38 => new Packets.Play.Clientbound.PongResponsePacket(),
                 _ => new UnknownPacket() // TODO: Remove when packets implemented.
                 //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
                 //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")
             },
             _ => throw new ArgumentOutOfRangeException(nameof(state), $"Invalid protocol state {state}.")
         };
-
-        if (packet is UnknownPacket)
-        {
-            AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
-                                   $"[red]Unknown packet for state {state} and ID {packetId} (0x{packetId:X2})[/]");
-        }
-        else if (!packet.GetPacketAttributeValue(p => p.Silent))
-        {
-            AnsiConsole.MarkupLine(
-                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
-        }
 
         return packet;
     }

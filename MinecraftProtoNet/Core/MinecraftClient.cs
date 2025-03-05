@@ -80,6 +80,20 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                 var packetId = reader.ReadVarInt();
                 var packet = packetService.CreateIncomingPacket(State, packetId);
                 packet.Deserialize(ref reader);
+                
+                if (packet is UnknownPacket)
+                {
+                    AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
+                                           $"[red]Unknown packet for state {State} and ID {packetId} (0x{packetId:X2})[/]");
+                }
+                else if (!packet.GetPacketAttributeValue(p => p.Silent))
+                {
+                    AnsiConsole.Markup(
+                        $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
+                        $"{packet.GetType().FullName?.NamespaceToPrettyString(packetId)} ");
+                    AnsiConsole.WriteLine(packet.GetPropertiesAsString()); // Some strings include brackets.
+                }
+                
                 await packetService.HandlePacketAsync(packet, this);
             }
         }

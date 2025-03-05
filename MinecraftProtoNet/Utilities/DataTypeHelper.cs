@@ -46,11 +46,13 @@ public static class DataTypeHelper
     /// Used for internal packet namespaces. Will not work for other namespaces.
     /// </summary>
     /// <param name="fullname"></param>
+    /// <param name="packetId"></param>
     /// <returns></returns>
-    public static string NamespaceToPrettyString(this string fullname)
+    public static string NamespaceToPrettyString(this string fullname, int packetId)
     {
         var parts = fullname.Split('.');
         if (parts.Length < 5) return fullname;
-        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/][cyan]{parts[4].Replace("Packet", string.Empty).Titleize()}[/][white]]][/]";
+        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/](0x{packetId:X2}) " +
+               $"[cyan]{parts[4].Replace("Packet", string.Empty).Titleize()}[/][white]]][/]";
     }
 }

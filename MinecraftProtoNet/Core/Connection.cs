@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 using Spectre.Console;
 
@@ -102,16 +103,18 @@ public class Connection : IDisposable
             Array.Copy(lengthBytes, 0, fullPacket, 0, varIntLength);
             Array.Copy(packetData, 0, fullPacket, varIntLength, packetData.Length);
             AnsiConsole.MarkupLine(
-                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} [white]BYTES:[/] {BitConverter.ToString(fullPacket)}"); // Debugging
+                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId))} [white]BYTES:[/] {BitConverter.ToString(fullPacket)}"); // Debugging
             var bytesAsString = Regex.Replace(Encoding.UTF8.GetString(fullPacket), @"\p{C}+", " ");
             AnsiConsole.Markup(
-                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()} [white]AS STRING:[/] ");
+                $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId))} [white]AS STRING:[/] ");
             AnsiConsole.WriteLine(bytesAsString);
         }
         else
         {
-            AnsiConsole.MarkupLine(
-                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString()}");
+            AnsiConsole.Markup(
+                $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] " +
+                $"{packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId))} ");
+            AnsiConsole.WriteLine(packet.GetPropertiesAsString());
         }
         // Debug
 

@@ -8,4 +8,9 @@ public class Chunk(int x, int z, ChunkData chunkData, LightData lightData)
     public int Z { get; set; } = z;
     public ChunkData ChunkData { get; set; } = chunkData;
     public LightData LightData { get; set; } = lightData;
+
+    public override string ToString()
+    {
+        return $"{X}, {Z}";
+    }
 }

@@ -71,6 +71,11 @@ public class PlayerChatPacket : IClientPacket
         public required Guid Uuid { get; set; }
         public required int Index { get; set; }
         public byte[]? MessageSignature { get; set; }
+
+        public override string ToString()
+        {
+            return $"{{Uuid={Uuid}, Index={Index}, MessageSignature={MessageSignature}}}";
+        }
     }
 
     public class BodyPayload
@@ -78,12 +83,22 @@ public class PlayerChatPacket : IClientPacket
         public required string Message { get; set; } = string.Empty;
         public required long Timestamp { get; set; }
         public required long Salt { get; set; }
+
+        public override string ToString()
+        {
+            return $"{{Message={Message}, Timestamp={Timestamp}, Salt={Salt}}}";
+        }
     }
 
     public class MessageValidationPayload
     {
         public required int MessageId { get; set; }
         public required byte[] Signature { get; set; }
+
+        public override string ToString()
+        {
+            return $"{{MessageId={MessageId}, Signature={Signature}}}";
+        }
     }
 
     public class OtherPayload
@@ -91,6 +106,11 @@ public class PlayerChatPacket : IClientPacket
         public NbtTag? UnsignedContent { get; set; }
         public required FilterType FilterType { get; set; }
         public long[]? FilterTypeBits { get; set; }
+
+        public override string ToString()
+        {
+            return $"{{UnsignedContent={UnsignedContent}, FilterType={FilterType}, FilterTypeBits={FilterTypeBits}}}";
+        }
     }
 
     public class FormattingPayload
@@ -98,6 +118,11 @@ public class PlayerChatPacket : IClientPacket
         public required int Type { get; set; }
         public required NbtTag SenderName { get; set; }
         public NbtTag? TargetName { get; set; }
+
+        public override string ToString()
+        {
+            return $"{{Type={Type}, SenderName={SenderName}, TargetName={TargetName}}}";
+        }
     }
 
     public enum FilterType

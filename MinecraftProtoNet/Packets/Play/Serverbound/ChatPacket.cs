@@ -51,7 +51,6 @@ public class ChatPacket : IServerPacket
             buffer.WriteBoolean(false);
         }
 
-
         buffer.WriteVarInt(MessageCount);
         buffer.WriteBuffer(Acknowledged);
     }

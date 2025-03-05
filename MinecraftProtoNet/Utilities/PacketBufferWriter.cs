@@ -198,4 +198,11 @@ public ref struct PacketBufferWriter
         BinaryPrimitives.WriteDoubleBigEndian(_buffer[_writePosition..], value);
         _writePosition += sizeof(double);
     }
+
+    public void WriteSignedInt(int payload)
+    {
+        EnsureCapacity(sizeof(int));
+        BinaryPrimitives.WriteInt32BigEndian(_buffer[_writePosition..], payload);
+        _writePosition += sizeof(int);
+    }
 }

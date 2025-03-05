@@ -67,4 +67,14 @@ public class Vector3D
             ? new Vector3D(X / length, Y / length, Z / length)
             : new Vector3D(0, 0, 0);
     }
+
+    public override string ToString()
+    {
+        return $"({X}, {Y}, {Z})";
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(X, Y, Z);
+    }
 }

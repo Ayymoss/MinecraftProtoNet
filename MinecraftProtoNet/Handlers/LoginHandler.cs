@@ -19,11 +19,7 @@ public class LoginHandler : IPacketHandler
     {
         switch (packet)
         {
-            case DisconnectLoginPacket disconnect:
-                Console.WriteLine($"Disconnected: {disconnect.Reason}");
-                break;
             case LoginSuccessPacket loginSuccess:
-                Console.WriteLine($"Login Success -> {{Username: {loginSuccess.Username}, UUID: {loginSuccess.UUID}}}");
                 await client.SendPacketAsync(new LoginAcknowledgedPacket());
                 client.State = ProtocolState.Configuration;
                 AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");

@@ -1,5 +1,4 @@
-﻿using System.Numerics;
-using MinecraftProtoNet.Attributes;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -7,18 +6,18 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x42, ProtocolState.Play)]
-public class PlayerPositionPacket : IClientPacket
+[Packet(0x20, ProtocolState.Play)]
+public class EntityPositionSyncPacket : IClientPacket
 {
-    public int TeleportId { get; set; }
+    public int EntityId { get; set; }
     public Vector3D Position { get; set; }
     public Vector3D Velocity { get; set; }
     public Vector2D YawPitch { get; set; }
-    public PositionFlags Flags { get; set; }
+    public bool OnGround { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        TeleportId = buffer.ReadVarInt();
+        EntityId = buffer.ReadVarInt();
 
         var x = buffer.ReadDouble();
         var y = buffer.ReadDouble();
@@ -34,20 +33,6 @@ public class PlayerPositionPacket : IClientPacket
         var pitch = buffer.ReadFloat();
         YawPitch = new Vector2D(yaw, pitch);
 
-        Flags = (PositionFlags)buffer.ReadUnsignedInt();
-    }
-
-    public enum PositionFlags : sbyte
-    {
-        None,
-        X,
-        Y,
-        Z,
-        RotationY,
-        RotationX,
-        DeltaX,
-        DeltaY,
-        DeltaZ,
-        RotateDelta
+        OnGround = buffer.ReadBoolean();
     }
 }

@@ -25,9 +25,6 @@ namespace MinecraftProtoNet.Handlers
         {
             switch (packet)
             {
-                case DisconnectPacket disconnectPacket:
-                    Console.WriteLine($"Received disconnect: {disconnectPacket.Reason}");
-                    break;
                 case SelectKnownPacksPacket selectKnownPacksPacket:
                     await client.SendPacketAsync(new Packets.Configuration.Serverbound.SelectKnownPacksPacket { KnownPacks = [] });
                     break;
@@ -39,13 +36,6 @@ namespace MinecraftProtoNet.Handlers
                     await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
                     client.State = ProtocolState.Play;
                     AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");
-                    break;
-                case RegistryDataPacket registryDataPacket:
-                    Console.WriteLine($"Received {registryDataPacket.Tags.Count} NBT tags");
-
-                    break;
-                case UpdateTagsPacket updateTagsPacket:
-                    Console.WriteLine($"Received {updateTagsPacket.Tags.Count} update tags");
                     break;
             }
         }

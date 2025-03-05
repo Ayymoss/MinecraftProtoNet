@@ -1,4 +1,5 @@
-﻿using MinecraftProtoNet.Attributes;
+﻿using Humanizer;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
