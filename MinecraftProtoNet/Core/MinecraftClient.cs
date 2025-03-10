@@ -4,12 +4,13 @@ using MinecraftProtoNet.Packets.Handshaking.Serverbound;
 using MinecraftProtoNet.Packets.Login.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
 using MinecraftProtoNet.Services;
+using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Utilities;
 using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
-public class MinecraftClient(Connection connection, IPacketService packetService, MinecraftClientState clientState) : IMinecraftClient
+public class MinecraftClient(Connection connection, IPacketService packetService, ClientState clientState) : IMinecraftClient
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
@@ -71,16 +72,16 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
     private async Task ListenForPacketsAsync(CancellationToken cancellationToken)
     {
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
                 var packetBuffer = await connection.ReadPacketBytesAsync(cancellationToken);
                 var reader = new PacketBufferReader(packetBuffer);
                 var packetId = reader.ReadVarInt();
                 var packet = packetService.CreateIncomingPacket(State, packetId);
                 packet.Deserialize(ref reader);
-                
+
                 if (packet is UnknownPacket)
                 {
                     AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
@@ -93,42 +94,41 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                         $"{packet.GetType().FullName?.NamespaceToPrettyString(packetId)} ");
                     AnsiConsole.WriteLine(packet.GetPropertiesAsString()); // Some strings include brackets.
                 }
-                
+
                 await packetService.HandlePacketAsync(packet, this);
             }
-        }
-        catch (EndOfStreamException ex)
-        {
-            AnsiConsole.MarkupLine(
-                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection closed by server.[/]");
-            AnsiConsole.WriteException(ex);
-        }
-        catch (IOException ex) when (ex.InnerException is SocketException
-                                     {
-                                         SocketErrorCode: SocketError.ConnectionReset or SocketError.ConnectionAborted
-                                     })
-        {
-            var socket = (SocketException)ex.InnerException;
-
-            AnsiConsole.MarkupLine(
-                $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host. EC: {socket.ErrorCode} - SEC: {socket.SocketErrorCode} - MSG: {socket.Message}[/]");
-            AnsiConsole.WriteException(ex);
-        }
-        catch (OperationCanceledException ex)
-        {
-            AnsiConsole.MarkupLine($"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Listening for packets cancelled.[/]");
-            AnsiConsole.WriteException(ex);
-        }
-        catch (Exception ex)
-        {
-            AnsiConsole.MarkupLine($"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Error while listening for packets:[/]");
-            AnsiConsole.WriteException(ex);
-        }
-        finally
-        {
-            Environment.Exit(1);
+            catch (EndOfStreamException ex)
+            {
+                AnsiConsole.MarkupLine(
+                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection closed by server.[/]");
+                AnsiConsole.WriteException(ex);
+                Environment.Exit(1);
+            }
+            catch (IOException ex) when (ex.InnerException is SocketException
+                                         {
+                                             SocketErrorCode: SocketError.ConnectionReset or SocketError.ConnectionAborted
+                                         } socket)
+            {
+                AnsiConsole.MarkupLine(
+                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host. EC: {socket.ErrorCode} - SEC: {socket.SocketErrorCode} - MSG: {socket.Message}[/]");
+                AnsiConsole.WriteException(ex);
+                Environment.Exit(1);
+            }
+            catch (OperationCanceledException ex)
+            {
+                AnsiConsole.MarkupLine(
+                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Listening for packets cancelled.[/]");
+                AnsiConsole.WriteException(ex);
+                Environment.Exit(1);
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine(
+                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Error while listening for packets:[/]");
+                AnsiConsole.WriteException(ex);
+            }
         }
     }
 
-    public MinecraftClientState ClientState => clientState;
+    public ClientState ClientState => clientState;
 }

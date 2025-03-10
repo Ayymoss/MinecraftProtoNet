@@ -120,6 +120,13 @@ public class PacketService : IPacketService
                 0x32 => new Packets.Play.Clientbound.MoveEntityRotationPacket(),
                 0x37 => new Packets.Play.Clientbound.PingPacket(),
                 0x38 => new Packets.Play.Clientbound.PongResponsePacket(),
+                0x5D => new Packets.Play.Clientbound.SetEntityDataPacket(),
+                0x6F => new Packets.Play.Clientbound.SoundPacket(),
+                0x03 => new Packets.Play.Clientbound.AnimatePacket(),
+                0x09 => new Packets.Play.Clientbound.BlockUpdatePacket(),
+                0x29 => new Packets.Play.Clientbound.LevelEventPacket(),
+                0x5F => new Packets.Play.Clientbound.SetEntityMotionPacket(),
+                0x22 => new Packets.Play.Clientbound.ForgetLevelChunkPacket(),
                 _ => new UnknownPacket() // TODO: Remove when packets implemented.
                 //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
                 //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")

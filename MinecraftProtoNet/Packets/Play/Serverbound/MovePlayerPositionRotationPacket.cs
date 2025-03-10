@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x1D, ProtocolState.Play)]
+[Packet(0x1D, ProtocolState.Play, true)]
 public class MovePlayerPositionRotationPacket : IServerPacket
 {
     public required double X { get; set; }
@@ -27,7 +27,6 @@ public class MovePlayerPositionRotationPacket : IServerPacket
         buffer.WriteFloat(Pitch);
         buffer.WriteSignedByte((byte)Flags);
     }
-    
 
     public enum MovementFlags
     {

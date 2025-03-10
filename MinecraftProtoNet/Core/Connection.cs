@@ -109,7 +109,7 @@ public class Connection : IDisposable
                 $"[grey][[DEBUG]][/] [green][[->SERVER]][/] {packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId))} [white]AS STRING:[/] ");
             AnsiConsole.WriteLine(bytesAsString);
         }
-        else
+        else if (!packet.GetPacketAttributeValue(p => p.Silent))
         {
             AnsiConsole.Markup(
                 $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] " +

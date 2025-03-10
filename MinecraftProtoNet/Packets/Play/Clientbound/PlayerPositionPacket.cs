@@ -11,8 +11,8 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class PlayerPositionPacket : IClientPacket
 {
     public int TeleportId { get; set; }
-    public Vector3D Position { get; set; }
-    public Vector3D Velocity { get; set; }
+    public Vector3<double> Position { get; set; }
+    public Vector3<double> Velocity { get; set; }
     public Vector2D YawPitch { get; set; }
     public PositionFlags Flags { get; set; }
 
@@ -23,12 +23,12 @@ public class PlayerPositionPacket : IClientPacket
         var x = buffer.ReadDouble();
         var y = buffer.ReadDouble();
         var z = buffer.ReadDouble();
-        Position = new Vector3D(x, y, z);
+        Position = new Vector3<double>(x, y, z);
 
         var velX = buffer.ReadDouble();
         var velY = buffer.ReadDouble();
         var velZ = buffer.ReadDouble();
-        Velocity = new Vector3D(velX, velY, velZ);
+        Velocity = new Vector3<double>(velX, velY, velZ);
 
         var yaw = buffer.ReadFloat();
         var pitch = buffer.ReadFloat();

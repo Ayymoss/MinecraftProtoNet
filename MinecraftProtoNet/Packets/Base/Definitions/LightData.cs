@@ -1,6 +1,4 @@
-﻿using System.Collections;
-
-namespace MinecraftProtoNet.Models.World.Meta;
+﻿namespace MinecraftProtoNet.Packets.Base.Definitions;
 
 public class LightData(
     long[] skyLightMask,

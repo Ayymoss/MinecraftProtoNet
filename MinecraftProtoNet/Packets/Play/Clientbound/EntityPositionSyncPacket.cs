@@ -6,12 +6,12 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x20, ProtocolState.Play)]
+[Packet(0x20, ProtocolState.Play, true)]
 public class EntityPositionSyncPacket : IClientPacket
 {
     public int EntityId { get; set; }
-    public Vector3D Position { get; set; }
-    public Vector3D Velocity { get; set; }
+    public Vector3<double> Position { get; set; }
+    public Vector3<double> Velocity { get; set; }
     public Vector2D YawPitch { get; set; }
     public bool OnGround { get; set; }
 
@@ -22,12 +22,12 @@ public class EntityPositionSyncPacket : IClientPacket
         var x = buffer.ReadDouble();
         var y = buffer.ReadDouble();
         var z = buffer.ReadDouble();
-        Position = new Vector3D(x, y, z);
+        Position = new Vector3<double>(x, y, z);
 
         var velX = buffer.ReadDouble();
         var velY = buffer.ReadDouble();
         var velZ = buffer.ReadDouble();
-        Velocity = new Vector3D(velX, velY, velZ);
+        Velocity = new Vector3<double>(velX, velY, velZ);
 
         var yaw = buffer.ReadFloat();
         var pitch = buffer.ReadFloat();

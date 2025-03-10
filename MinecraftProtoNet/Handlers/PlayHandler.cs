@@ -6,11 +6,12 @@ using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Play.Clientbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.State.Base;
 using KeepAlivePacket = MinecraftProtoNet.Packets.Play.Clientbound.KeepAlivePacket;
 
 namespace MinecraftProtoNet.Handlers;
 
-public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
+public class PlayHandler(ClientState clientState) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
     [
@@ -34,12 +35,17 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
         (ProtocolState.Play, 0x47),
         (ProtocolState.Play, 0x37),
         (ProtocolState.Play, 0x38),
+        (ProtocolState.Play, 0x5D),
     ];
 
     // TODO: Remove/move.
     private record Player(Guid Guid, int EntityId);
 
-    private Dictionary<Player, Vector3D> _players = [];
+    private Dictionary<Player, Vector3<double>> _players = [];
+
+    //Unknown packet for state Play and ID 3 (0x03)
+    //Unknown packet for state Play and ID 9 (0x09)
+
 
     public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
     {
@@ -47,7 +53,7 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
         {
             case LoginPacket loginPacket:
             {
-                clientState.EntityId = loginPacket.EntityId;
+                clientState.Player.EntityId = loginPacket.EntityId;
                 break;
             }
             case AddEntityPacket addEntityPacket:
@@ -92,6 +98,22 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
                     await client.SendPacketAsync(new ChatPacket(string.Join(" ", message)));
                 }
 
+                if (playerChatPacket.Body.Message.StartsWith("!getblock"))
+                {
+                    var coords = playerChatPacket.Body.Message.Split(" ");
+                    if (coords.Length == 4)
+                    {
+                        var x = int.Parse(coords[1]);
+                        var y = int.Parse(coords[2]);
+                        var z = int.Parse(coords[3]);
+                        var block = clientState.Level.GetBlockAt(x, y, z);
+                        var message = block != null
+                            ? $"Block: ({block.Id}) {block.Name}"
+                            : $"Block not found at {x}, {y}, {z}";
+                        await client.SendPacketAsync(new ChatPacket(message));
+                    }
+                }
+
                 if (playerChatPacket.Body.Message == "!pos")
                 {
                     var playerPos = _players.Where(x => x.Key.Guid == playerChatPacket.Header.Uuid)
@@ -125,7 +147,7 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
                         var x = float.Parse(coords[1]);
                         var y = float.Parse(coords[2]);
                         var z = float.Parse(coords[3]);
-                        InterpolateToCoordinates(client, new Vector3D(x, y, z));
+                        InterpolateToCoordinates(client, new Vector3<double>(x, y, z));
                         await client.SendPacketAsync(new ChatPacket($"Moving to {x:N2}, {y:N2}, {z:N2}"));
                     }
                 }
@@ -141,21 +163,16 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
             case PlayerPositionPacket playerPositionPacket: // TODO: Will fire on join or when moving too quickly or other teleport.
             {
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
-                clientState.Position = playerPositionPacket.Position;
-                clientState.Velocity = playerPositionPacket.Velocity;
-                clientState.YawPitch = playerPositionPacket.YawPitch;
+                clientState.Player.Position = playerPositionPacket.Position;
+                clientState.Player.Velocity = playerPositionPacket.Velocity;
+                clientState.Player.YawPitch = playerPositionPacket.YawPitch;
                 await client.SendPacketAsync(Move(playerPositionPacket.Position.X, playerPositionPacket.Position.Y,
                     playerPositionPacket.Position.Z));
                 break;
             }
             case KeepAlivePacket keepAlivePacket:
             {
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(1_000);
-                    await client.SendPacketAsync(new Packets.Play.Serverbound.KeepAlivePacket { Payload = keepAlivePacket.Payload });
-                });
-
+                await client.SendPacketAsync(new Packets.Play.Serverbound.KeepAlivePacket { Payload = keepAlivePacket.Payload });
                 break;
             }
             case PlayerCombatKillPacket playerCombatKillPacket:
@@ -198,10 +215,27 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
                     new ChatPacket($"Ping: {TimeProvider.System.GetLocalNow().ToUnixTimeMilliseconds() - pongResponsePacket.Payload}ms"));
                 break;
             }
+            case LevelChunkWithLightPacket levelChunkWithLightPacket:
+            {
+                var (chunkX, chunkZ) = (levelChunkWithLightPacket.ChunkX, levelChunkWithLightPacket.ChunkZ);
+                clientState.Level.Chunks.AddOrUpdate((chunkX, chunkZ), levelChunkWithLightPacket.Chunk, (location, _) =>
+                {
+                    var oldChunk = clientState.Level.Chunks[location];
+                    oldChunk = levelChunkWithLightPacket.Chunk;
+                    return oldChunk;
+                });
+                break;
+            }
+            case ForgetLevelChunkPacket forgetLevelChunkPacket:
+            {
+                var (chunkX, chunkZ) = (forgetLevelChunkPacket.ChunkX, forgetLevelChunkPacket.ChunkZ);
+                clientState.Level.Chunks.TryRemove((chunkX, chunkZ), out _);
+                break;
+            }
         }
     }
 
-    private void SetPosition(int entityId, Vector3D newPosition, bool delta = true)
+    private void SetPosition(int entityId, Vector3<double> newPosition, bool delta = true)
     {
         var (key, position) = _players.FirstOrDefault(x => x.Key.EntityId == entityId);
 
@@ -232,14 +266,14 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
             Pitch = 0,
             Flags = MovePlayerPositionRotationPacket.MovementFlags.None
         };
-        clientState.Position.X = result.X;
-        clientState.Position.Y = result.Y;
-        clientState.Position.Z = result.Z;
-        clientState.YawPitch.X = result.Yaw;
+        clientState.Player.Position.X = result.X;
+        clientState.Player.Position.Y = result.Y;
+        clientState.Player.Position.Z = result.Z;
+        clientState.Player.YawPitch.X = result.Yaw;
         return result;
     }
 
-    private static void InterpolateToCoordinates(IMinecraftClient client, Vector3D targetPosition)
+    private static void InterpolateToCoordinates(IMinecraftClient client, Vector3<double> targetPosition)
     {
         const float baseSpeed = 0.25f;
         const float stoppingDistance = 0.25f;
@@ -248,8 +282,8 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
         {
             while (true)
             {
-                var currentPosition = client.ClientState.Position;
-                var direction = new Vector3D(
+                var currentPosition = client.ClientState.Player.Position;
+                var direction = new Vector3<double>(
                     targetPosition.X - currentPosition.X,
                     targetPosition.Y - currentPosition.Y,
                     targetPosition.Z - currentPosition.Z);
@@ -263,29 +297,28 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
 
                 var newPosition = currentPosition + direction * baseSpeed;
                 var targetYaw = CalculateYawToTarget(currentPosition, targetPosition);
-                client.ClientState.YawPitch.X = NormalizeYaw(targetYaw);
-                var pitchDegrees = client.ClientState.YawPitch.Y;
+                client.ClientState.Player.YawPitch.X = NormalizeYaw(targetYaw);
+                var pitchDegrees = client.ClientState.Player.YawPitch.Y;
 
                 var result = new MovePlayerPositionRotationPacket
                 {
                     X = newPosition.X,
                     Y = newPosition.Y,
                     Z = newPosition.Z,
-                    Yaw = (float)client.ClientState.YawPitch.X,
+                    Yaw = (float)client.ClientState.Player.YawPitch.X,
                     Pitch = (float)pitchDegrees,
                     Flags = MovePlayerPositionRotationPacket.MovementFlags.None
                 };
 
-                client.ClientState.Position.X = result.X;
-                client.ClientState.Position.Y = result.Y;
-                client.ClientState.Position.Z = result.Z;
+                client.ClientState.Player.Position.X = result.X;
+                client.ClientState.Player.Position.Y = result.Y;
+                client.ClientState.Player.Position.Z = result.Z;
 
                 await client.SendPacketAsync(result);
                 await Task.Delay(20);
             }
         });
     }
-
 
     private static float NormalizeYaw(float yaw)
     {
@@ -303,7 +336,7 @@ public class PlayHandler(MinecraftClientState clientState) : IPacketHandler
         return yaw;
     }
 
-    private static float CalculateYawToTarget(Vector3D currentPosition, Vector3D targetPosition)
+    private static float CalculateYawToTarget(Vector3<double> currentPosition, Vector3<double> targetPosition)
     {
         var deltaX = targetPosition.X - currentPosition.X;
         var deltaZ = targetPosition.Z - currentPosition.Z;

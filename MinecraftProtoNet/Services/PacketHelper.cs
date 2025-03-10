@@ -85,7 +85,7 @@ public static class PacketHelper
         switch (value)
         {
             case null:
-                return "null";
+                return "<NULL>";
             case string stringValue:
                 return $"\"{stringValue}\"";
         }

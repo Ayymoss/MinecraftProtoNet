@@ -6,15 +6,15 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x5B, ProtocolState.Play)]
-public class SetDefaultSpawnPositionPacket : IClientPacket
+[Packet(0x09, ProtocolState.Play)]
+public class BlockUpdatePacket : IClientPacket
 {
-    public Vector3 Location { get; set; }
-    public float Angle { get; set; }
+    public Vector3 Position { get; set; }
+    public int BlockId { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        Location = buffer.ReadAsPosition();
-        Angle = buffer.ReadFloat();
+        Position = buffer.ReadAsPosition();
+        BlockId = buffer.ReadVarInt();
     }
 }

@@ -52,7 +52,7 @@ public class LoginPacket : IClientPacket
         IsFlat = buffer.ReadBoolean();
         HasDeathLocation = buffer.ReadBoolean();
         DeathDimensionName = HasDeathLocation ? buffer.ReadString() : null;
-        DeathLocation = HasDeathLocation ? buffer.ReadPosition() : null;
+        DeathLocation = HasDeathLocation ? buffer.ReadAsPosition() : null;
         PortalCooldown = buffer.ReadVarInt();
         SeaLevel = buffer.ReadVarInt();
         EnforcesSecureChat = buffer.ReadBoolean();

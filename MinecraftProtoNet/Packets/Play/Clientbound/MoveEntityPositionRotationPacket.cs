@@ -1,5 +1,4 @@
-﻿using System.Numerics;
-using MinecraftProtoNet.Attributes;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -7,14 +6,14 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x30, ProtocolState.Play)]
+[Packet(0x30, ProtocolState.Play, true)]
 public class MoveEntityPositionRotationPacket : IClientPacket
 {
     public int EntityId { get; set; }
     public short DeltaXRaw { get; set; }
     public short DeltaYRaw { get; set; }
     public short DeltaZRaw { get; set; }
-    public Vector3D Delta => new(DeltaXRaw / 4096.0, DeltaYRaw / 4096.0, DeltaZRaw / 4096.0);
+    public Vector3<double> Delta => new(DeltaXRaw / 4096.0, DeltaYRaw / 4096.0, DeltaZRaw / 4096.0);
     public sbyte Yaw { get; set; }
     public sbyte Pitch { get; set; }
     public bool OnGround { get; set; }

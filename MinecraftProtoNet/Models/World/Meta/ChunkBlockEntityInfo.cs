@@ -2,7 +2,7 @@
 
 namespace MinecraftProtoNet.Models.World.Meta;
 
-public readonly struct ChunkBlockEntity(byte x, short y, byte z, int type, NbtTag nbt)
+public class ChunkBlockEntityInfo(byte x, short y, byte z, int type, NbtTag nbt)
 {
     public byte X { get; } = x;
     public short Y { get; } = y;

@@ -6,6 +6,7 @@ using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Services;
+using MinecraftProtoNet.State.Base;
 
 namespace Bot;
 
@@ -45,7 +46,7 @@ public static class Program
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<Connection>();
-        services.AddSingleton<MinecraftClientState>();
+        services.AddSingleton<ClientState>();
         services.AddSingleton<IPacketService, PacketService>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
 

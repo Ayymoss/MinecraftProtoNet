@@ -6,14 +6,14 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2F, ProtocolState.Play)]
+[Packet(0x2F, ProtocolState.Play, true)]
 public class MoveEntityPositionPacket : IClientPacket
 {
     public int EntityId { get; set; }
     public short DeltaXRaw { get; set; }
     public short DeltaYRaw { get; set; }
     public short DeltaZRaw { get; set; }
-    public Vector3D Delta => new(DeltaXRaw / 4096.0, DeltaYRaw / 4096.0, DeltaZRaw / 4096.0);
+    public Vector3<double> Delta => new(DeltaXRaw / 4096.0, DeltaYRaw / 4096.0, DeltaZRaw / 4096.0);
     public bool OnGround { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
