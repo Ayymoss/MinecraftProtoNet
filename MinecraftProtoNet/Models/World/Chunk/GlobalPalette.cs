@@ -2,25 +2,16 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public class GlobalPalette<T>(Dictionary<int, T> registry) : IPalette<T>
+public class GlobalPalette : IPalette
 {
-    public int IdFor(T value)
+    public int IdFor(int registryId)
     {
-        foreach (var entry in registry)
-        {
-            if (entry.Value.Equals(value))
-                return entry.Key;
-        }
-
-        return 0;
+        return registryId;
     }
 
-    public T ValueFor(int id)
+    public int RegistryIdFor(int paletteId)
     {
-        if (!registry.TryGetValue(id, out var value))
-            throw new IndexOutOfRangeException($"Invalid registry id: {id} - Type: {typeof(T)}");
-
-        return value;
+        return paletteId;
     }
 
     public void Read(ref PacketBufferReader reader)

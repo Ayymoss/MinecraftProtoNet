@@ -127,6 +127,7 @@ public class PacketService : IPacketService
                 0x29 => new Packets.Play.Clientbound.LevelEventPacket(),
                 0x5F => new Packets.Play.Clientbound.SetEntityMotionPacket(),
                 0x22 => new Packets.Play.Clientbound.ForgetLevelChunkPacket(),
+                0x7C => new Packets.Play.Clientbound.UpdateAttributesPacket(),
                 _ => new UnknownPacket() // TODO: Remove when packets implemented.
                 //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
                 //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")

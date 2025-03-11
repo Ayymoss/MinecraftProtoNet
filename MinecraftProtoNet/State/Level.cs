@@ -14,10 +14,7 @@ public class Level
 
         if (!Chunks.TryGetValue((chunkX, chunkZ), out var chunk)) return null;
 
-        var localX = worldX & 0xF;
-        var localZ = worldZ & 0xF;
-
-        return chunk.GetBlock(localX, worldY, localZ);
+        return chunk.GetBlock(worldX, worldY, worldZ);
     }
 
     public void AddChunk(Chunk chunk)

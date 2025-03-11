@@ -1,40 +1,49 @@
-using MinecraftProtoNet.Utilities;
-
 namespace MinecraftProtoNet.Models.World.Chunk;
 
 public class BitStorage
 {
     private readonly int _bitsPerEntry;
-    private readonly long[] _data;
+    private readonly long[]? _data;
     private readonly int _size;
     private readonly long _maxEntryValue;
 
-    public BitStorage(int bitsPerEntry, int size)
+    public BitStorage(int bitsPerEntry, int size, long[]? data)
     {
-        _bitsPerEntry = Math.Max(bitsPerEntry, 1);
-        _size = size;
-        _maxEntryValue = (1L << bitsPerEntry) - 1;
+        if (bitsPerEntry is < 1 or > 32)
+            throw new ArgumentOutOfRangeException(nameof(bitsPerEntry), "Bits per entry must be between 1 and 32, inclusive.");
 
-        var storageNeeded = (size * bitsPerEntry + 63) / 64;
-        _data = new long[storageNeeded];
+        _bitsPerEntry = bitsPerEntry;
+        _size = size;
+
+        _maxEntryValue = (1L << bitsPerEntry) - 1;
+        var valuesPerLong = 64 / bitsPerEntry;
+        var expectedLength = (size + valuesPerLong - 1) / valuesPerLong;
+
+        if (data is not null)
+        {
+            if (data.Length != expectedLength)
+            {
+                Array.Resize(ref data, expectedLength);
+            }
+
+            _data = data;
+        }
+        else
+        {
+            _data = new long[expectedLength];
+        }
     }
 
     public int Get(int index)
     {
-        if (index < 0 || index >= _size)
-            throw new IndexOutOfRangeException($"Index {index} out of bounds for size {_size}");
-
-        if (_bitsPerEntry == 0)
-            return 0;
+        if (index < 0 || index >= _size) throw new IndexOutOfRangeException($"Index {index} out of bounds for size {_size}");
+        if (_bitsPerEntry == 0 || _data is null) return 0;
 
         var bitIndex = index * _bitsPerEntry;
         var longIndex = bitIndex >> 6; // Divide by 64
         var bitOffset = bitIndex & 0x3F; // Modulo 64
 
-        if (bitOffset + _bitsPerEntry <= 64)
-        {
-            return (int)((_data[longIndex] >> bitOffset) & _maxEntryValue);
-        }
+        if (bitOffset + _bitsPerEntry <= 64) return (int)((_data[longIndex] >> bitOffset) & _maxEntryValue);
 
         var part1 = 64 - bitOffset;
         var part2 = _bitsPerEntry - part1;
@@ -43,14 +52,5 @@ public class BitStorage
         var val2 = _data[longIndex + 1] & ((1L << part2) - 1);
 
         return (int)((val1 | (val2 << part1)) & _maxEntryValue);
-    }
-
-    public void Read(ref PacketBufferReader reader)
-    {
-        var length = reader.ReadVarInt(); // TODO: Validate with PrefixedArray helper.
-        for (var i = 0; i < length && i < _data.Length; i++)
-        {
-            _data[i] = reader.ReadSignedLong();
-        }
     }
 }

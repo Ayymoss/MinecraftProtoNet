@@ -1,11 +1,13 @@
-﻿using System.Text;
+﻿using System.Text.Json;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
+using MinecraftProtoNet.Models.Json;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Configuration.Clientbound;
 using MinecraftProtoNet.State.Base;
 using Spectre.Console;
+using BlockState = MinecraftProtoNet.Models.World.Chunk.BlockState;
 
 namespace MinecraftProtoNet.Handlers
 {
@@ -37,17 +39,13 @@ namespace MinecraftProtoNet.Handlers
                 case FinishConfigurationPacket finishConfigurationPacket:
                 {
                     // Setup the client environment
-                    ClientState.InitializeBlockStateRegistry(new Dictionary<int, BlockState>
-                    {
-                        [0] = BlockState.Air,
-                        [85] = new(85, "minecraft:bedrock"),
-                        [27579] = new(27579, "minecraft:verdant_froglight"),
-                        [27581] = new(27581, "minecraft:unknown"),
-                        [27584] = new(27584, "minecraft:unknown"),
-                        [27578] = new(27578, "minecraft:unknown"),
-                        [27576] = new(27576, "minecraft:ochre_froglight"),
-                        [27582] = new(27582, "minecraft:pearlescent_froglight"),
-                    });
+                    var jsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-1.12.4.json"); // TODO: Rehome
+                    var jsonString = await File.ReadAllTextAsync(jsonFilePath);
+                    var blockData = JsonSerializer.Deserialize<Dictionary<string, Block>>(jsonString) ?? [];
+                    var blockStateData = blockData
+                        .SelectMany(kvp => kvp.Value.States.Select(state => new { BlockName = kvp.Key, StateId = state.Id }))
+                        .ToDictionary(x => x.StateId, x => new BlockState(x.StateId, x.BlockName));
+                    ClientState.InitializeBlockStateRegistry(blockStateData);
 
                     var biomes = clientState.Registry["minecraft:worldgen/biome"]
                         .Select((x, index) => new { i = index, x.Key })

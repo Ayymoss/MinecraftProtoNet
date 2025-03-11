@@ -142,12 +142,14 @@ public class PlayHandler(ClientState clientState) : IPacketHandler
                 if (playerChatPacket.Body.Message.StartsWith("!goto"))
                 {
                     var coords = playerChatPacket.Body.Message.Split(" ");
-                    if (coords.Length == 4)
+                    if (coords.Length is 4 or 5)
                     {
                         var x = float.Parse(coords[1]);
                         var y = float.Parse(coords[2]);
                         var z = float.Parse(coords[3]);
-                        InterpolateToCoordinates(client, new Vector3<double>(x, y, z));
+                        var speed = 0.25f;
+                        if (coords.Length is 5) float.TryParse(coords[4], out speed);
+                        InterpolateToCoordinates(client, new Vector3<double>(x, y, z), speed);
                         await client.SendPacketAsync(new ChatPacket($"Moving to {x:N2}, {y:N2}, {z:N2}"));
                     }
                 }
@@ -273,10 +275,9 @@ public class PlayHandler(ClientState clientState) : IPacketHandler
         return result;
     }
 
-    private static void InterpolateToCoordinates(IMinecraftClient client, Vector3<double> targetPosition)
+    private static void InterpolateToCoordinates(IMinecraftClient client, Vector3<double> targetPosition, float speed = 0.25f)
     {
-        const float baseSpeed = 0.25f;
-        const float stoppingDistance = 0.25f;
+        var stoppingDistance = float.Max(0.25f, speed);
 
         _ = Task.Run(async () =>
         {
@@ -295,7 +296,7 @@ public class PlayHandler(ClientState clientState) : IPacketHandler
                 direction.Y /= distance;
                 direction.Z /= distance;
 
-                var newPosition = currentPosition + direction * baseSpeed;
+                var newPosition = currentPosition + direction * speed;
                 var targetYaw = CalculateYawToTarget(currentPosition, targetPosition);
                 client.ClientState.Player.YawPitch.X = NormalizeYaw(targetYaw);
                 var pitchDegrees = client.ClientState.Player.YawPitch.Y;

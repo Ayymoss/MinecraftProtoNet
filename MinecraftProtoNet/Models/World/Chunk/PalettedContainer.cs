@@ -1,36 +1,25 @@
-using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public class PalettedContainer<T>
+public class PalettedContainer
 {
-    private IPalette<T> _palette;
-    private BitStorage _storage;
-    private PaletteType _paletteType;
+    private IPalette _palette;
+    private BitStorage? _storage;
+    private readonly PaletteType _paletteType;
 
     public PalettedContainer(PaletteType paletteType)
     {
         _paletteType = paletteType;
         _palette = CreatePalette(0);
-        var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
-        _storage = new BitStorage(0, size);
     }
 
-    private Dictionary<int, T> GetRegistry()
+    public int? Get(int index)
     {
-        return _paletteType switch
-        {
-            PaletteType.BlockState => (Dictionary<int, T>)(object)ClientState.BlockStateRegistry,
-            PaletteType.Biome => (Dictionary<int, T>)(object)ClientState.BiomeRegistry,
-            _ => throw new ArgumentOutOfRangeException(nameof(_paletteType), _paletteType, null)
-        };
-    }
+        if (_storage is null) return null;
 
-    public T Get(int index)
-    {
         var paletteId = _storage.Get(index);
-        return _palette.ValueFor(paletteId);
+        return _palette.RegistryIdFor(paletteId);
     }
 
     public void Read(ref PacketBufferReader reader)
@@ -40,20 +29,22 @@ public class PalettedContainer<T>
         _palette.Read(ref reader);
 
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
-        _storage = new BitStorage(bitsPerEntry, size);
-        _storage.Read(ref reader);
+
+        // We still need to read the data even if bitsPerEntry is 0???? Why....
+        var bitData = reader.ReadPrefixedArray<long>();
+        if (bitsPerEntry is 0) return;
+
+        _storage = new BitStorage(bitsPerEntry, size, bitData);
     }
 
-    private IPalette<T> CreatePalette(int bitsPerEntry)
+    private IPalette CreatePalette(int bitsPerEntry)
     {
-        var registry = GetRegistry();
-
         return bitsPerEntry switch
         {
-            0 => new SingleValuePalette<T>(registry),
-            <= 4 => new LinearPalette<T>(registry, bitsPerEntry),
-            <= 8 => new HashMapPalette<T>(registry, bitsPerEntry),
-            _ => new GlobalPalette<T>(registry)
+            0 => new SingleValuePalette(),
+            <= 4 => new IndirectPalette(bitsPerEntry),
+            <= 8 => new DirectPalette(),
+            _ => new GlobalPalette()
         };
     }
 }

@@ -1,9 +1,7 @@
-﻿using System.Numerics;
-using MinecraftProtoNet.Attributes;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
@@ -27,7 +25,7 @@ public class LevelChunkWithLightPacket : IClientPacket
         var blockEntities = buffer.ReadPrefixedArray<ChunkBlockEntityInfo>();
 
         // Create the chunk
-        Chunk = new Chunk(ChunkX, ChunkZ, heightmaps, blockEntities);
+        Chunk = new Chunk(ChunkX, ChunkZ);
 
         // Parse chunk sections from the chunk data buffer
         var chunkReader = new PacketBufferReader(chunkDataBuffer);

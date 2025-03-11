@@ -2,19 +2,19 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public class SingleValuePalette<T>(Dictionary<int, T> registry) : IPalette<T>
+public class SingleValuePalette : IPalette
 {
-    private T _value;
-    private bool _hasValue = false;
+    private int _registryId;
+    private bool _hasValue;
 
-    public int IdFor(T value)
+    public int IdFor(int registryId)
     {
         if (!_hasValue)
         {
-            _value = value;
+            _registryId = registryId;
             _hasValue = true;
         }
-        else if (!_value.Equals(value))
+        else if (_registryId != registryId)
         {
             throw new InvalidOperationException("Cannot add more than one value to SingleValuePalette");
         }
@@ -22,22 +22,16 @@ public class SingleValuePalette<T>(Dictionary<int, T> registry) : IPalette<T>
         return 0;
     }
 
-    public T ValueFor(int id)
+    public int RegistryIdFor(int paletteId)
     {
-        if (id != 0 || !_hasValue) throw new IndexOutOfRangeException($"Invalid palette id: {id} - Type: {typeof(T)}");
+        if (paletteId != 0 || !_hasValue) throw new IndexOutOfRangeException($"Invalid palette id: {paletteId}");
 
-        return _value;
+        return _registryId;
     }
 
     public void Read(ref PacketBufferReader reader)
     {
-        var id = reader.ReadVarInt();
-        if (!registry.TryGetValue(id, out var value))
-        {
-            throw new IndexOutOfRangeException($"Invalid registry id: {id} - Type: {typeof(T)}");
-        }
-
-        _value = value;
+        _registryId = reader.ReadVarInt();
         _hasValue = true;
     }
 }

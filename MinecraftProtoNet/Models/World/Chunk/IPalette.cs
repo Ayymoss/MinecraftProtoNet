@@ -2,9 +2,9 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public interface IPalette<T>
+public interface IPalette
 {
-    int IdFor(T value);
-    T ValueFor(int id);
+    int IdFor(int registryId);
+    int RegistryIdFor(int paletteId);
     void Read(ref PacketBufferReader reader);
 }

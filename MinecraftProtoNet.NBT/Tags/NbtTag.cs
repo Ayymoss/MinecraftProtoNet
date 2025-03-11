@@ -9,6 +9,6 @@ public abstract class NbtTag(string? name)
 
     public override string ToString()
     {
-        return $"{nameof(NbtTag)}: {Name} ({Type})";
+        return $"{nameof(NbtTag)}: {Name ?? "<NULL>"} ({Type})";
     }
 }
