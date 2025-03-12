@@ -1,5 +1,6 @@
 ﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Models.Player;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
@@ -15,7 +16,7 @@ public class LoginSuccessPacket : IClientPacket
     // TODO: This packet needs to be revised for latest protocol (1.21.4)
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        UUID = buffer.ReadUUID();
+        UUID = buffer.ReadUuid();
         Username = buffer.ReadString();
         var count = buffer.ReadVarInt();
         Properties = new Property[count];
@@ -28,12 +29,5 @@ public class LoginSuccessPacket : IClientPacket
                 Signature = buffer.ReadString()
             };
         }
-    }
-
-    public class Property
-    {
-        public string? Name { get; set; }
-        public string? Value { get; set; }
-        public string? Signature { get; set; }
     }
 }

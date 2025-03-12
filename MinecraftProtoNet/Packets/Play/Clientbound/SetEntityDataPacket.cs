@@ -2,13 +2,14 @@
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Packets.Base.Definitions;
 using MinecraftProtoNet.Utilities;
 using Spectre.Console;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Partially implemented.
-[Packet(0x5D, ProtocolState.Play, true)]
+[Packet(0x5D, ProtocolState.Play)]
 public class SetEntityDataPacket : IClientPacket
 {
     public int EntityId { get; set; }
@@ -23,7 +24,7 @@ public class SetEntityDataPacket : IClientPacket
             var index = buffer.ReadUnsignedByte();
             if (index is 0xFF) break;
 
-            var type = (MetadataType)buffer.ReadVarInt();
+            var type = (MetadataType)buffer.ReadVarInt(); // TODO: Strangely high values are because packet is partially done and bytes are offset.
             var value = GetValue(ref buffer, type);
             metadata.Add(new Metadata
             {
@@ -44,7 +45,7 @@ public class SetEntityDataPacket : IClientPacket
 
         public override string ToString()
         {
-            return $"[{Index}] {Type} = {Value}";
+            return $"[{Index}] {Type?.ToString() ?? "<NULL>"} = {Value?.GetType().ToString() ?? "<NULL>"}";
         }
     }
 
@@ -111,6 +112,9 @@ public class SetEntityDataPacket : IClientPacket
                 break;
             case MetadataType.Pose:
                 value = (Pose)buffer.ReadVarInt();
+                break;
+            case MetadataType.Slot:
+                value = Slot.Read(ref buffer);
                 break;
             default:
                 AnsiConsole.MarkupLine($"[yellow]Warning:[/] [white]Non-implemented metadata type:[/] {type} ({(int)type})");

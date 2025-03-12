@@ -20,7 +20,7 @@ public class PlayerChatPacket : IClientPacket
         // Header
         Header = new HeaderPayload
         {
-            Uuid = buffer.ReadUUID(),
+            Uuid = buffer.ReadUuid(),
             Index = buffer.ReadVarInt(),
             MessageSignature = buffer.ReadBoolean() ? buffer.ReadBuffer(256).ToArray() : null
         };

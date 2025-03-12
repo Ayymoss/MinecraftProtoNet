@@ -21,7 +21,7 @@ public class AddEntityPacket : IClientPacket
     public void Deserialize(ref PacketBufferReader buffer)
     {
         EntityId = buffer.ReadVarInt();
-        EntityUuid = buffer.ReadUUID(); // TODO: Upon connecting we get a UUID from everyone.
+        EntityUuid = buffer.ReadUuid(); // TODO: Upon connecting we get a UUID from everyone.
         Type = buffer.ReadVarInt();
         Position = new Vector3<double>(buffer.ReadDouble(), buffer.ReadDouble(), buffer.ReadDouble());
         PitchYawAndHeadYaw = new Vector3<double>(buffer.ReadSignedByte(), buffer.ReadSignedByte(), buffer.ReadSignedByte());

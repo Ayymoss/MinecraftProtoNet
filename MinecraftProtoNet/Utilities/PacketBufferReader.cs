@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.Collections;
 using System.Numerics;
 using System.Text;
 using MinecraftProtoNet.Models.World.Meta;
@@ -107,6 +108,40 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return value;
     }
 
+    public BitArray ReadFixedBitSet(int length)
+    {
+        var bytesNeeded = (length + 7) / 8;
+        var bytes = ReadBytes(bytesNeeded);
+        var bitArray = new BitArray(bytes.ToArray());
+
+        if (bitArray.Length <= length) return bitArray;
+        var result = new BitArray(length);
+        for (var i = 0; i < length; i++)
+        {
+            result[i] = bitArray[i];
+        }
+
+        return result;
+    }
+
+    public HashSet<TEnum> ReadEnumSet<TEnum>() where TEnum : Enum
+    {
+        var values = Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToArray();
+
+        var bitSet = ReadFixedBitSet(values.Length);
+        HashSet<TEnum> readValues = [];
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            if (bitSet[i])
+            {
+                readValues.Add(values[i]);
+            }
+        }
+
+        return readValues;
+    }
+
     public ReadOnlySpan<byte> ReadBuffer(int count)
     {
         if (count > ReadableBytes) throw new ArgumentOutOfRangeException(nameof(count), "Cannot read beyond the readable bytes.");
@@ -128,7 +163,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return bitSet;
     }
 
-    public Guid ReadUUID()
+    public Guid ReadUuid()
     {
         var bytes = ReadBuffer(16);
         return new Guid(bytes); // Guid constructor directly handles big-endian
@@ -163,14 +198,15 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return new ChunkBlockEntityInfo((byte)x, y, (byte)z, type, nbtData);
     }
 
-    public T[] ReadPrefixedArray<T>()
+    public T[] ReadPrefixedArray<T>(Func<T>? customReader = null)
     {
         var length = ReadVarInt();
         var array = new T[length];
 
         for (var i = 0; i < length; i++)
         {
-            array[i] = ReadObject<T>();
+            if (customReader is not null) array[i] = customReader();
+            else array[i] = ReadObject<T>();
         }
 
         return array;
