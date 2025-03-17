@@ -18,5 +18,5 @@ public interface IMinecraftClient
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
     void PhysicsTick();
     void SetPosition(int entityId, Vector3<double> newPosition, bool delta = true);
-    MovePlayerPositionRotationPacket Move(double x, double y, double z);
+    MovePlayerPositionRotationPacket Move(double x, double y, double z, float yaw = 0, float pitch = 0);
 }

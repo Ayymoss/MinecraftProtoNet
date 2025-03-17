@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 
@@ -6,6 +7,47 @@ namespace MinecraftProtoNet.State;
 
 public class Level
 {
+    public double TickInterval { get; private set; } = 50d;
+    public long WorldAge { get; private set; }
+    public long TimeOfDay { get; private set; }
+    public bool TimeOfDayIncreasing { get; private set; }
+    public Stopwatch TimeSinceLastTimePacket { get; } = new();
+
+    public void UpdateTickInformation(long worldAge, long timeOfDay, bool timeOfDayIncreasing)
+    {
+        var previousWorldAge = WorldAge;
+
+        WorldAge = worldAge;
+        TimeOfDay = timeOfDay;
+        TimeOfDayIncreasing = timeOfDayIncreasing;
+
+        if (previousWorldAge > 0)
+        {
+            var ticksPassed = WorldAge - previousWorldAge;
+            if (ticksPassed <= 0) return;
+
+            var realTimeElapsed = TimeSinceLastTimePacket.ElapsedMilliseconds;
+            TimeSinceLastTimePacket.Restart();
+            var calculatedTickInterval = (double)realTimeElapsed / ticksPassed;
+            const double smoothingFactor = 0.25;
+            TickInterval = TickInterval * (1 - smoothingFactor) + calculatedTickInterval * smoothingFactor;
+        }
+        else
+        {
+            TimeSinceLastTimePacket.Restart();
+        }
+    }
+
+    public double GetCurrentServerTps()
+    {
+        return 1000.0 / TickInterval;
+    }
+
+    public double GetTickRateMultiplier()
+    {
+        return 50.0 / TickInterval;
+    }
+
     // Lookups for frequency access
     private readonly Dictionary<Guid, Player> _players = new();
     private readonly Dictionary<int, Player> _playersByEntityId = new();
@@ -42,7 +84,7 @@ public class Level
     /// <summary>
     /// Adds an entity to an existing player
     /// </summary>
-    public async Task<Player> AddEntityAsync(Guid uuid, int entityId, Vector3<double>? position = null, Vector2D? yawPitch = null)
+    public async Task<Player> AddEntityAsync(Guid uuid, int entityId, Vector3<double>? position = null, Vector2<float>? yawPitch = null)
     {
         try
         {
@@ -140,7 +182,7 @@ public class Level
     /// <summary>
     /// Updates an entity's position and orientation
     /// </summary>
-    public async Task<bool> UpdateEntityPositionAsync(int entityId, Vector3<double> position, Vector2D? yawPitch = null)
+    public async Task<bool> UpdateEntityPositionAsync(int entityId, Vector3<double> position, Vector2<float>? yawPitch = null)
     {
         try
         {

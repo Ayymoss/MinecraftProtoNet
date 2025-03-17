@@ -13,7 +13,7 @@ public static class Program
         var serviceProvider = services.BuildServiceProvider();
 
         var client = serviceProvider.GetRequiredService<IMinecraftClient>();
-        await client.ConnectAsync("10.10.1.20", 25565);
+        await client.ConnectAsync("10.10.1.20", 25555);
 
         Console.ReadKey();
         await client.DisconnectAsync();

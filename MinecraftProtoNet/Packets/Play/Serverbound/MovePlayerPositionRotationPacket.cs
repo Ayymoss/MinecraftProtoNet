@@ -25,7 +25,7 @@ public class MovePlayerPositionRotationPacket : IServerPacket
         buffer.WriteDouble(Z);
         buffer.WriteFloat(Yaw);
         buffer.WriteFloat(Pitch);
-        buffer.WriteSignedByte((byte)Flags);
+        buffer.WriteUnsignedByte((byte)Flags);
     }
 
     public enum MovementFlags

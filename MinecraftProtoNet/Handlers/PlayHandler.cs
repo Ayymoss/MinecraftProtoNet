@@ -38,12 +38,19 @@ public class PlayHandler : IPacketHandler
         (ProtocolState.Play, 0x5D),
         (ProtocolState.Play, 0x40),
         (ProtocolState.Play, 0x73),
+        (ProtocolState.Play, 0x6B),
     ];
 
     public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {
+            case SetTimePacket setTimePacket:
+            {
+                client.State.Level.UpdateTickInformation(setTimePacket.WorldAge, setTimePacket.TimeOfDay,
+                    setTimePacket.TimeOfDayIncreasing);
+                break;
+            }
             case LoginPacket loginPacket:
             {
                 if (client.State.LocalPlayer.Entity is not { } entity) break;
@@ -69,15 +76,16 @@ public class PlayHandler : IPacketHandler
             }
             case DisconnectPacket disconnectPacket:
             {
-                Console.WriteLine(
-                    $"Disconnected from Server for: {disconnectPacket.DisconnectReason.FindTag<NbtString>(null)?.Value ?? "FAILED TO PARSE"}");
+                var translateLookup = disconnectPacket.DisconnectReason.FindTag<NbtString>("translate")?.Value;
+                var messages = disconnectPacket.DisconnectReason.FindTags<NbtString>(null).Reverse().Select(x => x.Value);
+                Console.WriteLine($"Disconnected from Server for: ({translateLookup}) {string.Join(" ", messages)}");
                 break;
             }
             case SystemChatPacket systemChatPacket:
             {
-                var translate = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
-                var name = systemChatPacket.Tags.FindTag<NbtString>("text")?.Value;
-                Console.WriteLine($"System Message: {translate ?? "<FAILED TO PARSE>"} {name ?? "<FAILED TO PARSE>"}");
+                var translateLookup = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
+                var texts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value);
+                Console.WriteLine($"System Message: ({translateLookup ?? "<NULL>"}) {string.Join(" ", texts)}");
                 break;
             }
             case PlayerChatPacket playerChatPacket:
@@ -93,7 +101,7 @@ public class PlayHandler : IPacketHandler
                 client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
                 client.State.LocalPlayer.Entity.YawPitch = playerPositionPacket.YawPitch;
                 await client.SendPacketAsync(client.Move(playerPositionPacket.Position.X, playerPositionPacket.Position.Y,
-                    playerPositionPacket.Position.Z));
+                    playerPositionPacket.Position.Z, playerPositionPacket.YawPitch.X, playerPositionPacket.YawPitch.Y));
                 break;
             }
             case KeepAlivePacket keepAlivePacket:

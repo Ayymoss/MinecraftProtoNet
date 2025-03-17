@@ -1,9 +1,6 @@
-﻿using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
+﻿using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
-using Spectre.Console;
 
 namespace MinecraftProtoNet.Services;
 
@@ -92,57 +89,74 @@ public class PacketService : IPacketService
             },
             ProtocolState.Play => packetId switch
             {
+                // Connection & Core Game State
                 0x00 => new Packets.Play.Clientbound.BundleDelimiterPacket(),
-                0x01 => new Packets.Play.Clientbound.AddEntityPacket(),
+                0x27 => new Packets.Play.Clientbound.KeepAlivePacket(),
+                0x37 => new Packets.Play.Clientbound.PingPacket(),
+                0x38 => new Packets.Play.Clientbound.PongResponsePacket(),
+                0x1D => new Packets.Play.Clientbound.DisconnectPacket(),
+
+                // Player Initial Login & Setup
                 0x2C => new Packets.Play.Clientbound.LoginPacket(),
                 0x0B => new Packets.Play.Clientbound.ChangeDifficultyPacket(),
                 0x3A => new Packets.Play.Clientbound.PlayerAbilitiesPacket(),
                 0x63 => new Packets.Play.Clientbound.SetHeldSlotPacket(),
-                0x7E => new Packets.Play.Clientbound.UpdateRecipesPacket(),
-                0x1F => new Packets.Play.Clientbound.EntityEventPacket(),
-                0x42 => new Packets.Play.Clientbound.PlayerPositionPacket(),
-                0x23 => new Packets.Play.Clientbound.GameEventPacket(),
-                0x28 => new Packets.Play.Clientbound.LevelChunkWithLightPacket(),
-                0x27 => new Packets.Play.Clientbound.KeepAlivePacket(),
-                0x62 => new Packets.Play.Clientbound.SetHealthPacket(),
-                0x3E => new Packets.Play.Clientbound.PlayerCombatKillPacket(),
-                0x30 => new Packets.Play.Clientbound.MoveEntityPositionRotationPacket(),
-                0x6B => new Packets.Play.Clientbound.SetTimePacket(),
                 0x5B => new Packets.Play.Clientbound.SetDefaultSpawnPositionPacket(),
-                0x78 => new Packets.Play.Clientbound.TickingStatePacket(),
-                0x79 => new Packets.Play.Clientbound.TickingStepPacket(),
-                0x2F => new Packets.Play.Clientbound.MoveEntityPositionPacket(),
-                0x1D => new Packets.Play.Clientbound.DisconnectPacket(),
-                0x3B => new Packets.Play.Clientbound.PlayerChatPacket(),
-                0x73 => new Packets.Play.Clientbound.SystemChatPacket(),
-                0x47 => new Packets.Play.Clientbound.RemoveEntitiesPacket(),
-                0x20 => new Packets.Play.Clientbound.EntityPositionSyncPacket(),
-                0x4D => new Packets.Play.Clientbound.RotateHeadPacket(),
-                0x32 => new Packets.Play.Clientbound.MoveEntityRotationPacket(),
-                0x37 => new Packets.Play.Clientbound.PingPacket(),
-                0x38 => new Packets.Play.Clientbound.PongResponsePacket(),
-                0x5D => new Packets.Play.Clientbound.SetEntityDataPacket(),
-                0x6F => new Packets.Play.Clientbound.SoundPacket(),
-                0x03 => new Packets.Play.Clientbound.AnimatePacket(),
-                0x09 => new Packets.Play.Clientbound.BlockUpdatePacket(),
-                0x29 => new Packets.Play.Clientbound.LevelEventPacket(),
-                0x5F => new Packets.Play.Clientbound.SetEntityMotionPacket(),
-                0x22 => new Packets.Play.Clientbound.ForgetLevelChunkPacket(),
-                0x7C => new Packets.Play.Clientbound.UpdateAttributesPacket(),
-                0x15 => new Packets.Play.Clientbound.ContainerSetSlotPacket(),
-                0x76 => new Packets.Play.Clientbound.TakeItemEntity(),
-                0x60 => new Packets.Play.Clientbound.SetEquipmentPacket(),
+                0x42 => new Packets.Play.Clientbound.PlayerPositionPacket(),
+
+                // Player Information
                 0x40 => new Packets.Play.Clientbound.PlayerInfoUpdatePacket(),
                 0x3F => new Packets.Play.Clientbound.PlayerInfoRemovePacket(),
-                0x4E => new Packets.Play.Clientbound.SectionBlocksUpdatePacket(),
-                0x2A => new Packets.Play.Clientbound.LevelParticlesPacket(),
-                0x02 => new Packets.Play.Clientbound.AddExperienceOrbPacket(),
-                0x1A => new Packets.Play.Clientbound.DamageEventPacket(),
                 0x61 => new Packets.Play.Clientbound.SetExperiencePacket(),
+                0x62 => new Packets.Play.Clientbound.SetHealthPacket(),
+
+                // Player Status & Chat
+                0x3B => new Packets.Play.Clientbound.PlayerChatPacket(),
+                0x73 => new Packets.Play.Clientbound.SystemChatPacket(),
+                0x3E => new Packets.Play.Clientbound.PlayerCombatKillPacket(),
+
+                // Entity Creation & Removal
+                0x01 => new Packets.Play.Clientbound.AddEntityPacket(),
+                0x02 => new Packets.Play.Clientbound.AddExperienceOrbPacket(),
+                0x47 => new Packets.Play.Clientbound.RemoveEntitiesPacket(),
+
+                // Entity Movement & Position
+                0x30 => new Packets.Play.Clientbound.MoveEntityPositionRotationPacket(),
+                0x2F => new Packets.Play.Clientbound.MoveEntityPositionPacket(),
+                0x32 => new Packets.Play.Clientbound.MoveEntityRotationPacket(),
+                0x20 => new Packets.Play.Clientbound.EntityPositionSyncPacket(),
+                0x4D => new Packets.Play.Clientbound.RotateHeadPacket(),
+                0x5F => new Packets.Play.Clientbound.SetEntityMotionPacket(),
+
+                // Entity State & Properties
+                0x5D => new Packets.Play.Clientbound.SetEntityDataPacket(),
+                0x1F => new Packets.Play.Clientbound.EntityEventPacket(),
+                0x7C => new Packets.Play.Clientbound.UpdateAttributesPacket(),
+                0x60 => new Packets.Play.Clientbound.SetEquipmentPacket(),
+                0x03 => new Packets.Play.Clientbound.AnimatePacket(),
+                0x1A => new Packets.Play.Clientbound.DamageEventPacket(),
+                0x76 => new Packets.Play.Clientbound.TakeItemEntity(),
+
+                // World & Environment
+                0x28 => new Packets.Play.Clientbound.LevelChunkWithLightPacket(),
+                0x22 => new Packets.Play.Clientbound.ForgetLevelChunkPacket(),
+                0x4E => new Packets.Play.Clientbound.SectionBlocksUpdatePacket(),
+                0x09 => new Packets.Play.Clientbound.BlockUpdatePacket(),
+                0x05 => new Packets.Play.Clientbound.BlockChangedAcknowledgementPacket(),
                 0x58 => new Packets.Play.Clientbound.SetChunkCacheCenterPacket(),
-                _ => new UnknownPacket() // TODO: Remove when packets implemented.
-                //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
-                //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")
+                0x6B => new Packets.Play.Clientbound.SetTimePacket(),
+                0x23 => new Packets.Play.Clientbound.GameEventPacket(),
+                0x29 => new Packets.Play.Clientbound.LevelEventPacket(),
+                0x2A => new Packets.Play.Clientbound.LevelParticlesPacket(),
+
+                // Game Mechanics
+                0x78 => new Packets.Play.Clientbound.TickingStatePacket(),
+                0x79 => new Packets.Play.Clientbound.TickingStepPacket(),
+                0x7E => new Packets.Play.Clientbound.UpdateRecipesPacket(),
+                0x15 => new Packets.Play.Clientbound.ContainerSetSlotPacket(),
+                0x6F => new Packets.Play.Clientbound.SoundPacket(),
+                0x13 => new Packets.Play.Clientbound.ContainerSetContentPacket(),
+                _ => new UnknownPacket()
             },
             _ => throw new ArgumentOutOfRangeException(nameof(state), $"Invalid protocol state {state}.")
         };

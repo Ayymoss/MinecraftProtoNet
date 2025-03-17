@@ -25,7 +25,7 @@ public class LoginStartPacket : IServerPacket
         }
         else
         {
-            buffer.WriteSignedByte(0);
+            buffer.WriteUnsignedByte(0);
         }
     }
 }

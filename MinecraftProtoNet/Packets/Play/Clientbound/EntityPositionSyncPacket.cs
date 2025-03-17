@@ -12,7 +12,7 @@ public class EntityPositionSyncPacket : IClientPacket
     public int EntityId { get; set; }
     public Vector3<double> Position { get; set; }
     public Vector3<double> Velocity { get; set; }
-    public Vector2D YawPitch { get; set; }
+    public Vector2<float> YawPitch { get; set; }
     public bool OnGround { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
@@ -31,7 +31,7 @@ public class EntityPositionSyncPacket : IClientPacket
 
         var yaw = buffer.ReadFloat();
         var pitch = buffer.ReadFloat();
-        YawPitch = new Vector2D(yaw, pitch);
+        YawPitch = new Vector2<float>(yaw, pitch);
 
         OnGround = buffer.ReadBoolean();
     }

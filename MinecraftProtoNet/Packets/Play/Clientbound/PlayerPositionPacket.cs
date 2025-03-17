@@ -13,7 +13,7 @@ public class PlayerPositionPacket : IClientPacket
     public int TeleportId { get; set; }
     public Vector3<double> Position { get; set; }
     public Vector3<double> Velocity { get; set; }
-    public Vector2D YawPitch { get; set; }
+    public Vector2<float> YawPitch { get; set; }
     public PositionFlags Flags { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
@@ -32,7 +32,7 @@ public class PlayerPositionPacket : IClientPacket
 
         var yaw = buffer.ReadFloat();
         var pitch = buffer.ReadFloat();
-        YawPitch = new Vector2D(yaw, pitch);
+        YawPitch = new Vector2<float>(yaw, pitch);
 
         Flags = (PositionFlags)buffer.ReadUnsignedInt();
     }

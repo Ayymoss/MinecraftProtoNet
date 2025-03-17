@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Handshaking.Serverbound;
@@ -142,6 +143,8 @@ public class MinecraftClient(Connection connection, IPacketService packetService
     {
         var sender = State.Level.GetPlayerByUuid(senderGuid);
 
+        if (!State.LocalPlayer.HasEntity) return;
+
         if (bodyMessage.StartsWith("!say"))
         {
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
@@ -150,12 +153,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
         if (bodyMessage.StartsWith("!getblock"))
         {
-            var coords = bodyMessage.Split(" ");
-            if (coords.Length == 4)
+            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (coords.Length is 3)
             {
-                var x = int.Parse(coords[1]);
-                var y = int.Parse(coords[2]);
-                var z = int.Parse(coords[3]);
+                var x = int.Parse(coords[0]);
+                var y = int.Parse(coords[1]);
+                var z = int.Parse(coords[2]);
                 var block = State.Level.GetBlockAt(x, y, z);
                 var message = block != null
                     ? $"Block: ({block.Id}) {block.Name}"
@@ -166,12 +169,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
         if (bodyMessage.StartsWith("!goto"))
         {
-            var coords = bodyMessage.Split(" ");
-            if (coords.Length is 4 or 5)
+            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (coords.Length is 3 or 4)
             {
-                var x = float.Parse(coords[1]);
-                var y = float.Parse(coords[2]);
-                var z = float.Parse(coords[3]);
+                var x = float.Parse(coords[0]);
+                var y = float.Parse(coords[1]);
+                var z = float.Parse(coords[2]);
                 var speed = 0.25f;
                 if (coords.Length is 5) float.TryParse(coords[4], out speed);
                 ClientManagerHelpers.InterpolateToCoordinates(this, new Vector3<double>(x, y, z), speed);
@@ -183,6 +186,57 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         {
             await SendPacketAsync(new Packets.Play.Serverbound.PingRequestPacket
                 { Payload = TimeProvider.System.GetLocalNow().ToUnixTimeMilliseconds() });
+        }
+
+        if (bodyMessage == "!tps")
+        {
+            await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
+                                                 $"| MSPT: {State.Level.TickInterval:N2}ms " +
+                                                 $"| Rate: {State.Level.GetTickRateMultiplier():N2}x"));
+        }
+
+        if (bodyMessage.StartsWith("!swing"))
+        {
+            var message = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (Enum.TryParse<Hand>(string.Join(" ", message), true, out var swing))
+                await SendPacketAsync(new SwingPacket { Hand = swing });
+        }
+
+        if (bodyMessage.StartsWith("!cmd"))
+        {
+            var message = bodyMessage.Split(" ").Skip(1).ToArray();
+            await SendPacketAsync(new ChatCommandPacket(string.Join(" ", message)));
+        }
+
+        if (bodyMessage.StartsWith("!slot"))
+        {
+            var message = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (message.Length is 1)
+            {
+                var slot = short.Parse(message[0]);
+                await SendPacketAsync(new SetCarriedItemPacket { Slot = slot });
+            }
+        }
+
+        if (bodyMessage.StartsWith("!place"))
+        {
+            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (coords.Length is 4)
+            {
+                var x = float.Parse(coords[0]);
+                var y = float.Parse(coords[1]);
+                var z = float.Parse(coords[2]);
+                var face = Enum.Parse<BlockFace>(coords[3], true);
+                await SendPacketAsync(new UseItemOnPacket
+                {
+                    Hand = Hand.MainHand,
+                    Position = new Vector3<double>(x, y, z),
+                    BlockFace = face,
+                    Cursor = new Vector3<float>(0.5f, 1f, 0.5f),
+                    InsideBlock = false,
+                    Sequence = State.LocalPlayer.Entity.BlockPlaceSequence++
+                });
+            }
         }
 
         if (sender is null) return;
@@ -233,15 +287,15 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         }
     }
 
-    public MovePlayerPositionRotationPacket Move(double x, double y, double z)
+    public MovePlayerPositionRotationPacket Move(double x, double y, double z, float yaw = 0, float pitch = 0)
     {
         var result = new MovePlayerPositionRotationPacket
         {
             X = x,
             Y = y,
             Z = z,
-            Yaw = 0,
-            Pitch = 0,
+            Yaw = yaw,
+            Pitch = pitch,
             Flags = MovePlayerPositionRotationPacket.MovementFlags.None
         };
 
@@ -250,6 +304,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         State.LocalPlayer.Entity.Position.Y = result.Y;
         State.LocalPlayer.Entity.Position.Z = result.Z;
         State.LocalPlayer.Entity.YawPitch.X = result.Yaw;
+        State.LocalPlayer.Entity.YawPitch.Y = result.Pitch;
         return result;
     }
 }

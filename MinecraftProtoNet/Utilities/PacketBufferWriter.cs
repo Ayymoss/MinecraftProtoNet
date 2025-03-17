@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
+using MinecraftProtoNet.Models.Core;
 
 namespace MinecraftProtoNet.Utilities;
 
@@ -92,7 +93,7 @@ public ref struct PacketBufferWriter
         _writePosition += bytes.Length;
     }
 
-    public void WriteSignedByte(byte value)
+    public void WriteUnsignedByte(byte value)
     {
         EnsureCapacity(sizeof(byte));
         _buffer[_writePosition] = value;
@@ -119,7 +120,7 @@ public ref struct PacketBufferWriter
 
     public void WriteBoolean(bool value)
     {
-        WriteSignedByte(value ? (byte)1 : (byte)0);
+        WriteUnsignedByte(value ? (byte)1 : (byte)0);
     }
 
     // GetVarIntSize/GetVarLongSize can stay as helper methods
@@ -185,6 +186,20 @@ public ref struct PacketBufferWriter
         return _buffer[.._writePosition].ToArray();
     }
 
+    public void WritePosition(Vector3<double> position)
+    {
+        var x = (long)Math.Floor(position.X);
+        var y = (long)Math.Floor(position.Y);
+        var z = (long)Math.Floor(position.Z);
+
+        x = x & 0x3FFFFFF;
+        y = y & 0xFFF;
+        z = z & 0x3FFFFFF;
+
+        var packed = (x << 38) | (z << 12) | y;
+        WriteSignedLong(packed);
+    }
+
     public void WriteFloat(float value)
     {
         EnsureCapacity(sizeof(float));
@@ -204,5 +219,12 @@ public ref struct PacketBufferWriter
         EnsureCapacity(sizeof(int));
         BinaryPrimitives.WriteInt32BigEndian(_buffer[_writePosition..], payload);
         _writePosition += sizeof(int);
+    }
+
+    public void WriteSignedShort(short slot)
+    {
+        EnsureCapacity(sizeof(short));
+        BinaryPrimitives.WriteInt16BigEndian(_buffer[_writePosition..], slot);
+        _writePosition += sizeof(short);
     }
 }
