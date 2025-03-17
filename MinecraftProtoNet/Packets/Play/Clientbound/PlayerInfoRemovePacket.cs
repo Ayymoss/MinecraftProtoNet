@@ -5,13 +5,13 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x27, ProtocolState.Play, true)]
-public class KeepAlivePacket : IClientPacket
+[Packet(0x3F, ProtocolState.Play)]
+public class PlayerInfoRemovePacket : IClientPacket
 {
-    public long Payload { get; set; }
+    public Guid[] Uuids { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = buffer.ReadSignedLong();
+        Uuids = buffer.ReadPrefixedArray<Guid>();
     }
 }

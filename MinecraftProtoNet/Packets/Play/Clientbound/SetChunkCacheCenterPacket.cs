@@ -5,13 +5,15 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x27, ProtocolState.Play, true)]
-public class KeepAlivePacket : IClientPacket
+[Packet(0x58, ProtocolState.Play)]
+public class SetChunkCacheCenterPacket : IClientPacket
 {
-    public long Payload { get; set; }
+    public int ChunkX { get; set; }
+    public int ChunkY { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        Payload = buffer.ReadSignedLong();
+        ChunkX = buffer.ReadVarInt();
+        ChunkY = buffer.ReadVarInt();
     }
 }

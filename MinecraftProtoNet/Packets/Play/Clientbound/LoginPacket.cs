@@ -1,6 +1,7 @@
 ﻿using System.Numerics;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
@@ -27,7 +28,7 @@ public class LoginPacket : IClientPacket
     public bool IsFlat { get; set; }
     public bool HasDeathLocation { get; set; }
     public string? DeathDimensionName { get; set; }
-    public Vector3? DeathLocation { get; set; }
+    public Vector3<double>? DeathLocation { get; set; }
     public int PortalCooldown { get; set; }
     public int SeaLevel { get; set; }
     public bool EnforcesSecureChat { get; set; }
@@ -52,7 +53,7 @@ public class LoginPacket : IClientPacket
         IsFlat = buffer.ReadBoolean();
         HasDeathLocation = buffer.ReadBoolean();
         DeathDimensionName = HasDeathLocation ? buffer.ReadString() : null;
-        DeathLocation = HasDeathLocation ? buffer.ReadAsPosition() : null;
+        DeathLocation = HasDeathLocation ? buffer.ReadCoordinatePosition() : null;
         PortalCooldown = buffer.ReadVarInt();
         SeaLevel = buffer.ReadVarInt();
         EnforcesSecureChat = buffer.ReadBoolean();

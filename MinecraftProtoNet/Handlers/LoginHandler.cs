@@ -21,8 +21,8 @@ public class LoginHandler : IPacketHandler
         {
             case LoginSuccessPacket loginSuccess:
                 await client.SendPacketAsync(new LoginAcknowledgedPacket());
-                client.State = ProtocolState.Configuration;
-                AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");
+                client.ProtocolState = ProtocolState.Configuration;
+                AnsiConsole.MarkupLine($"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.ProtocolState.ToString()}[/]");
                 break;
         }
     }

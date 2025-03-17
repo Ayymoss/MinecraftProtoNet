@@ -1,19 +1,32 @@
-﻿using MinecraftProtoNet.Models.Core;
+﻿using System.Diagnostics.CodeAnalysis;
+using MinecraftProtoNet.Models.Player;
 
 namespace MinecraftProtoNet.State;
 
 public class Player
 {
+    public bool IsFullyRegistered => HasEntity && HasUsername;
+
+    [MemberNotNullWhen(true, nameof(Username))]
+    public bool HasUsername => Username is not null;
+
+    [MemberNotNullWhen(true, nameof(Entity))]
+    public bool HasEntity => Entity is not null;
+
+    public string? Username { get; set; }
     public Guid Uuid { get; set; }
-    public int EntityId { get; set; }
-    public string Username { get; set; }
-    public Vector3<double> Position { get; set; } = new();
-    public Vector3<double> Velocity { get; set; } = new();
-    public Vector2D YawPitch { get; set; } = new();
-    public List<object?> Objects { get; set; } // TODO: This needs to typed properly.
+    public int GameMode { get; set; }
+    public int Latency { get; set; }
+    public List<Property> Properties { get; set; } = [];
+
+    /// <summary>
+    /// Represents the physical entity in the world.
+    /// </summary>
+    public Entity? Entity { get; set; }
 
     public override string ToString()
     {
-        return $"({EntityId}) Player: {Username} ({Uuid}) Position: {Position} Velocity: {Velocity} YawPitch: {YawPitch} Objects: {Objects.Count}";
+        return
+            $"Player: {Username} ({Uuid}) - {GameMode} - {Latency}ms - {Properties.Count} properties - {HasEntity} - {HasUsername} - {IsFullyRegistered}";
     }
 }

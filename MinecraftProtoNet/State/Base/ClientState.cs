@@ -7,7 +7,7 @@ namespace MinecraftProtoNet.State.Base;
 public class ClientState
 {
     public Level Level { get; set; } = new();
-    public Player Player { get; set; } = new();
+    public Player LocalPlayer { get; set; } = new() { Entity = new Entity() };
     public ConcurrentDictionary<string, Dictionary<string, NbtTag?>> Registry { get; set; } = [];
 
     public static Dictionary<int, BlockState> BlockStateRegistry { get; private set; } = new();

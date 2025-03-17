@@ -46,7 +46,8 @@ public class PacketService : IPacketService
     public async Task HandlePacketAsync(IClientPacket packet, IMinecraftClient client)
     {
         var packetId = packet.GetPacketAttributeValue(p => p.PacketId);
-        if (_handlers.TryGetValue(client.State, out var stateHandlers) && stateHandlers.TryGetValue(packetId, out var handler))
+        if (_handlers.TryGetValue(client.ProtocolState, out var stateHandlers) &&
+            stateHandlers.TryGetValue(packetId, out var handler))
         {
             await handler.HandleAsync(packet, client);
         }
@@ -132,6 +133,13 @@ public class PacketService : IPacketService
                 0x76 => new Packets.Play.Clientbound.TakeItemEntity(),
                 0x60 => new Packets.Play.Clientbound.SetEquipmentPacket(),
                 0x40 => new Packets.Play.Clientbound.PlayerInfoUpdatePacket(),
+                0x3F => new Packets.Play.Clientbound.PlayerInfoRemovePacket(),
+                0x4E => new Packets.Play.Clientbound.SectionBlocksUpdatePacket(),
+                0x2A => new Packets.Play.Clientbound.LevelParticlesPacket(),
+                0x02 => new Packets.Play.Clientbound.AddExperienceOrbPacket(),
+                0x1A => new Packets.Play.Clientbound.DamageEventPacket(),
+                0x61 => new Packets.Play.Clientbound.SetExperiencePacket(),
+                0x58 => new Packets.Play.Clientbound.SetChunkCacheCenterPacket(),
                 _ => new UnknownPacket() // TODO: Remove when packets implemented.
                 //_ => throw new ArgumentOutOfRangeException(nameof(packetId),
                 //    $"Unknown packet ID {packetId} (0x{packetId:X2}) for Play state.")

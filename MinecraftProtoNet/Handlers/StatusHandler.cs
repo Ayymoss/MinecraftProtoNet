@@ -34,7 +34,8 @@ public class StatusHandler : IPacketHandler
                     Console.WriteLine(ex);
                 }
 
-                await client.SendPacketAsync(new PingRequestPacket { Payload = TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() });
+                await client.SendPacketAsync(new PingRequestPacket
+                    { Payload = TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() });
                 break;
             case PongResponsePacket pong:
                 Console.WriteLine($"Ping: {TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() - pong.Payload}ms");

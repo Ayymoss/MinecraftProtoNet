@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Numerics;
 using System.Text;
+using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags;
@@ -198,6 +199,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return new ChunkBlockEntityInfo((byte)x, y, (byte)z, type, nbtData);
     }
 
+    // TODO: Can't use func within struct this way... Find another solution.
     public T[] ReadPrefixedArray<T>(Func<T>? customReader = null)
     {
         var length = ReadVarInt();
@@ -218,6 +220,8 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         {
             case var type when type == typeof(VarInt):
                 return (T)(object)new VarInt(ReadVarInt());
+            case var type when type == typeof(VarLong):
+                return (T)(object)new VarLong(ReadVarLong());
             case var type when type == typeof(string):
                 return (T)(object)ReadString();
             case var type when type == typeof(byte):
@@ -228,17 +232,28 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
                 return (T)(object)ReadBuffer(ReadVarInt()).ToArray();
             case var type when type == typeof(ChunkBlockEntityInfo):
                 return (T)(object)ReadChunkBlockEntity();
+            case var type when type == typeof(Guid):
+                return (T)(object)ReadUuid();
             default: throw new NotSupportedException($"Unsupported type {typeof(T).Name}");
         }
     }
 
-    public Vector3 ReadAsPosition()
+    public Vector3<double> ReadCoordinatePosition()
     {
         var positionRaw = ReadSignedLong();
-        var x = (float)(positionRaw >> 38);
-        var y = (float)(positionRaw << 52 >> 52);
-        var z = (float)(positionRaw << 26 >> 38);
-        return new Vector3(x, y, z);
+        var x = (double)(positionRaw >> 38);
+        var y = (double)(positionRaw << 52 >> 52);
+        var z = (double)(positionRaw << 26 >> 38);
+        return new Vector3<double>(x, y, z);
+    }
+
+    public Vector3<float> ReadChunkCoordinatePosition()
+    {
+        var positionRaw = ReadSignedLong();
+        var x = (float)(positionRaw >> 42);
+        var y = (float)(positionRaw << 44 >> 44);
+        var z = (float)(positionRaw << 22 >> 42);
+        return new Vector3<float>(x, y, z);
     }
 
     public long ReadSignedLong()
@@ -295,4 +310,9 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
 public readonly struct VarInt(int value)
 {
     public int Value { get; } = value;
+}
+
+public readonly struct VarLong(long value)
+{
+    public long Value { get; } = value;
 }

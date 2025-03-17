@@ -5,13 +5,14 @@ using MinecraftProtoNet.Models.Json;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Configuration.Clientbound;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.State.Base;
 using Spectre.Console;
 using BlockState = MinecraftProtoNet.Models.World.Chunk.BlockState;
 
 namespace MinecraftProtoNet.Handlers
 {
-    public class ConfigurationHandler(ClientState clientState) : IPacketHandler
+    public class ConfigurationHandler : IPacketHandler
     {
         public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         [
@@ -47,20 +48,20 @@ namespace MinecraftProtoNet.Handlers
                         .ToDictionary(x => x.StateId, x => new BlockState(x.StateId, x.BlockName));
                     ClientState.InitializeBlockStateRegistry(blockStateData);
 
-                    var biomes = clientState.Registry["minecraft:worldgen/biome"]
+                    var biomes = client.State.Registry["minecraft:worldgen/biome"]
                         .Select((x, index) => new { i = index, x.Key })
                         .ToDictionary(k => k.i, v => new Biome(v.i, v.Key));
                     ClientState.InitializeBiomeRegistry(biomes);
 
                     // Continue to play.
                     await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
-                    client.State = ProtocolState.Play;
+                    client.ProtocolState = ProtocolState.Play;
                     AnsiConsole.MarkupLine(
-                        $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.State.ToString()}[/]");
+                        $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.ProtocolState.ToString()}[/]");
                     break;
                 }
                 case RegistryDataPacket registryDataPacket:
-                    clientState.Registry.AddOrUpdate(registryDataPacket.RegistryId, registryDataPacket.Tags,
+                    client.State.Registry.AddOrUpdate(registryDataPacket.RegistryId, registryDataPacket.Tags,
                         (registryId, existingTags) =>
                         {
                             foreach (var tagPair in registryDataPacket.Tags) existingTags[tagPair.Key] = tagPair.Value;
