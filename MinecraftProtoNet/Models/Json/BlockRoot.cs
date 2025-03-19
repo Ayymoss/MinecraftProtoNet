@@ -2,7 +2,7 @@
 
 namespace MinecraftProtoNet.Models.Json;
 
-public class Block
+public class BlockRoot
 {
     [JsonPropertyName("states")] public List<BlockState> States { get; init; } = [];
 }

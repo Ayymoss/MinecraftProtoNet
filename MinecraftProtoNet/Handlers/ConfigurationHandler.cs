@@ -40,9 +40,9 @@ namespace MinecraftProtoNet.Handlers
                 case FinishConfigurationPacket finishConfigurationPacket:
                 {
                     // Setup the client environment
-                    var jsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-1.12.4.json"); // TODO: Rehome
-                    var jsonString = await File.ReadAllTextAsync(jsonFilePath);
-                    var blockData = JsonSerializer.Deserialize<Dictionary<string, Block>>(jsonString) ?? [];
+                    var blockJsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-1.21.4.json"); // TODO: Rehome
+                    var blockJsonString = await File.ReadAllTextAsync(blockJsonFilePath);
+                    var blockData = JsonSerializer.Deserialize<Dictionary<string, BlockRoot>>(blockJsonString) ?? [];
                     var blockStateData = blockData
                         .SelectMany(kvp => kvp.Value.States.Select(state => new { BlockName = kvp.Key, StateId = state.Id }))
                         .ToDictionary(x => x.StateId, x => new BlockState(x.StateId, x.BlockName));
@@ -52,6 +52,14 @@ namespace MinecraftProtoNet.Handlers
                         .Select((x, index) => new { i = index, x.Key })
                         .ToDictionary(k => k.i, v => new Biome(v.i, v.Key));
                     ClientState.InitializeBiomeRegistry(biomes);
+
+                    var registryJsonFilePath =
+                        Path.Combine(AppContext.BaseDirectory, "StaticFiles", "registries-1.21.4.json"); // TODO: Rehome
+                    var registryJsonString = await File.ReadAllTextAsync(registryJsonFilePath);
+                    var registry = JsonSerializer.Deserialize<Dictionary<string, RegistryRoot>>(registryJsonString) ?? [];
+                    var itemData = registry["minecraft:item"].Entries
+                        .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
+                    ClientState.InitialiseItemRegistry(itemData);
 
                     // Continue to play.
                     await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());

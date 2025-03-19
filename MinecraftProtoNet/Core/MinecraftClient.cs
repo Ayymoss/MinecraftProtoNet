@@ -2,6 +2,7 @@
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Packets.Base.Definitions;
 using MinecraftProtoNet.Packets.Handshaking.Serverbound;
 using MinecraftProtoNet.Packets.Login.Serverbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
@@ -210,16 +211,26 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
         if (bodyMessage.StartsWith("!slot"))
         {
+            var entity = State.LocalPlayer.Entity;
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             if (message.Length is 1)
             {
                 var slot = short.Parse(message[0]);
                 await SendPacketAsync(new SetCarriedItemPacket { Slot = slot });
+                entity.HeldSlot = slot;
             }
         }
 
         if (bodyMessage.StartsWith("!place"))
         {
+            var entity = State.LocalPlayer.Entity;
+            var heldItem = entity.HeldItem;
+            if (heldItem.ItemId is null)
+            {
+                await SendPacketAsync(new ChatPacket("You are not holding anything."));
+                return;
+            }
+
             var coords = bodyMessage.Split(" ").Skip(1).ToArray();
             if (coords.Length is 4)
             {
@@ -234,9 +245,45 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                     BlockFace = face,
                     Cursor = new Vector3<float>(0.5f, 1f, 0.5f),
                     InsideBlock = false,
-                    Sequence = State.LocalPlayer.Entity.BlockPlaceSequence++
+                    Sequence = State.LocalPlayer.Entity.BlockPlaceSequence
                 });
+                await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
             }
+        }
+
+        if (bodyMessage == "!holding")
+        {
+            var heldItem = State.LocalPlayer.Entity.HeldItem;
+            if (heldItem.ItemId is null)
+            {
+                await SendPacketAsync(new ChatPacket("You are not holding anything."));
+                return;
+            }
+
+            var itemName = ClientState.ItemRegistry[heldItem.ItemId.Value];
+            var message = $"Holding: {heldItem.ItemCount}x of {itemName} ({heldItem.ItemId})";
+            await SendPacketAsync(new ChatPacket(message));
+        }
+
+        if (bodyMessage == "!drop")
+        {
+            var entity = State.LocalPlayer.Entity;
+            var heldItem = entity.HeldItem;
+            if (heldItem.ItemId is null)
+            {
+                await SendPacketAsync(new ChatPacket("You are not holding anything."));
+                return;
+            }
+
+            await SendPacketAsync(new PlayerActionPacket
+            {
+                Status = PlayerActionPacket.StatusType.DropItemStack,
+                Position = new Vector3<double>(0, 0, 0),
+                Face = BlockFace.Bottom,
+                Sequence = 0
+            });
+            await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+            entity.Inventory[(short)(entity.HeldSlot + 36)] = new Slot();
         }
 
         if (sender is null) return;

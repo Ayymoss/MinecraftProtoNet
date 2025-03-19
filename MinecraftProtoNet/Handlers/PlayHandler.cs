@@ -1,18 +1,19 @@
 ﻿using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Packets.Base.Definitions;
 using MinecraftProtoNet.Packets.Play.Clientbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.State;
 using KeepAlivePacket = MinecraftProtoNet.Packets.Play.Clientbound.KeepAlivePacket;
 
 namespace MinecraftProtoNet.Handlers;
 
 public class PlayHandler : IPacketHandler
 {
+    private bool _playerLoaded;
+
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
     [
         (ProtocolState.Play, 0x01),
@@ -35,10 +36,13 @@ public class PlayHandler : IPacketHandler
         (ProtocolState.Play, 0x47),
         (ProtocolState.Play, 0x37),
         (ProtocolState.Play, 0x38),
+        (ProtocolState.Play, 0x15),
         (ProtocolState.Play, 0x5D),
         (ProtocolState.Play, 0x40),
+        (ProtocolState.Play, 0x13),
         (ProtocolState.Play, 0x73),
         (ProtocolState.Play, 0x6B),
+        (ProtocolState.Play, 0x05),
     ];
 
     public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
@@ -88,14 +92,51 @@ public class PlayHandler : IPacketHandler
                 Console.WriteLine($"System Message: ({translateLookup ?? "<NULL>"}) {string.Join(" ", texts)}");
                 break;
             }
+            case ContainerSetContentPacket containerSetContentPacket:
+            {
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var entity = client.State.LocalPlayer.Entity;
+                entity.Inventory = containerSetContentPacket.SlotData
+                    .Select((x, i) => new { Index = (short)i, Slot = x })
+                    .ToDictionary(x => x.Index, x => x.Slot);
+                entity.BlockPlaceSequence = containerSetContentPacket.StateId + 1;
+                break;
+            }
+            case ContainerSetSlotPacket containerSetSlotPacket:
+            {
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var entity = client.State.LocalPlayer.Entity;
+                entity.Inventory[containerSetSlotPacket.SlotToUpdate] = containerSetSlotPacket.Slot;
+                entity.BlockPlaceSequence = containerSetSlotPacket.StateId + 1;
+                break;
+            }
+            case BlockChangedAcknowledgementPacket: blockChangedAcknowledgementPacket:
+            {
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var entity = client.State.LocalPlayer.Entity;
+                entity.HeldItem.ItemCount -= 1;
+                if (entity.HeldItem.ItemCount <= 0) entity.Inventory[entity.HeldSlotWithOffset] = new Slot();
+                break;
+            }
             case PlayerChatPacket playerChatPacket:
             {
                 await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message);
                 break;
             }
+            case SetHeldSlotPacket setHeldSlotPacket:
+            {
+                if (client.State.LocalPlayer.HasEntity) client.State.LocalPlayer.Entity.HeldSlot = setHeldSlotPacket.HeldSlot;
+                break;
+            }
             case PlayerPositionPacket playerPositionPacket: // TODO: Will fire on join or when moving too quickly or other teleport.
             {
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
+                if (!_playerLoaded)
+                {
+                    await client.SendPacketAsync(new PlayerLoadedPacket());
+                    _playerLoaded = true;
+                }
+
                 if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
                 client.State.LocalPlayer.Entity.Position = playerPositionPacket.Position;
                 client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
