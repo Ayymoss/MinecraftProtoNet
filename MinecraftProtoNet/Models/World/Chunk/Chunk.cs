@@ -50,6 +50,20 @@ public class Chunk(int x, int z)
         Sections = sectionList;
     }
 
+    public void SetBlock(int x, int y, int z, int blockStateId)
+    {
+        var localX = x & 0xF;
+        var localY = y & 0xF;
+        var localZ = z & 0xF;
+
+        var sectionY = y >> 4;
+        var sectionIndex = GetSectionIndex(sectionY);
+
+        if (sectionIndex < 0 || sectionIndex >= Sections.Length) return;
+
+        Sections[sectionIndex].SetBlockStateId(localX, localY, localZ, blockStateId);
+    }
+
     public override string ToString()
     {
         return $"{Sections.Length} sections";

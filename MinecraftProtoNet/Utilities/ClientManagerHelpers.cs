@@ -1,4 +1,5 @@
 ﻿using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 
@@ -40,7 +41,7 @@ public static class ClientManagerHelpers
                     Z = newPosition.Z,
                     Yaw = (float)entity.YawPitch.X,
                     Pitch = (float)pitchDegrees,
-                    Flags = MovePlayerPositionRotationPacket.MovementFlags.None
+                    Flags = MovementFlags.None
                 };
 
                 entity.Position.X = result.X;

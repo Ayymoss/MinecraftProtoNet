@@ -1,5 +1,6 @@
 ﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Player;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -70,7 +71,7 @@ public class PlayerInfoUpdatePacket : IClientPacket
                         var gameMode = buffer.ReadVarInt();
                         PlayerInfos[i].Actions[j] = new UpdateGameMode(action)
                         {
-                            GameMode = gameMode
+                            GameMode = (GameMode)gameMode
                         };
                         break;
                     case PlayerAction.UpdateListed:
@@ -157,7 +158,7 @@ public class PlayerInfoUpdatePacket : IClientPacket
 
     public class UpdateGameMode(PlayerAction action) : PlayerActionBase(action)
     {
-        public required int GameMode { get; set; }
+        public required GameMode GameMode { get; set; }
     }
 
     public class UpdateListed(PlayerAction action) : PlayerActionBase(action)

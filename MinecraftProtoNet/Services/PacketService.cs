@@ -114,6 +114,8 @@ public class PacketService : IPacketService
                 0x3B => new Packets.Play.Clientbound.PlayerChatPacket(),
                 0x73 => new Packets.Play.Clientbound.SystemChatPacket(),
                 0x3E => new Packets.Play.Clientbound.PlayerCombatKillPacket(),
+                0x3D => new Packets.Play.Clientbound.PlayerCombatEnterPacket(),
+                0x3C => new Packets.Play.Clientbound.PlayerCombatEndPacket(),
 
                 // Entity Creation & Removal
                 0x01 => new Packets.Play.Clientbound.AddEntityPacket(),
@@ -127,6 +129,7 @@ public class PacketService : IPacketService
                 0x20 => new Packets.Play.Clientbound.EntityPositionSyncPacket(),
                 0x4D => new Packets.Play.Clientbound.RotateHeadPacket(),
                 0x5F => new Packets.Play.Clientbound.SetEntityMotionPacket(),
+                0x25 => new Packets.Play.Clientbound.HurtAnimationPacket(),
 
                 // Entity State & Properties
                 0x5D => new Packets.Play.Clientbound.SetEntityDataPacket(),
@@ -148,6 +151,7 @@ public class PacketService : IPacketService
                 0x23 => new Packets.Play.Clientbound.GameEventPacket(),
                 0x29 => new Packets.Play.Clientbound.LevelEventPacket(),
                 0x2A => new Packets.Play.Clientbound.LevelParticlesPacket(),
+                0x06 => new Packets.Play.Clientbound.BlockDestructionPacket(),
 
                 // Game Mechanics
                 0x78 => new Packets.Play.Clientbound.TickingStatePacket(),

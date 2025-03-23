@@ -7,14 +7,12 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x1D, ProtocolState.Play, true)]
-public class MovePlayerPositionRotationPacket : IServerPacket
+[Packet(0x1C, ProtocolState.Play)]
+public class MovePlayerPositionPacket : IServerPacket
 {
     public required double X { get; set; }
     public required double Y { get; set; }
     public required double Z { get; set; }
-    public required float Yaw { get; set; }
-    public required float Pitch { get; set; }
     public required MovementFlags Flags { get; set; }
 
     public void Serialize(ref PacketBufferWriter buffer)
@@ -24,8 +22,6 @@ public class MovePlayerPositionRotationPacket : IServerPacket
         buffer.WriteDouble(X);
         buffer.WriteDouble(Y);
         buffer.WriteDouble(Z);
-        buffer.WriteFloat(Yaw);
-        buffer.WriteFloat(Pitch);
         buffer.WriteUnsignedByte((byte)Flags);
     }
 }

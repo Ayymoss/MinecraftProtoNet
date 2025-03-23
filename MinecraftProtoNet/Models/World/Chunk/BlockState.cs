@@ -2,10 +2,12 @@ namespace MinecraftProtoNet.Models.World.Chunk;
 
 public class BlockState(int id, string name)
 {
-    public static readonly BlockState Air = new(0, "minecraft:air");
-
     public int Id { get; } = id;
     public string Name { get; } = name;
+    public bool IsAir => Id is 0;
+
+    public bool IsLiquid => Name.Contains("water", StringComparison.CurrentCultureIgnoreCase) ||
+                            Name.Contains("lava", StringComparison.CurrentCultureIgnoreCase);
 
     public override bool Equals(object? obj)
     {

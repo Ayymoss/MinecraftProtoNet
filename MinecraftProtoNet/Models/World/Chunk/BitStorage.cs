@@ -53,4 +53,27 @@ public class BitStorage
 
         return (int)((val1 | (val2 << part1)) & _maxEntryValue);
     }
+
+    public void Set(int index, int value)
+    {
+        if (index < 0 || index >= _size) throw new IndexOutOfRangeException($"Index {index} out of bounds for size {_size}");
+        if (_data is null) return;
+
+        var longValue = value & _maxEntryValue;
+        var bitIndex = index * _bitsPerEntry;
+        var longIndex = bitIndex >> 6; // Divide by 64
+        var bitOffset = bitIndex & 0x3F; // Modulo 64
+
+        if (bitOffset + _bitsPerEntry <= 64)
+        {
+            _data[longIndex] = (_data[longIndex] & ~(_maxEntryValue << bitOffset)) | (longValue << bitOffset);
+        }
+        else
+        {
+            var part1 = 64 - bitOffset;
+            var part2 = _bitsPerEntry - part1;
+            _data[longIndex] = (_data[longIndex] & ~(((1L << part1) - 1) << bitOffset)) | (longValue << bitOffset);
+            _data[longIndex + 1] = (_data[longIndex + 1] & ~((1L << part2) - 1)) | (longValue >> part1);
+        }
+    }
 }

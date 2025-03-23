@@ -13,7 +13,7 @@ public class MoveEntityPositionRotationPacket : IClientPacket
     public short DeltaXRaw { get; set; }
     public short DeltaYRaw { get; set; }
     public short DeltaZRaw { get; set; }
-    public Vector3<double> Delta => new(DeltaXRaw / 4096.0, DeltaYRaw / 4096.0, DeltaZRaw / 4096.0);
+    public Vector3<double> Delta => new(DeltaXRaw / 4096d, DeltaYRaw / 4096d, DeltaZRaw / 4096d);
     public sbyte Yaw { get; set; }
     public sbyte Pitch { get; set; }
     public bool OnGround { get; set; }

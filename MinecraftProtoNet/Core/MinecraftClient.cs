@@ -1,5 +1,6 @@
 ﻿using System.Net.Sockets;
 using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Handlers.Meta;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Base.Definitions;
@@ -14,7 +15,7 @@ using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
-public class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
+public partial class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     public ClientState State { get; } = new();
@@ -135,24 +136,19 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         }
     }
 
-    // TODO: Find a better place for game specific logic.
-    public void PhysicsTick()
-    {
-    }
-
     public async Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage)
     {
-        var sender = State.Level.GetPlayerByUuid(senderGuid);
-
         if (!State.LocalPlayer.HasEntity) return;
+        var sender = State.Level.GetPlayerByUuid(senderGuid);
+        var command = bodyMessage.Split(" ")[0];
 
-        if (bodyMessage.StartsWith("!say"))
+        if (command == "!say")
         {
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             await SendPacketAsync(new ChatPacket(string.Join(" ", message)));
         }
 
-        if (bodyMessage.StartsWith("!getblock"))
+        if (command == "!getblock")
         {
             var coords = bodyMessage.Split(" ").Skip(1).ToArray();
             if (coords.Length is 3)
@@ -168,7 +164,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             }
         }
 
-        if (bodyMessage.StartsWith("!goto"))
+        if (command == "!goto")
         {
             var coords = bodyMessage.Split(" ").Skip(1).ToArray();
             if (coords.Length is 3 or 4)
@@ -183,75 +179,201 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             }
         }
 
-        if (bodyMessage == "!ping")
+        if (command == "!gotowalk")
+        {
+            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (coords.Length is 3)
+            {
+                var x = float.Parse(coords[0]);
+                var y = float.Parse(coords[1]);
+                var z = float.Parse(coords[2]);
+                //await State.LocalPlayer.Entity.MoveToPosition(new Vector3<double>(x, y, z), State.Level, SendPacketAsync);
+
+                //if (!result)
+                //{
+                //    await SendPacketAsync(new ChatPacket("I can't reach that position."));
+                //    return;
+                //}
+
+                await SendPacketAsync(new ChatPacket("Moving to that position."));
+            }
+        }
+
+        if (command == "!ping")
         {
             await SendPacketAsync(new Packets.Play.Serverbound.PingRequestPacket
                 { Payload = TimeProvider.System.GetLocalNow().ToUnixTimeMilliseconds() });
         }
 
-        if (bodyMessage == "!tps")
+        if (command == "!tps")
         {
             await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
                                                  $"| MSPT: {State.Level.TickInterval:N2}ms " +
                                                  $"| Rate: {State.Level.GetTickRateMultiplier():N2}x"));
         }
 
-        if (bodyMessage.StartsWith("!swing"))
+        if (command == "!swing")
         {
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             if (Enum.TryParse<Hand>(string.Join(" ", message), true, out var swing))
                 await SendPacketAsync(new SwingPacket { Hand = swing });
         }
 
-        if (bodyMessage.StartsWith("!cmd"))
+        if (command == "!cmd")
         {
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             await SendPacketAsync(new ChatCommandPacket(string.Join(" ", message)));
         }
 
-        if (bodyMessage.StartsWith("!slot"))
+        if (command == "!slot")
         {
             var entity = State.LocalPlayer.Entity;
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             if (message.Length is 1)
             {
                 var slot = short.Parse(message[0]);
+                if (slot is < 0 or > 8)
+                {
+                    await SendPacketAsync(new ChatPacket("Slot must be between 0 and 8."));
+                    return;
+                }
+
                 await SendPacketAsync(new SetCarriedItemPacket { Slot = slot });
                 entity.HeldSlot = slot;
             }
+            else
+            {
+                await SendPacketAsync(new ChatPacket($"Slot Held: {entity.HeldSlot} (0-8)"));
+            }
         }
 
-        if (bodyMessage.StartsWith("!place"))
+        if (command == "!place")
         {
             var entity = State.LocalPlayer.Entity;
-            var heldItem = entity.HeldItem;
-            if (heldItem.ItemId is null)
+            if (entity.HeldItem.ItemId is null)
             {
                 await SendPacketAsync(new ChatPacket("You are not holding anything."));
                 return;
             }
 
-            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (coords.Length is 4)
+            await PlaceHelper();
+        }
+
+        if (command == "!lookat")
+        {
+            var args = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (args.Length is 3 or 4)
             {
-                var x = float.Parse(coords[0]);
-                var y = float.Parse(coords[1]);
-                var z = float.Parse(coords[2]);
-                var face = Enum.Parse<BlockFace>(coords[3], true);
-                await SendPacketAsync(new UseItemOnPacket
+                var x = float.Parse(args[0]);
+                var y = float.Parse(args[1]);
+                var z = float.Parse(args[2]);
+
+                var face = BlockFace.Top;
+                if (args.Length >= 4 && Enum.TryParse<BlockFace>(args[3], true, out var parsedFace))
                 {
-                    Hand = Hand.MainHand,
-                    Position = new Vector3<double>(x, y, z),
-                    BlockFace = face,
-                    Cursor = new Vector3<float>(0.5f, 1f, 0.5f),
-                    InsideBlock = false,
-                    Sequence = State.LocalPlayer.Entity.BlockPlaceSequence
-                });
-                await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+                    face = parsedFace;
+                }
+
+                await LookAtHelper(x, y, z, face);
             }
         }
 
-        if (bodyMessage == "!holding")
+        if (command == "!jump")
+        {
+            var entity = State.LocalPlayer.Entity;
+            if (entity.IsOnGround)
+            {
+                entity.IsJumping = true;
+                await SendPacketAsync(new ChatPacket("Jumping!"));
+            }
+            else
+            {
+                await SendPacketAsync(new ChatPacket("You are not on the ground."));
+            }
+        }
+
+        if (command == "!placeit")
+        {
+            var args = bodyMessage.Split(" ").Skip(1).ToArray();
+            if (args.Length is 3)
+            {
+                var x = float.Parse(args[0]);
+                var y = float.Parse(args[1]);
+                var z = float.Parse(args[2]);
+
+                var heldBlock = State.LocalPlayer.Entity.HeldItem;
+                if (heldBlock.ItemId is null) return;
+                await LookAtHelper(x, y, z, BlockFace.Top);
+                await PlaceHelper();
+                await LookAtHelper(x - 1, y, z, BlockFace.Top);
+                await PlaceHelper();
+                await LookAtHelper(x + 1, y, z, BlockFace.Top);
+                await PlaceHelper();
+                await Task.Delay(100);
+                await LookAtHelper(x, y + 1, z, BlockFace.Top);
+                await PlaceHelper();
+                State.LocalPlayer.Entity.IsJumping = true;
+                await Task.Delay(100);
+                await LookAtHelper(x, y + 2, z, BlockFace.Top);
+                await PlaceHelper();
+                await Task.Delay(500);
+                await LookAtHelper(x, y + 1, z, BlockFace.South);
+                var lookingAt = State.LocalPlayer.Entity.GetLookingAtBlock(State.Level);
+                if (lookingAt is null) return;
+                await SendPacketAsync(new PlayerActionPacket
+                {
+                    Status = PlayerActionPacket.StatusType.StartedDigging,
+                    Position = lookingAt.BlockPosition.ToVector3<int, double>(),
+                    Face = lookingAt.Face,
+                    Sequence = State.LocalPlayer.Entity.IncrementSequence()
+                });
+
+                for (int i = 0; i < 5; i++)
+                {
+                    await Task.Delay(50);
+                    await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+                }
+
+                await SendPacketAsync(new PlayerActionPacket
+                {
+                    Status = PlayerActionPacket.StatusType.FinishedDigging,
+                    Position = lookingAt.BlockPosition.ToVector3<int, double>(),
+                    Face = lookingAt.Face,
+                    Sequence = State.LocalPlayer.Entity.IncrementSequence()
+                });
+            }
+        }
+
+        if (command == "!lookingat")
+        {
+            var entity = State.LocalPlayer.Entity;
+            var hit = entity.GetLookingAtBlock(State.Level);
+            if (hit is null)
+            {
+                await SendPacketAsync(new ChatPacket("I'm not looking at a block."));
+                return;
+            }
+
+            var cursorPos = hit.GetInBlockPosition();
+            var placementPos = hit.GetAdjacentBlockPosition();
+
+            List<string> messages =
+            [
+                $"Name: {hit.Block?.Name} - Pos: {hit.BlockPosition}",
+                $"Distance: {hit.Distance:N2}",
+                $"Cursor: {cursorPos}",
+                $"Face: {hit.Face}",
+                $"Placement Pos: {placementPos}"
+            ];
+
+            foreach (var message in messages)
+            {
+                await SendPacketAsync(new ChatPacket(message));
+                await Task.Delay(100);
+            }
+        }
+
+        if (command == "!holding")
         {
             var heldItem = State.LocalPlayer.Entity.HeldItem;
             if (heldItem.ItemId is null)
@@ -265,7 +387,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             await SendPacketAsync(new ChatPacket(message));
         }
 
-        if (bodyMessage == "!drop")
+        if (command == "!drop")
         {
             var entity = State.LocalPlayer.Entity;
             var heldItem = entity.HeldItem;
@@ -282,13 +404,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                 Face = BlockFace.Bottom,
                 Sequence = 0
             });
-            await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
             entity.Inventory[(short)(entity.HeldSlot + 36)] = new Slot();
         }
 
         if (sender is null) return;
 
-        if (bodyMessage == "!pos")
+        if (command == "!pos")
         {
             if (!sender.HasEntity)
             {
@@ -302,7 +423,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             await SendPacketAsync(new ChatPacket(message));
         }
 
-        if (bodyMessage == "!here")
+        if (command == "!here")
         {
             if (!sender.HasEntity)
             {
@@ -310,11 +431,116 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                 return;
             }
 
-            ClientManagerHelpers.InterpolateToCoordinates(this, sender.Entity.Position);
-            await SendPacketAsync(
-                new ChatPacket(
-                    $"Moving to last location: {sender.Entity.Position.X:N2}, {sender.Entity.Position.Y:N2}, {sender.Entity.Position.Z:N2}"));
+            var targetPosition = sender.Entity.Position;
+            var pathFinder = new AStarPathFinder(State.Level);
+            var result = pathFinder.FindPath(State.LocalPlayer.Entity.Position, targetPosition);
+            if (result is null)
+            {
+                Console.WriteLine("Path not found.");
+                return;
+            }
+
+            foreach (var vector in result)
+            {
+                Console.WriteLine(vector);
+            }
+
+            //await State.LocalPlayer.Entity.MoveToPosition(targetPosition, State.Level, SendPacketAsync);
+
+            // TODO: Won't jump, has issues going up/down blocks. Seems to cause teleport packets, illegal movement?
+            //if (!result)
+            //{
+            //    await SendPacketAsync(new ChatPacket("I can't reach your position."));
+            //    return;
+            //}
+
+            await SendPacketAsync(new ChatPacket("Moving to your position."));
         }
+    }
+
+    private async Task PlaceHelper()
+    {
+        if (!State.LocalPlayer.HasEntity) return;
+
+        var entity = State.LocalPlayer.Entity;
+        var hit = entity.GetLookingAtBlock(State.Level);
+        if (hit is null)
+        {
+            await SendPacketAsync(new ChatPacket("I'm not looking at a block."));
+            return;
+        }
+
+        if (hit.Distance > 6)
+        {
+            await SendPacketAsync(new ChatPacket("Block is too far away."));
+            return;
+        }
+
+        var cursor = hit.GetInBlockPosition();
+        await SendPacketAsync(new UseItemOnPacket
+        {
+            Hand = Hand.MainHand,
+            Position = new Vector3<double>(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z),
+            BlockFace = hit.Face,
+            Cursor = new Vector3<float>(cursor.X, cursor.Y, cursor.Z),
+            InsideBlock = false,
+            Sequence = entity.IncrementSequence()
+        });
+        await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+    }
+
+    private async Task LookAtHelper(float x, float y, float z, BlockFace? face)
+    {
+        if (!State.LocalPlayer.HasEntity) return;
+        var targetX = x + 0.5f;
+        var targetY = y + 0.5f;
+        var targetZ = z + 0.5f;
+
+        if (face.HasValue)
+        {
+            switch (face)
+            {
+                case BlockFace.Bottom:
+                    targetY = y;
+                    break;
+                case BlockFace.Top:
+                    targetY = y + 1.0f;
+                    break;
+                case BlockFace.North:
+                    targetZ = z;
+                    break;
+                case BlockFace.South:
+                    targetZ = z + 1.0f;
+                    break;
+                case BlockFace.West:
+                    targetX = x;
+                    break;
+                case BlockFace.East:
+                    targetX = x + 1.0f;
+                    break;
+            }
+        }
+
+        var playerEyeX = State.LocalPlayer.Entity.Position.X;
+        var playerEyeY = State.LocalPlayer.Entity.Position.Y + 1.62f;
+        var playerEyeZ = State.LocalPlayer.Entity.Position.Z;
+
+        var dx = targetX - playerEyeX;
+        var dy = targetY - playerEyeY;
+        var dz = targetZ - playerEyeZ;
+
+        var yaw = (float)(-Math.Atan2(dx, dz) * (180 / Math.PI));
+        var horizontalDistance = Math.Sqrt(dx * dx + dz * dz);
+        var pitch = (float)(-Math.Atan2(dy, horizontalDistance) * (180 / Math.PI));
+
+        await SendPacketAsync(new MovePlayerRotationPacket
+        {
+            Yaw = yaw,
+            Pitch = pitch,
+            Flags = MovementFlags.None
+        });
+
+        State.LocalPlayer.Entity.YawPitch = new Vector2<float>(yaw, pitch);
     }
 
     public void SetPosition(int entityId, Vector3<double> newPosition, bool delta = true)
@@ -343,7 +569,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
             Z = z,
             Yaw = yaw,
             Pitch = pitch,
-            Flags = MovePlayerPositionRotationPacket.MovementFlags.None
+            Flags = MovementFlags.None
         };
 
         if (!State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");

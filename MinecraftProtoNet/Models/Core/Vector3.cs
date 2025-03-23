@@ -51,6 +51,16 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
         return a * scalar;
     }
 
+    public static bool operator ==(Vector3<TNumber> a, Vector3<TNumber> b)
+    {
+        return a.X == b.X && a.Y == b.Y && a.Z == b.Z;
+    }
+
+    public static bool operator !=(Vector3<TNumber> a, Vector3<TNumber> b)
+    {
+        return !(a == b);
+    }
+
     public double Length()
     {
         var x = Convert.ToDouble(X);
@@ -69,6 +79,24 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
 
     public override string ToString()
     {
-        return $"({X}, {Y}, {Z})";
+        switch (typeof(TNumber))
+        {
+            case { } t when t == typeof(float):
+                return $"({X:N6}f, {Y:N6}f, {Z:N6}f)";
+            case { } t when t == typeof(double):
+                return $"({X:N6}d, {Y:N6}d, {Z:N6}d)";
+            case { } t when t == typeof(int):
+                return $"({X:N0}i, {Y:N0}i, {Z:N0}i)";
+            default:
+                return $"({X}, {Y}, {Z})";
+        }
+    }
+
+    public double LengthSquared()
+    {
+        var x = Convert.ToDouble(X);
+        var y = Convert.ToDouble(Y);
+        var z = Convert.ToDouble(Z);
+        return x * x + y * y + z * z;
     }
 }

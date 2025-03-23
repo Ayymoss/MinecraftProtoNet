@@ -28,4 +28,21 @@ public class ChunkSection
         BlockStates.Read(ref reader);
         Biomes.Read(ref reader);
     }
+
+    public void SetBlockStateId(int x, int y, int z, int blockStateId)
+    {
+        var index = GetBlockIndex(x, y, z);
+        BlockStates.Set(index, blockStateId);
+        var isAir = ClientState.BlockStateRegistry[blockStateId].IsAir;
+
+        switch (isAir)
+        {
+            case true when BlockStates.Get(index) is not 0:
+                NonEmptyBlockCount--;
+                break;
+            case false when BlockStates.Get(index) is 0:
+                NonEmptyBlockCount++;
+                break;
+        }
+    }
 }

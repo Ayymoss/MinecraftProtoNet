@@ -4,6 +4,7 @@ namespace MinecraftProtoNet.Models.World.Chunk;
 
 public class IndirectPalette(int bits) : IPalette
 {
+    public int Bits { get; } = bits;
     private readonly int[] _registryIds = new int[1 << bits];
     private int _size = 0;
 

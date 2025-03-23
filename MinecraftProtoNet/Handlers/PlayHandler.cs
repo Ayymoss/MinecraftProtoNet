@@ -28,6 +28,7 @@ public class PlayHandler : IPacketHandler
         (ProtocolState.Play, 0x28),
         (ProtocolState.Play, 0x27),
         (ProtocolState.Play, 0x62),
+        (ProtocolState.Play, 0x09),
         (ProtocolState.Play, 0x3E),
         (ProtocolState.Play, 0x30),
         (ProtocolState.Play, 0x2F),
@@ -43,6 +44,7 @@ public class PlayHandler : IPacketHandler
         (ProtocolState.Play, 0x73),
         (ProtocolState.Play, 0x6B),
         (ProtocolState.Play, 0x05),
+        (ProtocolState.Play, 0x25),
     ];
 
     public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
@@ -53,6 +55,11 @@ public class PlayHandler : IPacketHandler
             {
                 client.State.Level.UpdateTickInformation(setTimePacket.WorldAge, setTimePacket.TimeOfDay,
                     setTimePacket.TimeOfDayIncreasing);
+                break;
+            }
+            case BlockUpdatePacket blockUpdatePacket:
+            {
+                client.State.Level.HandleBlockUpdate(blockUpdatePacket.Position, blockUpdatePacket.BlockId);
                 break;
             }
             case LoginPacket loginPacket:
@@ -99,7 +106,14 @@ public class PlayHandler : IPacketHandler
                 entity.Inventory = containerSetContentPacket.SlotData
                     .Select((x, i) => new { Index = (short)i, Slot = x })
                     .ToDictionary(x => x.Index, x => x.Slot);
-                entity.BlockPlaceSequence = containerSetContentPacket.StateId + 1;
+                break;
+            }
+            case HurtAnimationPacket hurtAnimationPacket:
+            {
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var entity = client.State.LocalPlayer.Entity;
+                entity.IsHurt = true;
+                entity.IsHurtFromYaw = hurtAnimationPacket.Yaw;
                 break;
             }
             case ContainerSetSlotPacket containerSetSlotPacket:
@@ -107,10 +121,10 @@ public class PlayHandler : IPacketHandler
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
                 entity.Inventory[containerSetSlotPacket.SlotToUpdate] = containerSetSlotPacket.Slot;
-                entity.BlockPlaceSequence = containerSetSlotPacket.StateId + 1;
                 break;
             }
-            case BlockChangedAcknowledgementPacket: blockChangedAcknowledgementPacket:
+            case BlockChangedAcknowledgementPacket:
+                blockChangedAcknowledgementPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
@@ -120,7 +134,7 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerChatPacket playerChatPacket:
             {
-                await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message);
+                _ = Task.Run(async () => await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message));
                 break;
             }
             case SetHeldSlotPacket setHeldSlotPacket:
@@ -134,6 +148,19 @@ public class PlayHandler : IPacketHandler
                 if (!_playerLoaded)
                 {
                     await client.SendPacketAsync(new PlayerLoadedPacket());
+
+                    var physicsThread = new Thread(async () =>
+                    {
+                        while (true)
+                        {
+                            await client.PhysicsTickAsync();
+                            var delay = client.State.Level.GetTickRateMultiplier() * 50;
+                            var delayMs = TimeSpan.FromMilliseconds(delay);
+                            Thread.Sleep(delayMs);
+                        }
+                    }) { Name = "Minecraft Physics" };
+                    physicsThread.Start();
+
                     _playerLoaded = true;
                 }
 
@@ -141,6 +168,7 @@ public class PlayHandler : IPacketHandler
                 client.State.LocalPlayer.Entity.Position = playerPositionPacket.Position;
                 client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
                 client.State.LocalPlayer.Entity.YawPitch = playerPositionPacket.YawPitch;
+
                 await client.SendPacketAsync(client.Move(playerPositionPacket.Position.X, playerPositionPacket.Position.Y,
                     playerPositionPacket.Position.Z, playerPositionPacket.YawPitch.X, playerPositionPacket.YawPitch.Y));
                 break;
@@ -166,17 +194,25 @@ public class PlayHandler : IPacketHandler
             }
             case EntityPositionSyncPacket entityPositionSyncPacket:
             {
-                client.SetPosition(entityPositionSyncPacket.EntityId, entityPositionSyncPacket.Position, false);
+                await client.State.Level.SetPositionAsync(entityPositionSyncPacket.EntityId, entityPositionSyncPacket.Position,
+                    entityPositionSyncPacket.OnGround);
                 break;
             }
             case MoveEntityPositionRotationPacket moveEntityPositionRotationPacket:
             {
-                client.SetPosition(moveEntityPositionRotationPacket.EntityId, moveEntityPositionRotationPacket.Delta);
+                await client.State.Level.UpdatePositionAsync(moveEntityPositionRotationPacket.EntityId,
+                    moveEntityPositionRotationPacket.Delta, moveEntityPositionRotationPacket.OnGround);
                 break;
             }
             case MoveEntityPositionPacket moveEntityPositionPacket:
             {
-                client.SetPosition(moveEntityPositionPacket.EntityId, moveEntityPositionPacket.Delta);
+                await client.State.Level.UpdatePositionAsync(moveEntityPositionPacket.EntityId, moveEntityPositionPacket.Delta,
+                    moveEntityPositionPacket.OnGround);
+                break;
+            }
+            case SetEntityMotionPacket setEntityMotionPacket:
+            {
+                await client.State.Level.SetVelocityAsync(setEntityMotionPacket.EntityId, setEntityMotionPacket.Velocity);
                 break;
             }
             case PingPacket pingPacket:

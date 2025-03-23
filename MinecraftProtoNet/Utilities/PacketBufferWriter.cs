@@ -192,9 +192,9 @@ public ref struct PacketBufferWriter
         var y = (long)Math.Floor(position.Y);
         var z = (long)Math.Floor(position.Z);
 
-        x = x & 0x3FFFFFF;
-        y = y & 0xFFF;
-        z = z & 0x3FFFFFF;
+        x &= 0x3FFFFFF;
+        y &= 0xFFF;
+        z &= 0x3FFFFFF;
 
         var packed = (x << 38) | (z << 12) | y;
         WriteSignedLong(packed);
