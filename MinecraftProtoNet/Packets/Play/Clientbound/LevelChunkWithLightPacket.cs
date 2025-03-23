@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x28, ProtocolState.Play)]
+[Packet(0x28, ProtocolState.Play, true)]
 public class LevelChunkWithLightPacket : IClientPacket
 {
     public int ChunkX { get; set; }

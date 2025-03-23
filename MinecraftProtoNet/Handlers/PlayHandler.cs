@@ -39,6 +39,7 @@ public class PlayHandler : IPacketHandler
         (ProtocolState.Play, 0x38),
         (ProtocolState.Play, 0x15),
         (ProtocolState.Play, 0x5D),
+        (ProtocolState.Play, 0x20),
         (ProtocolState.Play, 0x40),
         (ProtocolState.Play, 0x13),
         (ProtocolState.Play, 0x73),
@@ -123,8 +124,7 @@ public class PlayHandler : IPacketHandler
                 entity.Inventory[containerSetSlotPacket.SlotToUpdate] = containerSetSlotPacket.Slot;
                 break;
             }
-            case BlockChangedAcknowledgementPacket:
-                blockChangedAcknowledgementPacket:
+            case BlockChangedAcknowledgementPacket blockChangedAcknowledgementPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
@@ -151,12 +151,20 @@ public class PlayHandler : IPacketHandler
 
                     var physicsThread = new Thread(async () =>
                     {
+                        var stopwatch = new System.Diagnostics.Stopwatch();
+
                         while (true)
                         {
+                            stopwatch.Restart();
                             await client.PhysicsTickAsync();
-                            var delay = client.State.Level.GetTickRateMultiplier() * 50;
-                            var delayMs = TimeSpan.FromMilliseconds(delay);
-                            Thread.Sleep(delayMs);
+                            stopwatch.Stop();
+    
+                            var targetDelay = client.State.Level.GetTickRateMultiplier() * 50;
+                            var processingTime = stopwatch.ElapsedMilliseconds;
+                            if (!(processingTime < targetDelay)) continue;
+                            
+                            var remainingDelay = TimeSpan.FromMilliseconds(targetDelay - processingTime);
+                            Thread.Sleep(remainingDelay);
                         }
                     }) { Name = "Minecraft Physics" };
                     physicsThread.Start();
@@ -195,7 +203,7 @@ public class PlayHandler : IPacketHandler
             case EntityPositionSyncPacket entityPositionSyncPacket:
             {
                 await client.State.Level.SetPositionAsync(entityPositionSyncPacket.EntityId, entityPositionSyncPacket.Position,
-                    entityPositionSyncPacket.OnGround);
+                    entityPositionSyncPacket.Velocity, entityPositionSyncPacket.YawPitch, entityPositionSyncPacket.OnGround);
                 break;
             }
             case MoveEntityPositionRotationPacket moveEntityPositionRotationPacket:

@@ -187,8 +187,11 @@ public class Level
     /// </summary>
     /// <param name="entityId">The entity ID to update</param>
     /// <param name="position">The new absolute position</param>
+    /// <param name="velocity">The new velocity</param>
+    /// <param name="yawPitch">The new yaw and pitch</param>
     /// <param name="onGround">Whether the entity is on the ground</param>
-    public async Task SetPositionAsync(int entityId, Vector3<double> position, bool onGround)
+    public async Task SetPositionAsync(int entityId, Vector3<double> position, Vector3<double> velocity, Vector2<float> yawPitch,
+        bool onGround)
     {
         try
         {
@@ -197,11 +200,10 @@ public class Level
             var entity = GetEntityOfId(entityId);
             if (entity == null) return;
 
-            var oldPosition = entity.Position;
             entity.Position = position;
+            entity.Velocity = velocity;
+            entity.YawPitch = yawPitch;
             entity.IsOnGround = onGround;
-
-            LogPositionChange(entityId, "SYNC", oldPosition, position);
         }
         finally
         {
@@ -224,11 +226,8 @@ public class Level
             var entity = GetEntityOfId(entityId);
             if (entity is null) return;
 
-            var oldPosition = entity.Position;
             entity.Position += delta;
             entity.IsOnGround = onGround;
-
-            LogPositionChange(entityId, "DELTA", oldPosition, entity.Position);
         }
         finally
         {
@@ -236,24 +235,8 @@ public class Level
         }
     }
 
-    private void LogPositionChange(int entityId, string reason, Vector3<double> oldPos, Vector3<double> newPos)
-    {
-        var delta = new Vector3<double>(
-            newPos.X - oldPos.X,
-            newPos.Y - oldPos.Y,
-            newPos.Z - oldPos.Z
-        );
-
-        var distance = Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z);
-
-        //Console.WriteLine($"Entity {entityId} position update ({reason}):");
-        //Console.WriteLine($"  From: ({oldPos.X:F6}, {oldPos.Y:F6}, {oldPos.Z:F6})");
-        //Console.WriteLine($"  To:   ({newPos.X:F6}, {newPos.Y:F6}, {newPos.Z:F6})");
-        //Console.WriteLine($"  Delta: ({delta.X:F6}, {delta.Y:F6}, {delta.Z:F6}) dist={distance:F6}");
-    }
-
     /// <summary>
-    /// Sets an entity's velocity vector and immediately updates position to account for the velocity
+    /// Sets an entity's velocity vector and updates position accordingly
     /// </summary>
     /// <param name="entityId">The entity ID to update</param>
     /// <param name="packetVelocity">The velocity from the packet (in 1/8000 blocks per tick)</param>
@@ -266,12 +249,27 @@ public class Level
             var entity = GetEntityOfId(entityId);
             if (entity == null) return;
 
+            // Convert from Minecraft velocity units (1/8000 blocks per tick) to blocks per tick
+            // In Minecraft, velocity is sent as shorts that represent blocks/tick * 8000
             const double conversionFactor = 1.0 / 8000.0;
-            entity.Velocity *= conversionFactor;
+            var velocityBlocksPerTick = new Vector3<double>(
+                packetVelocity.X * conversionFactor,
+                packetVelocity.Y * conversionFactor,
+                packetVelocity.Z * conversionFactor
+            );
 
-            var tickRateMultiplier = GetTickRateMultiplier();
-            var velocity = entity.Velocity * tickRateMultiplier;
-            entity.Position += velocity;
+            // Store the new velocity
+            entity.Velocity = velocityBlocksPerTick;
+
+            // Calculate how many milliseconds have passed since the last tick
+            // This helps us estimate how much of the velocity should be applied
+            var timeSinceLastTick = TimeSinceLastTimePacket.ElapsedMilliseconds;
+            var tickProgress = Math.Min(1.0, timeSinceLastTick / TickInterval);
+
+            // Calculate and apply position delta based on velocity and tick progress
+            // We multiply by tickProgress to account for partial ticks
+            var positionDelta = entity.Velocity * tickProgress;
+            entity.Position += positionDelta;
         }
         finally
         {
