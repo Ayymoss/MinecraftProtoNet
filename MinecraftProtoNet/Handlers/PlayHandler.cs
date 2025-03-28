@@ -1,5 +1,7 @@
 ﻿using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Handlers.Base;
+using MinecraftProtoNet.Handlers.Meta;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
@@ -113,7 +115,6 @@ public class PlayHandler : IPacketHandler
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.IsHurt = true;
                 entity.IsHurtFromYaw = hurtAnimationPacket.Yaw;
                 break;
             }
@@ -142,7 +143,7 @@ public class PlayHandler : IPacketHandler
                 if (client.State.LocalPlayer.HasEntity) client.State.LocalPlayer.Entity.HeldSlot = setHeldSlotPacket.HeldSlot;
                 break;
             }
-            case PlayerPositionPacket playerPositionPacket: // TODO: Will fire on join or when moving too quickly or other teleport.
+            case PlayerPositionPacket playerPositionPacket:
             {
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
                 if (!_playerLoaded)
@@ -156,29 +157,43 @@ public class PlayHandler : IPacketHandler
                         while (true)
                         {
                             stopwatch.Restart();
-                            await client.PhysicsTickAsync();
+                            try
+                            {
+                                await client.PhysicsTickAsync();
+                                client.State.Level.IncrementClientTickCounter();
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Error in physics tick: {ex}");
+                            }
+
                             stopwatch.Stop();
-    
-                            var targetDelay = client.State.Level.GetTickRateMultiplier() * 50;
-                            var processingTime = stopwatch.ElapsedMilliseconds;
-                            if (!(processingTime < targetDelay)) continue;
-                            
-                            var remainingDelay = TimeSpan.FromMilliseconds(targetDelay - processingTime);
-                            Thread.Sleep(remainingDelay);
+
+                            var targetDelayMs = client.State.Level.TickInterval;
+                            var processingTimeMs = stopwatch.ElapsedMilliseconds;
+                            targetDelayMs = Math.Max(1, Math.Min(1000, targetDelayMs));
+
+                            if (processingTimeMs < targetDelayMs)
+                            {
+                                var remainingDelayMs = targetDelayMs - processingTimeMs;
+                                await Task.Delay(TimeSpan.FromMilliseconds(remainingDelayMs));
+                            }
+                            else
+                            {
+                                await Task.Yield();
+                            }
                         }
-                    }) { Name = "Minecraft Physics" };
+                    }) { Name = "Local Entity Physics", IsBackground = true };
                     physicsThread.Start();
 
                     _playerLoaded = true;
                 }
 
+                // --- Position update ---
                 if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
                 client.State.LocalPlayer.Entity.Position = playerPositionPacket.Position;
-                client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
+                //client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
                 client.State.LocalPlayer.Entity.YawPitch = playerPositionPacket.YawPitch;
-
-                await client.SendPacketAsync(client.Move(playerPositionPacket.Position.X, playerPositionPacket.Position.Y,
-                    playerPositionPacket.Position.Z, playerPositionPacket.YawPitch.X, playerPositionPacket.YawPitch.Y));
                 break;
             }
             case KeepAlivePacket keepAlivePacket:
@@ -193,6 +208,13 @@ public class PlayHandler : IPacketHandler
             }
             case SetHealthPacket setHealthPacket:
             {
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var entity = client.State.LocalPlayer.Entity;
+
+                entity.Health = setHealthPacket.Health;
+                entity.Hunger = setHealthPacket.Food;
+                entity.HungerSaturation = setHealthPacket.FoodSaturation;
+
                 if (setHealthPacket.Health <= 0)
                 {
                     await client.SendPacketAsync(new ClientCommandPacket { ActionId = ClientCommandPacket.Action.PerformRespawn });

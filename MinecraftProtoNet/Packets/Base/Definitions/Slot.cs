@@ -10,6 +10,12 @@ public class Slot
     public StructuredComponent[]? ComponentsToAdd { get; set; }
     public ComponentType[]? ComponentsToRemove { get; set; }
 
+    public static Slot Empty { get; set; } = new()
+    {
+        ItemCount = 0,
+        ItemId = 0
+    };
+
     public static Slot Read(ref PacketBufferReader reader)
     {
         var slot = new Slot
@@ -55,7 +61,8 @@ public class Slot
 
     public override string ToString()
     {
-        return $"{ItemCount} {ItemId?.ToString() ?? "<NULL>"} {ComponentsToAdd?.Length.ToString() ?? "<NULL>"} {ComponentsToRemove?.Length.ToString() ?? "<NULL>"}";
+        return
+            $"{ItemCount} {ItemId?.ToString() ?? "<NULL>"} {ComponentsToAdd?.Length.ToString() ?? "<NULL>"} {ComponentsToRemove?.Length.ToString() ?? "<NULL>"}";
     }
 }
 

@@ -9,6 +9,8 @@ public class BlockState(int id, string name)
     public bool IsLiquid => Name.Contains("water", StringComparison.CurrentCultureIgnoreCase) ||
                             Name.Contains("lava", StringComparison.CurrentCultureIgnoreCase);
 
+    public bool IsSolid => !IsAir && !IsLiquid;
+
     public override bool Equals(object? obj)
     {
         if (obj is BlockState other)

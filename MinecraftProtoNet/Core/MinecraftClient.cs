@@ -139,6 +139,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
     public async Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage)
     {
         if (!State.LocalPlayer.HasEntity) return;
+        var entity = State.LocalPlayer.Entity;
         var sender = State.Level.GetPlayerByUuid(senderGuid);
         var command = bodyMessage.Split(" ")[0];
 
@@ -179,7 +180,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
             }
         }
 
-        if (command == "!gotowalk")
+        if (command == "!gotopath")
         {
             var coords = bodyMessage.Split(" ").Skip(1).ToArray();
             if (coords.Length is 3)
@@ -187,13 +188,15 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                 var x = float.Parse(coords[0]);
                 var y = float.Parse(coords[1]);
                 var z = float.Parse(coords[2]);
-                //await State.LocalPlayer.Entity.MoveToPosition(new Vector3<double>(x, y, z), State.Level, SendPacketAsync);
 
-                //if (!result)
-                //{
-                //    await SendPacketAsync(new ChatPacket("I can't reach that position."));
-                //    return;
-                //}
+                InitializePathFinder();
+                var result = FollowPathTo(new Vector3<double>(x, y, z));
+
+                if (!result)
+                {
+                    await SendPacketAsync(new ChatPacket("I can't reach that position."));
+                    return;
+                }
 
                 await SendPacketAsync(new ChatPacket("Moving to that position."));
             }
@@ -208,8 +211,34 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         if (command == "!tps")
         {
             await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
-                                                 $"| MSPT: {State.Level.TickInterval:N2}ms " +
-                                                 $"| Rate: {State.Level.GetTickRateMultiplier():N2}x"));
+                                                 $"| MSPT: {State.Level.TickInterval:N2}ms "));
+        }
+
+        if (command == "!attack")
+        {
+            var entities = State.Level.GetAllPlayers().Where(x => x.HasEntity).Select(x => x.Entity!);
+            var target = entity.GetLookingAtEntity(entity, entities, 3.5);
+            if (target is null)
+            {
+                await SendPacketAsync(new ChatPacket("I'm not looking at a player."));
+                return;
+            }
+
+            var yawPitchToTarget = entity.GetYawPitchToTarget(entity, target);
+            await SendPacketAsync(new MovePlayerRotationPacket
+            {
+                Yaw = yawPitchToTarget.X,
+                Pitch = yawPitchToTarget.Y,
+                Flags = MovementFlags.None
+            });
+
+            await SendPacketAsync(new InteractPacket
+            {
+                EntityId = target.EntityId,
+                Type = InteractType.Attack,
+                SneakKeyPressed = entity.IsSneaking
+            });
+            await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
         }
 
         if (command == "!swing")
@@ -227,7 +256,6 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!slot")
         {
-            var entity = State.LocalPlayer.Entity;
             var message = bodyMessage.Split(" ").Skip(1).ToArray();
             if (message.Length is 1)
             {
@@ -249,7 +277,6 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!place")
         {
-            var entity = State.LocalPlayer.Entity;
             if (entity.HeldItem.ItemId is null)
             {
                 await SendPacketAsync(new ChatPacket("You are not holding anything."));
@@ -278,17 +305,37 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
             }
         }
 
+        if (command == "!state")
+        {
+            await SendPacketAsync(
+                new ChatPacket($"Sp: {entity.IsSprintingNew || entity.WantsToSprint}, J: {entity.IsJumping}, Sn: {entity.IsSneaking}"));
+        }
+
+        if (command == "!forward")
+        {
+            if (!entity.Forward)
+            {
+                entity.Forward = true;
+                await SendPacketAsync(new ChatPacket("Moving forward!"));
+            }
+            else
+            {
+                entity.Forward = false;
+                await SendPacketAsync(new ChatPacket("Stopping moving forward!"));
+            }
+        }
+
         if (command == "!jump")
         {
-            var entity = State.LocalPlayer.Entity;
-            if (entity.IsOnGround)
+            if (!entity.IsJumping)
             {
-                entity.IsJumping = true;
+                entity.StartJumping();
                 await SendPacketAsync(new ChatPacket("Jumping!"));
             }
             else
             {
-                await SendPacketAsync(new ChatPacket("You are not on the ground."));
+                entity.StopJumping();
+                await SendPacketAsync(new ChatPacket("Stopped jumping!"));
             }
         }
 
@@ -312,12 +359,13 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                 await Task.Delay(100);
                 await LookAtHelper(x, y + 1, z, BlockFace.Top);
                 await PlaceHelper();
-                State.LocalPlayer.Entity.IsJumping = true;
+                State.LocalPlayer.Entity.StartJumping();
                 await Task.Delay(100);
+                State.LocalPlayer.Entity.StopJumping();
                 await LookAtHelper(x, y + 2, z, BlockFace.Top);
                 await PlaceHelper();
                 await Task.Delay(500);
-                await LookAtHelper(x, y + 1, z, BlockFace.South);
+                await LookAtHelper(x, y + 1, z, BlockFace.Bottom);
                 var lookingAt = State.LocalPlayer.Entity.GetLookingAtBlock(State.Level);
                 if (lookingAt is null) return;
                 await SendPacketAsync(new PlayerActionPacket
@@ -328,7 +376,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                     Sequence = State.LocalPlayer.Entity.IncrementSequence()
                 });
 
-                for (int i = 0; i < 5; i++)
+                for (var i = 0; i < 5; i++)
                 {
                     await Task.Delay(50);
                     await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
@@ -346,7 +394,6 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!lookingat")
         {
-            var entity = State.LocalPlayer.Entity;
             var hit = entity.GetLookingAtBlock(State.Level);
             if (hit is null)
             {
@@ -389,7 +436,6 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!drop")
         {
-            var entity = State.LocalPlayer.Entity;
             var heldItem = entity.HeldItem;
             if (heldItem.ItemId is null)
             {
@@ -405,6 +451,70 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                 Sequence = 0
             });
             entity.Inventory[(short)(entity.HeldSlot + 36)] = new Slot();
+        }
+
+        if (command == "!sneak")
+        {
+            if (entity.IsSneaking)
+            {
+                entity.StopSneaking();
+                await SendPacketAsync(new PlayerCommandPacket
+                {
+                    EntityId = entity.EntityId,
+                    Action = PlayerAction.StopSneaking
+                });
+                await SendPacketAsync(new ChatPacket("Stopped sneaking."));
+            }
+            else
+            {
+                if (entity.WantsToSprint)
+                {
+                    entity.StopSprinting();
+                    await SendPacketAsync(new PlayerCommandPacket
+                    {
+                        EntityId = entity.EntityId,
+                        Action = PlayerAction.StopSprint
+                    });
+                }
+
+                entity.StartSneaking();
+                await SendPacketAsync(new PlayerCommandPacket
+                {
+                    EntityId = entity.EntityId,
+                    Action = PlayerAction.StartSneaking
+                });
+                await SendPacketAsync(new ChatPacket("Sneaking!"));
+            }
+        }
+
+        if (command == "!sprint")
+        {
+            if (entity.WantsToSprint)
+            {
+                await SendPacketAsync(new PlayerCommandPacket
+                {
+                    EntityId = entity.EntityId,
+                    Action = PlayerAction.StopSprint,
+                });
+                entity.StopSprinting();
+                await SendPacketAsync(new ChatPacket("Stopped sprinting."));
+            }
+            else
+            {
+                if (entity.IsSneaking)
+                {
+                    entity.StopSneaking();
+                    await SendPacketAsync(new PlayerCommandPacket
+                    {
+                        EntityId = entity.EntityId,
+                        Action = PlayerAction.StopSneaking
+                    });
+                }
+
+                // We only want to signal intent, not start sprinting.
+                entity.StartSprinting();
+                await SendPacketAsync(new ChatPacket("Sprinting!"));
+            }
         }
 
         if (sender is null) return;
@@ -432,27 +542,15 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
             }
 
             var targetPosition = sender.Entity.Position;
-            var pathFinder = new AStarPathFinder(State.Level);
-            var result = pathFinder.FindPath(State.LocalPlayer.Entity.Position, targetPosition);
-            if (result is null)
+            InitializePathFinder();
+            var result = FollowPathTo(targetPosition);
+
+            if (!result)
             {
-                Console.WriteLine("Path not found.");
+                await SendPacketAsync(new ChatPacket("I can't reach your position."));
                 return;
             }
 
-            foreach (var vector in result)
-            {
-                Console.WriteLine(vector);
-            }
-
-            //await State.LocalPlayer.Entity.MoveToPosition(targetPosition, State.Level, SendPacketAsync);
-
-            // TODO: Won't jump, has issues going up/down blocks. Seems to cause teleport packets, illegal movement?
-            //if (!result)
-            //{
-            //    await SendPacketAsync(new ChatPacket("I can't reach your position."));
-            //    return;
-            //}
 
             await SendPacketAsync(new ChatPacket("Moving to your position."));
         }

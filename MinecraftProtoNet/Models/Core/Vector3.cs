@@ -26,11 +26,6 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
         Z = z;
     }
 
-    public Vector3 GetAsVector3()
-    {
-        return new Vector3(Convert.ToSingle(X), Convert.ToSingle(Y), Convert.ToSingle(Z));
-    }
-
     public static Vector3<TNumber> operator +(Vector3<TNumber> a, Vector3<TNumber> b)
     {
         return new Vector3<TNumber>(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
@@ -51,45 +46,12 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
         return a * scalar;
     }
 
-    public static bool operator ==(Vector3<TNumber> a, Vector3<TNumber> b)
-    {
-        return a.X == b.X && a.Y == b.Y && a.Z == b.Z;
-    }
-
-    public static bool operator !=(Vector3<TNumber> a, Vector3<TNumber> b)
-    {
-        return !(a == b);
-    }
-
     public double Length()
     {
         var x = Convert.ToDouble(X);
         var y = Convert.ToDouble(Y);
         var z = Convert.ToDouble(Z);
         return Math.Sqrt(x * x + y * y + z * z);
-    }
-
-    public Vector3<double> Normalized()
-    {
-        var length = Length();
-        return length > 1e-5
-            ? new Vector3<double>(Convert.ToDouble(X) / length, Convert.ToDouble(Y) / length, Convert.ToDouble(Z) / length)
-            : new Vector3<double>(0, 0, 0);
-    }
-
-    public override string ToString()
-    {
-        switch (typeof(TNumber))
-        {
-            case { } t when t == typeof(float):
-                return $"({X:N6}f, {Y:N6}f, {Z:N6}f)";
-            case { } t when t == typeof(double):
-                return $"({X:N6}d, {Y:N6}d, {Z:N6}d)";
-            case { } t when t == typeof(int):
-                return $"({X:N0}i, {Y:N0}i, {Z:N0}i)";
-            default:
-                return $"({X}, {Y}, {Z})";
-        }
     }
 
     public double LengthSquared()
@@ -99,4 +61,43 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
         var z = Convert.ToDouble(Z);
         return x * x + y * y + z * z;
     }
+
+
+    public Vector3<double> Normalized()
+    {
+        var length = Length();
+        const double epsilon = 1e-10;
+        if (length < epsilon)
+        {
+            return new Vector3<double>(0, 0, 0);
+        }
+
+        var invLength = 1.0 / length;
+        return new Vector3<double>(
+            Convert.ToDouble(X) * invLength,
+            Convert.ToDouble(Y) * invLength,
+            Convert.ToDouble(Z) * invLength
+        );
+    }
+
+    public TNumber Dot(Vector3<TNumber> other)
+    {
+        return X * other.X + Y * other.Y + Z * other.Z;
+    }
+
+    public Vector3<TNumber> Cross(Vector3<TNumber> other)
+    {
+        return new Vector3<TNumber>(
+            Y * other.Z - Z * other.Y,
+            Z * other.X - X * other.Z,
+            X * other.Y - Y * other.X
+        );
+    }
+
+    public override string ToString()
+    {
+        return $"({X}, {Y}, {Z})";
+    }
+
+    public static Vector3<TNumber> Zero => new(TNumber.Zero, TNumber.Zero, TNumber.Zero);
 }

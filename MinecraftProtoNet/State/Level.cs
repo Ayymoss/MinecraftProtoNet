@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Handlers.Meta;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
@@ -11,50 +10,69 @@ namespace MinecraftProtoNet.State;
 public class Level
 {
     public double TickInterval { get; private set; } = 50d;
-    public long WorldAge { get; private set; }
+    public long ClientTickCounter { get; private set; }
+    public long WorldAge { get; set; }
     public long TimeOfDay { get; private set; }
     public bool TimeOfDayIncreasing { get; private set; }
     public Stopwatch TimeSinceLastTimePacket { get; } = new();
+    private readonly Lock _tickLock = new();
 
-    public void UpdateTickInformation(long worldAge, long timeOfDay, bool timeOfDayIncreasing)
+    public void UpdateTickInformation(long serverWorldAge, long timeOfDay, bool timeOfDayIncreasing)
     {
-        var previousWorldAge = WorldAge;
-
-        WorldAge = worldAge;
-        TimeOfDay = timeOfDay;
-        TimeOfDayIncreasing = timeOfDayIncreasing;
-
-        if (previousWorldAge > 0)
+        lock (_tickLock)
         {
-            var ticksPassed = WorldAge - previousWorldAge;
-            if (ticksPassed <= 0) return;
+            var previousServerWorldAge = WorldAge;
 
-            var realTimeElapsed = TimeSinceLastTimePacket.ElapsedMilliseconds;
-            TimeSinceLastTimePacket.Restart();
-            var calculatedTickInterval = (double)realTimeElapsed / ticksPassed;
-            const double smoothingFactor = 0.25;
-            TickInterval = TickInterval * (1 - smoothingFactor) + calculatedTickInterval * smoothingFactor;
+            WorldAge = serverWorldAge;
+            TimeOfDay = timeOfDay;
+            TimeOfDayIncreasing = timeOfDayIncreasing;
+
+            if (previousServerWorldAge > 0)
+            {
+                var serverTicksPassed = WorldAge - previousServerWorldAge;
+                if (serverTicksPassed > 0)
+                {
+                    var realTimeElapsed = TimeSinceLastTimePacket.ElapsedMilliseconds;
+                    TimeSinceLastTimePacket.Restart();
+
+                    if (realTimeElapsed > 0)
+                    {
+                        var calculatedTickInterval = (double)realTimeElapsed / serverTicksPassed;
+                        const double smoothingFactor = 0.25;
+                        TickInterval = TickInterval * (1 - smoothingFactor) + calculatedTickInterval * smoothingFactor;
+                        TickInterval = Math.Clamp(TickInterval, 5.0, 1000.0);
+                    }
+                }
+                else
+                {
+                    TimeSinceLastTimePacket.Restart();
+                }
+            }
+            else
+            {
+                TimeSinceLastTimePacket.Restart();
+            }
+
+            ClientTickCounter = serverWorldAge;
         }
-        else
+    }
+
+    public void IncrementClientTickCounter()
+    {
+        lock (_tickLock)
         {
-            TimeSinceLastTimePacket.Restart();
+            ClientTickCounter++;
         }
     }
 
     public double GetCurrentServerTps()
     {
-        return 1000.0 / TickInterval;
+        const double epsilon = 1e-9;
+        return TickInterval > epsilon ? 1000.0 / TickInterval : 0.0;
     }
 
-    public double GetTickRateMultiplier()
-    {
-        return 50.0 / TickInterval;
-    }
-
-    // Lookups for frequency access
     private readonly Dictionary<Guid, Player> _players = new();
     private readonly Dictionary<int, Player> _playersByEntityId = new();
-
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     /// <summary>
@@ -249,26 +267,15 @@ public class Level
             var entity = GetEntityOfId(entityId);
             if (entity == null) return;
 
-            // Convert from Minecraft velocity units (1/8000 blocks per tick) to blocks per tick
-            // In Minecraft, velocity is sent as shorts that represent blocks/tick * 8000
             const double conversionFactor = 1.0 / 8000.0;
-            var velocityBlocksPerTick = new Vector3<double>(
-                packetVelocity.X * conversionFactor,
-                packetVelocity.Y * conversionFactor,
-                packetVelocity.Z * conversionFactor
-            );
+            var velocityBlocksPerTick = new Vector3<double>(packetVelocity.X * conversionFactor, packetVelocity.Y * conversionFactor,
+                packetVelocity.Z * conversionFactor);
 
-            // Store the new velocity
             entity.Velocity = velocityBlocksPerTick;
 
-            // Calculate how many milliseconds have passed since the last tick
-            // This helps us estimate how much of the velocity should be applied
-            var timeSinceLastTick = TimeSinceLastTimePacket.ElapsedMilliseconds;
-            var tickProgress = Math.Min(1.0, timeSinceLastTick / TickInterval);
-
-            // Calculate and apply position delta based on velocity and tick progress
-            // We multiply by tickProgress to account for partial ticks
+            var tickProgress = Math.Min(1.0, TimeSinceLastTimePacket.ElapsedMilliseconds / TickInterval);
             var positionDelta = entity.Velocity * tickProgress;
+
             entity.Position += positionDelta;
         }
         finally
@@ -361,41 +368,71 @@ public class Level
         chunk.SetBlock(x, y, z, blockStateId);
     }
 
+    public List<AABB> GetCollidingBlockAABBs(AABB queryBox)
+    {
+        var collidingBoxes = new List<AABB>();
+
+        var minBx = (int)Math.Floor(queryBox.Min.X);
+        var minBy = (int)Math.Floor(queryBox.Min.Y);
+        var minBz = (int)Math.Floor(queryBox.Min.Z);
+        var maxBx = (int)Math.Floor(queryBox.Max.X);
+        var maxBy = (int)Math.Floor(queryBox.Max.Y);
+        var maxBz = (int)Math.Floor(queryBox.Max.Z);
+
+        for (var y = minBy; y <= maxBy; y++)
+        {
+            if (y is < -64 or > 319) continue;
+
+            for (var x = minBx; x <= maxBx; x++)
+            {
+                for (var z = minBz; z <= maxBz; z++)
+                {
+                    var blockState = GetBlockAt(x, y, z);
+                    if (blockState is not { IsAir: false, IsLiquid: false, IsSolid: true }) continue;
+
+                    // I'm only supporting floor slabs for now. Everything else is a full block.
+                    var blockBox = new AABB(x, y, z, x + 1, y + 1, z + 1);
+                    if (blockState.Name.Contains("slab")) blockBox = new AABB(x, y, z, x + 1, y + 0.5, z + 1);
+
+                    if (blockBox.Intersects(queryBox))
+                    {
+                        collidingBoxes.Add(blockBox);
+                    }
+                }
+            }
+        }
+
+        return collidingBoxes;
+    }
+
     public RaycastHit? RayCast(Vector3<double> start, Vector3<double> direction, double maxDistance = 100.0)
     {
-        // Normalize direction vector
         var length = Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y + direction.Z * direction.Z);
-        if (length < 1e-10) return null; // Prevent division by zero
+        if (length < 1e-10) return null;
 
         direction = new Vector3<double>(direction.X / length, direction.Y / length, direction.Z / length);
 
-        // Current block position
         var x = (int)Math.Floor(start.X);
         var y = (int)Math.Floor(start.Y);
         var z = (int)Math.Floor(start.Z);
 
-        // Direction step values
         var stepX = direction.X > 0 ? 1 : -1;
         var stepY = direction.Y > 0 ? 1 : -1;
         var stepZ = direction.Z > 0 ? 1 : -1;
 
-        // Calculate distances to next block boundaries
         var tMaxX = direction.X != 0 ? (stepX > 0 ? x + 1 - start.X : start.X - x) / Math.Abs(direction.X) : double.MaxValue;
         var tMaxY = direction.Y != 0 ? (stepY > 0 ? y + 1 - start.Y : start.Y - y) / Math.Abs(direction.Y) : double.MaxValue;
         var tMaxZ = direction.Z != 0 ? (stepZ > 0 ? z + 1 - start.Z : start.Z - z) / Math.Abs(direction.Z) : double.MaxValue;
 
-        // Calculate step sizes
         var tDeltaX = direction.X != 0 ? Math.Abs(1.0 / direction.X) : double.MaxValue;
         var tDeltaY = direction.Y != 0 ? Math.Abs(1.0 / direction.Y) : double.MaxValue;
         var tDeltaZ = direction.Z != 0 ? Math.Abs(1.0 / direction.Z) : double.MaxValue;
 
         var lastT = 0d;
 
-        // Check if the starting point is inside a block
         var startBlock = GetBlockAt(x, y, z);
         if (startBlock is { IsAir: false, IsLiquid: false })
         {
-            // We're starting inside a block, so the distance is 0
             return new RaycastHit
             {
                 Block = startBlock,
@@ -407,18 +444,14 @@ public class Level
             };
         }
 
-        // Calculate the maximum number of steps based on maxDistance
-        // For small distances, ensure we take at least a few steps
-        int maxSteps = Math.Max(10, (int)(maxDistance * 3));
-        int steps = 0;
+        var maxSteps = Math.Max(10, (int)(maxDistance * 3));
+        var steps = 0;
 
         while (steps < maxSteps)
         {
-            // Check if we've exceeded the maximum distance
             if (lastT > maxDistance)
                 return null;
 
-            // Determine which axis to step along next
             BlockFace lastFace;
             if (tMaxX < tMaxY && tMaxX < tMaxZ)
             {
@@ -442,7 +475,6 @@ public class Level
                 lastFace = stepZ > 0 ? BlockFace.North : BlockFace.South;
             }
 
-            // Check if the current block is solid
             var block = GetBlockAt(x, y, z);
             if (block is { IsAir: false, IsLiquid: false })
             {

@@ -9,7 +9,6 @@ public class AStarPathFinder(Level level)
     private const float DiagonalCost = 1.414f;
     private const int MaxJumpHeight = 1;
     private const int MaxFallHeight = 3;
-    private const bool DebugMode = true; // Set to true for extra output
 
     /// <summary>
     /// Find a path from start to target position
@@ -29,11 +28,6 @@ public class AStarPathFinder(Level level)
             (int)Math.Floor(target.Z)
         );
 
-        if (DebugMode)
-        {
-            Console.WriteLine($"Finding path from {startBlock} to {targetBlock}");
-        }
-
         var openSet = new PriorityQueue<PathNode>();
         var closedSet = new HashSet<(int x, int y, int z)>();
         var nodeCache = new Dictionary<(int x, int y, int z), PathNode>();
@@ -47,7 +41,6 @@ public class AStarPathFinder(Level level)
         nodeCache[(startBlock.X, startBlock.Y, startBlock.Z)] = startNode;
 
         var iterations = 0;
-
         while (openSet.Count > 0 && iterations < maxIterations)
         {
             iterations++;
@@ -55,28 +48,13 @@ public class AStarPathFinder(Level level)
             var current = openSet.Dequeue();
             var currentPos = (current.Position.X, current.Position.Y, current.Position.Z);
 
-            if (DebugMode && iterations % 100 == 0)
-            {
-                Console.WriteLine($"Iteration {iterations}, processing node {current.Position}, F={current.F}");
-            }
-
             if (current.Position.X == targetBlock.X && current.Position.Y == targetBlock.Y && current.Position.Z == targetBlock.Z)
             {
-                if (DebugMode)
-                {
-                    Console.WriteLine($"Path found in {iterations} iterations");
-                }
-
                 return ReconstructPath(current);
             }
 
             closedSet.Add(currentPos);
             var neighbors = GetWalkableNeighbors(current.Position);
-
-            if (DebugMode && neighbors.Count == 0)
-            {
-                Console.WriteLine($"No walkable neighbors for {current.Position}");
-            }
 
             foreach (var neighbor in neighbors)
             {
@@ -102,11 +80,6 @@ public class AStarPathFinder(Level level)
                 if (!openSet.Contains(neighborNode)) openSet.Enqueue(neighborNode);
                 else openSet.Update(neighborNode);
             }
-        }
-
-        if (DebugMode)
-        {
-            Console.WriteLine($"No path found after {iterations} iterations");
         }
 
         return null;

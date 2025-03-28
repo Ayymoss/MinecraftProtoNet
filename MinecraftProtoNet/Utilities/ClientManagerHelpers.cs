@@ -54,7 +54,7 @@ public static class ClientManagerHelpers
         });
     }
 
-    private static float NormalizeYaw(float yaw)
+    public static float NormalizeYaw(float yaw)
     {
         yaw %= 360;
         switch (yaw)
@@ -70,7 +70,7 @@ public static class ClientManagerHelpers
         return yaw;
     }
 
-    private static float CalculateYawToTarget(Vector3<double> currentPosition, Vector3<double> targetPosition)
+    public static float CalculateYawToTarget(Vector3<double> currentPosition, Vector3<double> targetPosition)
     {
         var deltaX = targetPosition.X - currentPosition.X;
         var deltaZ = targetPosition.Z - currentPosition.Z;
