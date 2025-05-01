@@ -5,6 +5,6 @@ namespace MinecraftProtoNet.Services;
 
 public interface IPacketService
 {
-    Task HandlePacketAsync(IClientPacket packet, IMinecraftClient client);
-    IClientPacket CreateIncomingPacket(ProtocolState state, int packetId);
+    Task HandlePacketAsync(IClientboundPacket packet, IMinecraftClient client);
+    IClientboundPacket CreateIncomingPacket(ProtocolState state, int packetId);
 }

@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x07, ProtocolState.Configuration)]
-public class RegistryDataPacket : IClientPacket
+public class RegistryDataPacket : IClientboundPacket
 {
     public string RegistryId { get; set; }
     public Dictionary<string, NbtTag?> Tags { get; set; } = new();

@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3B, ProtocolState.Play)]
-public class PlayerChatPacket : IClientPacket
+[Packet(0x3A, ProtocolState.Play)]
+public class PlayerChatPacket : IClientboundPacket
 {
     public HeaderPayload Header { get; set; }
     public BodyPayload Body { get; set; }
@@ -20,6 +20,7 @@ public class PlayerChatPacket : IClientPacket
         // Header
         Header = new HeaderPayload
         {
+            GlobalIndex = buffer.ReadVarInt(),
             Uuid = buffer.ReadUuid(),
             Index = buffer.ReadVarInt(),
             MessageSignature = buffer.ReadBoolean() ? buffer.ReadBuffer(256).ToArray() : null
@@ -38,10 +39,13 @@ public class PlayerChatPacket : IClientPacket
         Validations = new MessageValidationPayload[count];
         for (var i = 0; i < count; i++)
         {
+            var messageId = buffer.ReadVarInt();
+            var signature = messageId == 0 ? buffer.ReadBuffer(256).ToArray() : null;
+
             Validations[i] = new MessageValidationPayload
             {
-                MessageId = buffer.ReadVarInt(),
-                Signature = buffer.ReadBuffer(256).ToArray()
+                MessageId = messageId,
+                Signature = signature
             };
         }
 
@@ -70,11 +74,12 @@ public class PlayerChatPacket : IClientPacket
     {
         public required Guid Uuid { get; set; }
         public required int Index { get; set; }
-        public byte[]? MessageSignature { get; set; }
+        public required byte[]? MessageSignature { get; set; }
+        public required int GlobalIndex { get; set; }
 
         public override string ToString()
         {
-            return $"{{Uuid={Uuid}, Index={Index}, MessageSignature={MessageSignature}}}";
+            return $"{{GlobalIndex={GlobalIndex}, Uuid={Uuid}, Index={Index}, MessageSignature={MessageSignature}}}";
         }
     }
 
@@ -93,7 +98,7 @@ public class PlayerChatPacket : IClientPacket
     public class MessageValidationPayload
     {
         public required int MessageId { get; set; }
-        public required byte[] Signature { get; set; }
+        public required byte[]? Signature { get; set; }
 
         public override string ToString()
         {
@@ -103,9 +108,9 @@ public class PlayerChatPacket : IClientPacket
 
     public class OtherPayload
     {
-        public NbtTag? UnsignedContent { get; set; }
+        public required NbtTag? UnsignedContent { get; set; }
         public required FilterType FilterType { get; set; }
-        public long[]? FilterTypeBits { get; set; }
+        public required long[]? FilterTypeBits { get; set; }
 
         public override string ToString()
         {
@@ -117,7 +122,7 @@ public class PlayerChatPacket : IClientPacket
     {
         public required int Type { get; set; }
         public required NbtTag SenderName { get; set; }
-        public NbtTag? TargetName { get; set; }
+        public required NbtTag? TargetName { get; set; }
 
         public override string ToString()
         {

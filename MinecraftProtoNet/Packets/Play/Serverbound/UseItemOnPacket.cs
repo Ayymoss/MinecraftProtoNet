@@ -9,7 +9,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x3C, ProtocolState.Play)]
-public class UseItemOnPacket : IServerPacket
+public class UseItemOnPacket : IServerboundPacket
 {
     public required Hand Hand { get; set; }
     public required Vector3<double> Position { get; set; }
@@ -21,8 +21,6 @@ public class UseItemOnPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
         buffer.WriteVarInt((int)Hand);
         buffer.WritePosition(Position);
         buffer.WriteVarInt((int)BlockFace);

@@ -1,5 +1,6 @@
 ﻿<Solution>
   <Project Path="Bot\Bot.csproj" Type="Classic C#" />
+  <Project Path="MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" Type="Classic C#" />
   <Project Path="MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" Type="Classic C#" />
   <Project Path="MinecraftProtoNet\MinecraftProtoNet.csproj" Type="Classic C#" />
 </Solution>

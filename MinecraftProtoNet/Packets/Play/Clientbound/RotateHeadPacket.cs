@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x4D, ProtocolState.Play, true)]
-public class RotateHeadPacket : IClientPacket
+[Packet(0x4C, ProtocolState.Play, true)]
+public class RotateHeadPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public sbyte HeadYaw { get; set; }

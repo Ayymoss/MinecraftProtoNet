@@ -38,6 +38,8 @@ public partial class MinecraftClient
         var entity = State.LocalPlayer.Entity;
         var level = State.Level;
 
+        //Console.WriteLine($"[{TimeProvider.System.GetLocalNow():HH:mm:ss.fff}] TICK {level.ClientTickCounter}");
+
         UpdatePathFollowingInput(entity);
         ApplyJumpingInput(entity);
         ApplyMovementInput(entity);
@@ -99,7 +101,7 @@ public partial class MinecraftClient
 
         // 2. Apply Gravity
         entity.Velocity.Y += Gravity;
-        entity.Velocity.Y *= AirDrag; // Air drag also affects vertical velocity
+        entity.Velocity.Y *= AirDrag;
         if (entity.Velocity.Y < TerminalVelocity)
         {
             entity.Velocity.Y = TerminalVelocity;
@@ -154,6 +156,8 @@ public partial class MinecraftClient
     private void HandleEntityCollisions(Entity entity, Level level)
     {
         var allEntityIds = level.GetAllEntityIds();
+        if (allEntityIds.Length is 0) return;
+
         foreach (var otherId in allEntityIds)
         {
             if (otherId == entity.EntityId) continue;

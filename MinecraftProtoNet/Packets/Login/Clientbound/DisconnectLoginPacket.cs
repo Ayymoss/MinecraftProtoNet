@@ -6,9 +6,9 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Login.Clientbound;
 
 [Packet(0x00, ProtocolState.Login)]
-public class DisconnectLoginPacket : IClientPacket
+public class DisconnectLoginPacket : IClientboundPacket
 {
-    public string Reason { get; set; } = string.Empty; // TODO: Review packet payload / NBT?
+    public string Reason { get; set; } = string.Empty;
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

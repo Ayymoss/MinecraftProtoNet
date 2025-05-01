@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x1A, ProtocolState.Play)]
-public class DamageEventPacket : IClientPacket
+[Packet(0x19, ProtocolState.Play)]
+public class DamageEventPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public int SourceTypeId { get; set; }

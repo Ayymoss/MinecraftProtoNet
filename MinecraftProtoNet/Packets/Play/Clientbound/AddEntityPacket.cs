@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 [Packet(0x01, ProtocolState.Play)]
-public class AddEntityPacket : IClientPacket
+public class AddEntityPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public Guid EntityUuid { get; set; }

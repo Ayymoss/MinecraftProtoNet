@@ -7,10 +7,9 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Login.Serverbound;
 
 [Packet(0x03, ProtocolState.Login)]
-public class LoginAcknowledgedPacket : IServerPacket
+public class LoginAcknowledgedPacket : IServerboundPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
     }
 }

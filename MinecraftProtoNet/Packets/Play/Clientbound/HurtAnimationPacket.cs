@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x25, ProtocolState.Play)]
-public class HurtAnimationPacket : IClientPacket
+[Packet(0x24, ProtocolState.Play)]
+public class HurtAnimationPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public float Yaw { get; set; }

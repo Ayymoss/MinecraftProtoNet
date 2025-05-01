@@ -1,56 +1,53 @@
-﻿using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
+﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Handlers.Meta;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Base.Definitions;
 using MinecraftProtoNet.Packets.Play.Clientbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Services;
+using MinecraftProtoNet.Utilities;
 using KeepAlivePacket = MinecraftProtoNet.Packets.Play.Clientbound.KeepAlivePacket;
 
 namespace MinecraftProtoNet.Handlers;
 
+[HandlesPacket(typeof(SetTimePacket))]
+[HandlesPacket(typeof(BlockUpdatePacket))]
+[HandlesPacket(typeof(LoginPacket))]
+[HandlesPacket(typeof(AddEntityPacket))]
+[HandlesPacket(typeof(RemoveEntitiesPacket))]
+[HandlesPacket(typeof(DisconnectPacket))]
+[HandlesPacket(typeof(SystemChatPacket))]
+[HandlesPacket(typeof(ContainerSetContentPacket))]
+[HandlesPacket(typeof(HurtAnimationPacket))]
+[HandlesPacket(typeof(ContainerSetSlotPacket))]
+[HandlesPacket(typeof(BlockChangedAcknowledgementPacket))]
+[HandlesPacket(typeof(PlayerChatPacket))]
+[HandlesPacket(typeof(SetHeldSlotPacket))]
+[HandlesPacket(typeof(PlayerPositionPacket))]
+[HandlesPacket(typeof(KeepAlivePacket))]
+[HandlesPacket(typeof(PlayerCombatKillPacket))]
+[HandlesPacket(typeof(SetHealthPacket))]
+[HandlesPacket(typeof(EntityPositionSyncPacket))]
+[HandlesPacket(typeof(MoveEntityPositionRotationPacket))]
+[HandlesPacket(typeof(MoveEntityPositionPacket))]
+[HandlesPacket(typeof(SetEntityMotionPacket))]
+[HandlesPacket(typeof(PingPacket))]
+[HandlesPacket(typeof(PongResponsePacket))]
+[HandlesPacket(typeof(LevelChunkWithLightPacket))]
+[HandlesPacket(typeof(ForgetLevelChunkPacket))]
+[HandlesPacket(typeof(PlayerInfoUpdatePacket))]
+[HandlesPacket(typeof(PlayerInfoRemovePacket))]
 public class PlayHandler : IPacketHandler
 {
     private bool _playerLoaded;
 
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
-    [
-        (ProtocolState.Play, 0x01),
-        (ProtocolState.Play, 0x0B),
-        (ProtocolState.Play, 0x2C),
-        (ProtocolState.Play, 0x3A),
-        (ProtocolState.Play, 0x63),
-        (ProtocolState.Play, 0x7E),
-        (ProtocolState.Play, 0x1F),
-        (ProtocolState.Play, 0x42),
-        (ProtocolState.Play, 0x23),
-        (ProtocolState.Play, 0x28),
-        (ProtocolState.Play, 0x27),
-        (ProtocolState.Play, 0x62),
-        (ProtocolState.Play, 0x09),
-        (ProtocolState.Play, 0x3E),
-        (ProtocolState.Play, 0x30),
-        (ProtocolState.Play, 0x2F),
-        (ProtocolState.Play, 0x1D),
-        (ProtocolState.Play, 0x3B),
-        (ProtocolState.Play, 0x47),
-        (ProtocolState.Play, 0x37),
-        (ProtocolState.Play, 0x38),
-        (ProtocolState.Play, 0x15),
-        (ProtocolState.Play, 0x5D),
-        (ProtocolState.Play, 0x20),
-        (ProtocolState.Play, 0x40),
-        (ProtocolState.Play, 0x13),
-        (ProtocolState.Play, 0x73),
-        (ProtocolState.Play, 0x6B),
-        (ProtocolState.Play, 0x05),
-        (ProtocolState.Play, 0x25),
-    ];
+        PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
 
-    public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
+    public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {
@@ -67,13 +64,24 @@ public class PlayHandler : IPacketHandler
             }
             case LoginPacket loginPacket:
             {
+                if (client.AuthResult.ChatSession is not null)
+                {
+                    await client.SendPacketAsync(new ChatSessionUpdatePacket
+                    {
+                        SessionId = client.AuthResult.ChatSession.ChatContext.ChatSessionGuid,
+                        ExpiresAt = client.AuthResult.ChatSession.ExpiresAtEpochMs,
+                        PublicKey = client.AuthResult.ChatSession.PublicKeyDer,
+                        KeySignature = client.AuthResult.ChatSession.MojangSignature
+                    });
+                }
+
                 if (client.State.LocalPlayer.Entity is not { } entity) break;
                 entity.EntityId = loginPacket.EntityId;
                 break;
             }
             case AddEntityPacket addEntityPacket:
             {
-                const int playerEntityType = 147;
+                const int playerEntityType = 148;
                 if (addEntityPacket.Type is not playerEntityType) break;
                 await client.State.Level.AddEntityAsync(addEntityPacket.EntityUuid, addEntityPacket.EntityId, addEntityPacket.Position);
                 break;
@@ -135,6 +143,19 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerChatPacket playerChatPacket:
             {
+                var signatureBytes = playerChatPacket.Header.MessageSignature;
+
+                if (signatureBytes is not null)
+                {
+                    Console.WriteLine(
+                        $"[DEBUG OnReceive] Received Player Chat Signature ({signatureBytes.Length} bytes): {Convert.ToHexString(signatureBytes)}");
+                    ChatSigning.ChatMessageReceived(client.AuthResult, signatureBytes);
+                }
+                else
+                {
+                    Console.WriteLine("[DEBUG OnReceive] Received Player Chat Packet *without* signature.");
+                }
+
                 _ = Task.Run(async () => await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message));
                 break;
             }
@@ -182,6 +203,8 @@ public class PlayHandler : IPacketHandler
                             {
                                 await Task.Yield();
                             }
+
+                            await client.SendPacketAsync(new ClientTickEndPacket());
                         }
                     }) { Name = "Local Entity Physics", IsBackground = true };
                     physicsThread.Start();
@@ -242,7 +265,11 @@ public class PlayHandler : IPacketHandler
             }
             case SetEntityMotionPacket setEntityMotionPacket:
             {
-                await client.State.Level.SetVelocityAsync(setEntityMotionPacket.EntityId, setEntityMotionPacket.Velocity);
+                // @lassipulkkinen -> Even though the server will tell you the velocity of entities other than the local player (don't ask me why),
+                // you're not supposed to actually use it for anything. There are some exceptions (projectiles and item entities are
+                // simulated on the client and the server will send updates less often), but other than that the client just lerps the
+                // positions that are sent every 3 ticks
+                //await client.State.Level.SetVelocityAsync(setEntityMotionPacket.EntityId, setEntityMotionPacket.Velocity);
                 break;
             }
             case PingPacket pingPacket:

@@ -7,8 +7,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x28, ProtocolState.Play, true)]
-public class LevelChunkWithLightPacket : IClientPacket
+[Packet(0x27, ProtocolState.Play, true)]
+public class LevelChunkWithLightPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }
     public int ChunkZ { get; set; }
@@ -19,15 +19,19 @@ public class LevelChunkWithLightPacket : IClientPacket
         ChunkX = buffer.ReadSignedInt();
         ChunkZ = buffer.ReadSignedInt();
 
+        // Heightmaps - This should be collected when/if needed - for now, throwing it away
+        var heightMaps = buffer.ReadVarInt();
+        for (var i = 0; i < heightMaps; i++)
+        {
+            var type = buffer.ReadVarInt();
+            var heightMapData = buffer.ReadPrefixedArray<long>();
+        }
+
         // Chunk Data
-        var heightmaps = buffer.ReadNbtTag();
-        var chunkDataBuffer = buffer.ReadBuffer(buffer.ReadVarInt());
+        var chunkDataBuffer = buffer.ReadPrefixedArray<byte>();
         var blockEntities = buffer.ReadPrefixedArray<ChunkBlockEntityInfo>();
 
-        // Create the chunk
         Chunk = new Chunk(ChunkX, ChunkZ);
-
-        // Parse chunk sections from the chunk data buffer
         var chunkReader = new PacketBufferReader(chunkDataBuffer);
         Chunk.DeserializeSections(ref chunkReader);
 

@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x20, ProtocolState.Play, true)]
-public class EntityPositionSyncPacket : IClientPacket
+[Packet(0x1F, ProtocolState.Play, false)]
+public class EntityPositionSyncPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public Vector3<double> Position { get; set; }

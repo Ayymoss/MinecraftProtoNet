@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x04, ProtocolState.Configuration)]
-public class KeepAlivePacket : IClientPacket
+public class KeepAlivePacket : IClientboundPacket
 {
     public long Payload { get; set; }
 

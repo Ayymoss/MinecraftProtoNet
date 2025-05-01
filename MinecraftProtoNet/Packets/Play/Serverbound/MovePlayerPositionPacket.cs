@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x1C, ProtocolState.Play)]
-public class MovePlayerPositionPacket : IServerPacket
+public class MovePlayerPositionPacket : IServerboundPacket
 {
     public required double X { get; set; }
     public required double Y { get; set; }
@@ -17,8 +17,6 @@ public class MovePlayerPositionPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
         buffer.WriteDouble(X);
         buffer.WriteDouble(Y);
         buffer.WriteDouble(Z);

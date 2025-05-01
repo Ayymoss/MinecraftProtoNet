@@ -7,8 +7,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2C, ProtocolState.Play)]
-public class LoginPacket : IClientPacket
+[Packet(0x2B, ProtocolState.Play)]
+public class LoginPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public bool IsHardcore { get; set; }

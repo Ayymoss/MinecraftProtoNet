@@ -9,7 +9,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x27, ProtocolState.Play)]
-public class PlayerActionPacket : IServerPacket
+public class PlayerActionPacket : IServerboundPacket
 {
     public required StatusType Status { get; set; }
     public required Vector3<double> Position { get; set; }
@@ -18,9 +18,7 @@ public class PlayerActionPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
-        buffer.WriteVarInt((int)this.Status);
+        buffer.WriteVarInt((int)Status);
         buffer.WritePosition(Position);
         buffer.WriteUnsignedByte((byte)Face);
         buffer.WriteVarInt(Sequence);

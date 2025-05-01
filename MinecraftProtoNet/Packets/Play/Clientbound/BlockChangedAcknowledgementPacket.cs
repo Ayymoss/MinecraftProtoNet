@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x05, ProtocolState.Play)]
-public class BlockChangedAcknowledgementPacket : IClientPacket
+[Packet(0x04, ProtocolState.Play)]
+public class BlockChangedAcknowledgementPacket : IClientboundPacket
 {
     public int Sequence { get; set; }
 

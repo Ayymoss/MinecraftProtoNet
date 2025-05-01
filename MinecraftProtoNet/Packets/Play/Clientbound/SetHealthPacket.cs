@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x62, ProtocolState.Play)]
-public class SetHealthPacket : IClientPacket
+[Packet(0x61, ProtocolState.Play)]
+public class SetHealthPacket : IClientboundPacket
 {
     public float Health { get; set; }
     public int Food { get; set; }

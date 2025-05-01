@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3A, ProtocolState.Play)]
-public class PlayerAbilitiesPacket : IClientPacket
+[Packet(0x39, ProtocolState.Play)]
+public class PlayerAbilitiesPacket : IClientboundPacket
 {
     public AbilityFlag Flag { get; set; }
     public float FlyingSpeed { get; set; }

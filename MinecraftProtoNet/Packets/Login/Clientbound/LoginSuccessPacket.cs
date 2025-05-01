@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Login.Clientbound;
 
 [Packet(0x02, ProtocolState.Login)]
-public class LoginSuccessPacket : IClientPacket
+public class LoginSuccessPacket : IClientboundPacket
 {
     public Guid UUID { get; set; }
     public string Username { get; set; } = string.Empty;

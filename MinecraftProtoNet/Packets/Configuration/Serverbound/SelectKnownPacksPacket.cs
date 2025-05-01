@@ -7,14 +7,12 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Serverbound;
 
 [Packet(0x07, ProtocolState.Configuration)]
-public class SelectKnownPacksPacket : IServerPacket
+public class SelectKnownPacksPacket : IServerboundPacket
 {
     public required Packs[] KnownPacks { get; set; }
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
         buffer.WriteVarInt(KnownPacks.Length);
         foreach (var pack in KnownPacks)
         {

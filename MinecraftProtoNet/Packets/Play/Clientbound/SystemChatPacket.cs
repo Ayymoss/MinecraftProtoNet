@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x73, ProtocolState.Play)]
-public class SystemChatPacket : IClientPacket
+[Packet(0x72, ProtocolState.Play)]
+public class SystemChatPacket : IClientboundPacket
 {
     public NbtTag Tags { get; set; }
     public bool Overlay { get; set; }

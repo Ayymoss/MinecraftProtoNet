@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x28, ProtocolState.Play)]
-public class PlayerCommandPacket : IServerPacket
+public class PlayerCommandPacket : IServerboundPacket
 {
     public required int EntityId { get; set; }
     public required PlayerAction Action { get; set; }
@@ -16,7 +16,6 @@ public class PlayerCommandPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
         buffer.WriteVarInt(EntityId);
         buffer.WriteVarInt((int)Action);
         buffer.WriteVarInt(JumpBoost);

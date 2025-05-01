@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x01, ProtocolState.Configuration)]
-public class CustomPayloadPacket : IClientPacket
+public class CustomPayloadPacket : IClientboundPacket
 {
     public string Channel { get; set; }
     public byte[] Data { get; set; }

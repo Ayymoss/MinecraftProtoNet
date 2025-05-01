@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x03, ProtocolState.Configuration)]
-public class FinishConfigurationPacket : IClientPacket
+public class FinishConfigurationPacket : IClientboundPacket
 {
     public void Deserialize(ref PacketBufferReader buffer)
     {

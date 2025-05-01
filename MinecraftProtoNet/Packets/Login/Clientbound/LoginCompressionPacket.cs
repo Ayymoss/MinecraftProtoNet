@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Login.Clientbound;
 
 [Packet(0x03, ProtocolState.Login)]
-public class SetCompressionPacket : IClientPacket
+public class LoginCompressionPacket : IClientboundPacket
 {
     public int Threshold { get; set; }
 

@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x38, ProtocolState.Play)]
-public class PongResponsePacket : IClientPacket
+[Packet(0x37, ProtocolState.Play)]
+public class PongResponsePacket : IClientboundPacket
 {
     public long Payload { get; set; }
 

@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x32, ProtocolState.Play, true)]
-public class MoveEntityRotationPacket : IClientPacket
+[Packet(0x31, ProtocolState.Play, true)]
+public class MoveEntityRotationPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public sbyte Yaw { get; set; }

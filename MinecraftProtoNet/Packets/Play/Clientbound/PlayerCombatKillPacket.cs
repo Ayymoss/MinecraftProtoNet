@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3E, ProtocolState.Play)]
-public class PlayerCombatKillPacket : IClientPacket
+[Packet(0x3D, ProtocolState.Play)]
+public class PlayerCombatKillPacket : IClientboundPacket
 {
     public int PlayerId { get; set; }
     public NbtTag DeathMessage { get; set; }

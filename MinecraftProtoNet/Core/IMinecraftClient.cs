@@ -1,6 +1,5 @@
-﻿using MinecraftProtoNet.Models.Core;
+﻿using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.State.Base;
 
 namespace MinecraftProtoNet.Core;
@@ -10,12 +9,15 @@ public interface IMinecraftClient
     ProtocolState ProtocolState { get; set; }
     ClientState State { get; }
     int ProtocolVersion { get; set; }
+    AuthResult AuthResult { get; set; }
+    Task<bool> AuthenticateAsync();
+    void EnableEncryption(byte[] sharedSecret);
+    void EnableCompression(int threshold);
     Task ConnectAsync(string host, int port);
     Task DisconnectAsync();
-    Task SendPacketAsync(IServerPacket packet);
+    Task SendPacketAsync(IServerboundPacket packet);
 
     // TODO: Move these
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
     Task PhysicsTickAsync();
-    MovePlayerPositionRotationPacket Move(double x, double y, double z, float yaw, float pitch);
 }

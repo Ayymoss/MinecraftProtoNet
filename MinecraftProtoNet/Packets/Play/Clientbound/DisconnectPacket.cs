@@ -7,8 +7,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x1D, ProtocolState.Play)]
-public class DisconnectPacket : IClientPacket
+[Packet(0x1C, ProtocolState.Play)]
+public class DisconnectPacket : IClientboundPacket
 {
     public NbtTag DisconnectReason { get; set; } = new NbtEnd();
 

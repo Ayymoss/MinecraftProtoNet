@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x0D, ProtocolState.Configuration)]
-public class UpdateTagsPacket : IClientPacket
+public class UpdateTagsPacket : IClientboundPacket
 {
     public Dictionary<string, Tag[]> Tags { get; set; } = new();
 

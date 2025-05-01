@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x4E, ProtocolState.Play)]
-public class SectionBlocksUpdatePacket : IClientPacket
+[Packet(0x4D, ProtocolState.Play)]
+public class SectionBlocksUpdatePacket : IClientboundPacket
 {
     public Vector3<float> SectionPosition { get; set; }
     public long[] Blocks { get; set; }

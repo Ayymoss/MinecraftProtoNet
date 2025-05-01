@@ -1,6 +1,6 @@
 ﻿using System.Buffers.Binary;
 using System.Collections;
-using System.Numerics;
+using System.Diagnostics.Contracts;
 using System.Text;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Meta;
@@ -167,7 +167,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
     public Guid ReadUuid()
     {
         var bytes = ReadBuffer(16);
-        return new Guid(bytes); // Guid constructor directly handles big-endian
+        return new Guid(bytes);
     }
 
     public bool ReadBoolean()
@@ -304,6 +304,42 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         var value = BinaryPrimitives.ReadUInt32BigEndian(_buffer[ReadPosition..]);
         ReadPosition += sizeof(uint);
         return value;
+    }
+
+    [Pure]
+    public static int ReadVarInt(ReadOnlySpan<byte> buffer, out int bytesRead)
+    {
+        bytesRead = 0;
+        var result = 0;
+        byte read;
+
+        do
+        {
+            read = buffer[bytesRead];
+            var value = read & 127;
+            result |= value << (7 * bytesRead);
+
+            bytesRead++;
+            if (bytesRead > 5) throw new ArithmeticException("VarInt too long");
+        } while ((read & 0b10000000) != 0);
+
+        return result;
+    }
+
+    [Pure]
+    public static bool TryReadVarInt(byte[] buffer, out int value, out int bytesRead)
+    {
+        try
+        {
+            value = ReadVarInt(buffer, out bytesRead);
+            return true;
+        }
+        catch (Exception)
+        {
+            value = 0;
+            bytesRead = 0;
+            return false;
+        }
     }
 }
 

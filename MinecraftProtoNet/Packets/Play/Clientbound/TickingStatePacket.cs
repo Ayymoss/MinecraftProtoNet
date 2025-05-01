@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 [Packet(0x78, ProtocolState.Play)]
-public class TickingStatePacket : IClientPacket
+public class TickingStatePacket : IClientboundPacket
 {
     public float TickRate { get; set; }
     public bool IsFrozen { get; set; }

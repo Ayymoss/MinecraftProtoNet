@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
+using MinecraftProtoNet.Auth;
+using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Handlers.Meta;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Base.Definitions;
@@ -19,9 +20,27 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     public ClientState State { get; } = new();
-
+    public AuthResult AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
+
+    public async Task<bool> AuthenticateAsync()
+    {
+        var authResult = await AuthenticationFlow.AuthenticateAsync();
+        if (authResult is null) return false;
+        AuthResult = authResult;
+        return true;
+    }
+
+    public void EnableEncryption(byte[] sharedSecret)
+    {
+        connection.EnableEncryption(sharedSecret);
+    }
+
+    public void EnableCompression(int threshold)
+    {
+        connection.EnableCompression(threshold);
+    }
 
     public async Task ConnectAsync(string host, int port)
     {
@@ -35,7 +54,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         const int intention = 2; // 1 Status - 2 Login - 3 Transfer
         var handshakePacket = new HandshakePacket
         {
-            ProtocolVersion = 769, //ProtocolVersion, // Automate the protocol version from Status response.
+            ProtocolVersion = 770,
             ServerAddress = host,
             ServerPort = (ushort)port,
             NextState = intention // TODO: This should be intention dependant by the caller
@@ -56,9 +75,8 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
             case ProtocolState.Status:
                 await SendPacketAsync(new StatusRequestPacket());
                 break;
-            case ProtocolState.Login: // TODO: MSAL requires abstracting
-                await SendPacketAsync(new LoginStartPacket
-                    { Username = "MyNameDave", Uuid = new Guid("6f29c8b4-f0e7-40a3-a432-2ce0b97cebf0") });
+            case ProtocolState.Login:
+                await SendPacketAsync(new HelloPacket { Username = AuthResult.Username, Uuid = AuthResult.Uuid });
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
@@ -71,7 +89,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         connection.Dispose();
     }
 
-    public async Task SendPacketAsync(IServerPacket packet)
+    public async Task SendPacketAsync(IServerboundPacket packet)
     {
         await connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
     }
@@ -145,8 +163,10 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!say")
         {
-            var message = bodyMessage.Split(" ").Skip(1).ToArray();
-            await SendPacketAsync(new ChatPacket(string.Join(" ", message)));
+            // TODO: This causes server exception due to invalid packet, too large? // Clean up new public key changes & CreateChatSignature
+
+            var packetToSend = ChatSigning.CreateSignedChatPacket(AuthResult, string.Join("", bodyMessage.Split(" ").Skip(1).ToArray()));
+            await SendPacketAsync(packetToSend);
         }
 
         if (command == "!getblock")
@@ -161,7 +181,7 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                 var message = block != null
                     ? $"Block: ({block.Id}) {block.Name}"
                     : $"Block not found at {x}, {y}, {z}";
-                await SendPacketAsync(new ChatPacket(message));
+                //await SendPacketAsync(new ChatPacket(message));
             }
         }
 
@@ -210,8 +230,9 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
         if (command == "!tps")
         {
-            await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
-                                                 $"| MSPT: {State.Level.TickInterval:N2}ms "));
+            Console.WriteLine($"TPS: {State.Level.GetCurrentServerTps():N2} | MSPT: {State.Level.TickInterval:N2}ms");
+            //await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
+            //$"| MSPT: {State.Level.TickInterval:N2}ms "));
         }
 
         if (command == "!attack")
@@ -308,7 +329,8 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         if (command == "!state")
         {
             await SendPacketAsync(
-                new ChatPacket($"Sp: {entity.IsSprintingNew || entity.WantsToSprint}, J: {entity.IsJumping}, Sn: {entity.IsSneaking}"));
+                new ChatPacket(
+                    $"Pos: {entity.Position:N2}, Sp: {entity.IsSprintingNew || entity.WantsToSprint}, J: {entity.IsJumping}, Sn: {entity.IsSneaking}"));
         }
 
         if (command == "!forward")
@@ -523,21 +545,22 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         {
             if (!sender.HasEntity)
             {
-                await SendPacketAsync(new ChatPacket("Your position is not available."));
+                //await SendPacketAsync(new ChatPacket("Your position is not available."));
                 return;
             }
 
             var playerPos =
                 $"{sender.Username} -> {sender.Entity.Position.X:N2}, {sender.Entity.Position.Y:N2}, {sender.Entity.Position.Z:N2}";
             var message = $"Last position: {playerPos}";
-            await SendPacketAsync(new ChatPacket(message));
+            //await SendPacketAsync(new ChatPacket(message));
+            Console.WriteLine(message);
         }
 
         if (command == "!here")
         {
             if (!sender.HasEntity)
             {
-                await SendPacketAsync(new ChatPacket("Your position is not available."));
+                //await SendPacketAsync(new ChatPacket("Your position is not available."));
                 return;
             }
 
@@ -547,12 +570,11 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
 
             if (!result)
             {
-                await SendPacketAsync(new ChatPacket("I can't reach your position."));
+                //await SendPacketAsync(new ChatPacket("I can't reach your position."));
                 return;
             }
 
-
-            await SendPacketAsync(new ChatPacket("Moving to your position."));
+            //await SendPacketAsync(new ChatPacket("Moving to your position."));
         }
     }
 
@@ -639,43 +661,5 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         });
 
         State.LocalPlayer.Entity.YawPitch = new Vector2<float>(yaw, pitch);
-    }
-
-    public void SetPosition(int entityId, Vector3<double> newPosition, bool delta = true)
-    {
-        var entity = State.Level.GetEntityOfId(entityId);
-        if (entity is null) return;
-
-        if (delta)
-        {
-            entity.Position.X += newPosition.X;
-            entity.Position.Y += newPosition.Y;
-            entity.Position.Z += newPosition.Z;
-        }
-        else
-        {
-            entity.Position = newPosition;
-        }
-    }
-
-    public MovePlayerPositionRotationPacket Move(double x, double y, double z, float yaw = 0, float pitch = 0)
-    {
-        var result = new MovePlayerPositionRotationPacket
-        {
-            X = x,
-            Y = y,
-            Z = z,
-            Yaw = yaw,
-            Pitch = pitch,
-            Flags = MovementFlags.None
-        };
-
-        if (!State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
-        State.LocalPlayer.Entity.Position.X = result.X;
-        State.LocalPlayer.Entity.Position.Y = result.Y;
-        State.LocalPlayer.Entity.Position.Z = result.Z;
-        State.LocalPlayer.Entity.YawPitch.X = result.Yaw;
-        State.LocalPlayer.Entity.YawPitch.Y = result.Pitch;
-        return result;
     }
 }

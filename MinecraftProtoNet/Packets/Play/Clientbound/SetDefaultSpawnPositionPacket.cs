@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x5B, ProtocolState.Play)]
-public class SetDefaultSpawnPositionPacket : IClientPacket
+[Packet(0x5A, ProtocolState.Play)]
+public class SetDefaultSpawnPositionPacket : IClientboundPacket
 {
     public Vector3<double> Location { get; set; }
     public float Angle { get; set; }

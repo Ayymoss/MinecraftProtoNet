@@ -13,6 +13,13 @@ public static class Program
         var serviceProvider = services.BuildServiceProvider();
 
         var client = serviceProvider.GetRequiredService<IMinecraftClient>();
+        var authResult = await client.AuthenticateAsync();
+        if (!authResult)
+        {
+            Console.WriteLine("Authentication failed.");
+            return;
+        }
+
         await client.ConnectAsync("10.10.1.20", 25565);
 
         Console.ReadKey();

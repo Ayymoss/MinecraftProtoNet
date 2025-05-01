@@ -268,7 +268,8 @@ public class Level
             if (entity == null) return;
 
             const double conversionFactor = 1.0 / 8000.0;
-            var velocityBlocksPerTick = new Vector3<double>(packetVelocity.X * conversionFactor, packetVelocity.Y * conversionFactor,
+            var yConversionFactor = entity.IsOnGround && packetVelocity.Y < 0 ? 0 : conversionFactor;
+            var velocityBlocksPerTick = new Vector3<double>(packetVelocity.X * conversionFactor, packetVelocity.Y * yConversionFactor,
                 packetVelocity.Z * conversionFactor);
 
             entity.Velocity = velocityBlocksPerTick;

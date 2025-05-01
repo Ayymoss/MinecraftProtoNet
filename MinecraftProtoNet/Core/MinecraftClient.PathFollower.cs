@@ -4,6 +4,8 @@ using MinecraftProtoNet.State;
 
 namespace MinecraftProtoNet.Core;
 
+
+// TODO: Support any coordinates by looping for smaller sections. How do we handle Y? Closest block?
 public partial class MinecraftClient
 {
     private AStarPathFinder? _pathFinder;
@@ -50,7 +52,7 @@ public partial class MinecraftClient
         var entity = State.LocalPlayer.Entity;
         var start = entity.Position;
 
-        _currentPath = _pathFinder.FindPath(start, target, 50000);
+        _currentPath = _pathFinder.FindPath(start, target);
 
         if (_currentPath is not { Count: > 1 })
         {

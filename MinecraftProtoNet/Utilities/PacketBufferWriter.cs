@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics.Contracts;
 using System.Text;
 using MinecraftProtoNet.Models.Core;
 
@@ -7,15 +8,14 @@ namespace MinecraftProtoNet.Utilities;
 
 public ref struct PacketBufferWriter
 {
-    private byte[]? _array; // Underlying array for the buffer.  Nullable.
-    private Span<byte> _buffer; // Span view over the array.
+    private byte[]? _array;
+    private Span<byte> _buffer;
     private int _writePosition;
 
-    // Constructor that takes an initial capacity.
     public PacketBufferWriter(int initialCapacity = 256)
     {
-        _array = ArrayPool<byte>.Shared.Rent(initialCapacity); // Rent from the pool
-        _buffer = _array; // Initialize the Span with the full array
+        _array = ArrayPool<byte>.Shared.Rent(initialCapacity);
+        _buffer = _array;
         _writePosition = 0;
     }
 
@@ -24,8 +24,8 @@ public ref struct PacketBufferWriter
 
     public void WriteVarInt(int value)
     {
-        EnsureCapacity(5); // Max 5 bytes for a VarInt
-        var data = _buffer.Slice(_writePosition, 5); //Max VarInt size.
+        EnsureCapacity(5);
+        var data = _buffer.Slice(_writePosition, 5);
 
         var unsigned = (uint)value;
         byte len = 0;
@@ -47,7 +47,7 @@ public ref struct PacketBufferWriter
 
     public void WriteVarLong(long value)
     {
-        EnsureCapacity(10); // Max 10 bytes for VarLong
+        EnsureCapacity(10);
         var buffer = _buffer.Slice(_writePosition, 10);
         var bytesWritten = 0;
 
@@ -68,12 +68,11 @@ public ref struct PacketBufferWriter
 
     public void WriteString(string value)
     {
-        // Use GetByteCount for accurate size calculation (handles multi-byte characters)
         var maxLength = Encoding.UTF8.GetByteCount(value);
-        EnsureCapacity(GetVarIntSize(maxLength) + maxLength); // VarInt size + string size.
+        EnsureCapacity(GetVarIntSize(maxLength) + maxLength);
 
         var stringLength = Encoding.UTF8.GetBytes(value, _buffer[(_writePosition + GetVarIntSize(maxLength))..]);
-        WriteVarInt(stringLength); // Write stringLength, not maxLength.
+        WriteVarInt(stringLength);
 
         _writePosition += stringLength;
     }
@@ -85,7 +84,6 @@ public ref struct PacketBufferWriter
         _writePosition += sizeof(ushort);
     }
 
-    // Rename to WriteBytes to be consistent
     public void WriteBuffer(ReadOnlySpan<byte> bytes)
     {
         EnsureCapacity(bytes.Length);
@@ -123,7 +121,6 @@ public ref struct PacketBufferWriter
         WriteUnsignedByte(value ? (byte)1 : (byte)0);
     }
 
-    // GetVarIntSize/GetVarLongSize can stay as helper methods
     private static int GetVarIntSize(int value)
     {
         var size = 0;
@@ -148,7 +145,6 @@ public ref struct PacketBufferWriter
         return size;
     }
 
-    // EnsureCapacity now expands the buffer if needed.
     private void EnsureCapacity(int required)
     {
         if (_writePosition + required > _buffer.Length)
@@ -226,5 +222,24 @@ public ref struct PacketBufferWriter
         EnsureCapacity(sizeof(short));
         BinaryPrimitives.WriteInt16BigEndian(_buffer[_writePosition..], slot);
         _writePosition += sizeof(short);
+    }
+
+    [Pure]
+    public static int WriteVarInt(Span<byte> buffer, int value)
+    {
+        var bytesWritten = 0;
+        do
+        {
+            var temp = (byte)(value & 0x7F);
+            value >>>= 7;
+            if (value != 0)
+            {
+                temp |= 0x80;
+            }
+
+            buffer[bytesWritten++] = temp;
+        } while (value != 0);
+
+        return bytesWritten;
     }
 }

@@ -7,14 +7,11 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x29, ProtocolState.Play)]
-public class PlayerInputPacket(PlayerInputPacket.MovementFlag flag) : IServerPacket
+public class PlayerInputPacket(PlayerInputPacket.MovementFlag flag) : IServerboundPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
         buffer.WriteUnsignedByte((byte)flag);
-        
-
     }
 
     public enum MovementFlag : byte

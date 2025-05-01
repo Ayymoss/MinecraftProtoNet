@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2F, ProtocolState.Play, true)]
-public class MoveEntityPositionPacket : IClientPacket
+[Packet(0x2E, ProtocolState.Play, true)]
+public class MoveEntityPositionPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public short DeltaXRaw { get; set; }

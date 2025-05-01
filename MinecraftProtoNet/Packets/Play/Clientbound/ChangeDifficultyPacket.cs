@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x0B, ProtocolState.Play)]
-public class ChangeDifficultyPacket : IClientPacket
+[Packet(0x0A, ProtocolState.Play)]
+public class ChangeDifficultyPacket : IClientboundPacket
 {
     public DifficultyFlag Difficulty { get; set; }
     public bool DifficultyLocked { get; set; }

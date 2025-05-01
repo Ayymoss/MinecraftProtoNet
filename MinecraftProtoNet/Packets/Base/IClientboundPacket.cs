@@ -2,7 +2,7 @@
 
 namespace MinecraftProtoNet.Packets.Base;
 
-public interface IClientPacket : IPacket
+public interface IClientboundPacket : IPacket
 {
     void Deserialize(ref PacketBufferReader buffer);
 }

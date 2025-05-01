@@ -30,9 +30,16 @@ public class PalettedContainer
 
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
 
-        // We still need to read the data even if bitsPerEntry is 0???? Why....
-        var bitData = reader.ReadPrefixedArray<long>();
         if (bitsPerEntry is 0) return;
+
+        var entriesPerLong = 64 / bitsPerEntry;
+        var numberOfLongs = (size + entriesPerLong - 1) / entriesPerLong;
+        var bitData = new long[numberOfLongs];
+
+        for (var i = 0; i < numberOfLongs; i++)
+        {
+            bitData[i] = reader.ReadSignedLong();
+        }
 
         _storage = new BitStorage(bitsPerEntry, size, bitData);
     }
@@ -91,12 +98,12 @@ public class PalettedContainer
         {
             SingleValuePalette => 0,
             IndirectPalette indirect => indirect.Bits,
-            DirectPalette => 8,
-            GlobalPalette => 16,
+            DirectPalette => 15,
+            GlobalPalette => 31,
             _ => throw new InvalidOperationException("Unknown palette type")
         };
 
-        var newBits = Math.Min(currentBits + 1, 16);
+        var newBits = Math.Min(currentBits + 1, 31);
         var newPalette = CreatePalette(newBits);
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
         var newStorage = new BitStorage(newBits, size, null);
@@ -118,11 +125,22 @@ public class PalettedContainer
 
     private IPalette CreatePalette(int bitsPerEntry)
     {
+        if (_paletteType == PaletteType.Biome)
+        {
+            return bitsPerEntry switch
+            {
+                0 => new SingleValuePalette(),
+                <= 3 => new IndirectPalette(bitsPerEntry),
+                <= 6 => new DirectPalette(),
+                _ => new GlobalPalette()
+            };
+        }
+
         return bitsPerEntry switch
         {
             0 => new SingleValuePalette(),
-            <= 4 => new IndirectPalette(bitsPerEntry),
-            <= 8 => new DirectPalette(),
+            <= 8 => new IndirectPalette(bitsPerEntry),
+            <= 15 => new DirectPalette(),
             _ => new GlobalPalette()
         };
     }

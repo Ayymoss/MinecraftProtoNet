@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x0C, ProtocolState.Configuration)]
-public class UpdateEnabledFeaturesPacket : IClientPacket
+public class UpdateEnabledFeaturesPacket : IClientboundPacket
 {
     public string[] FeatureFlags { get; set; }
 

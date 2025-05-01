@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x02, ProtocolState.Configuration)]
-public class DisconnectPacket : IClientPacket
+public class DisconnectPacket : IClientboundPacket
 {
     public string Reason { get; set; }
 

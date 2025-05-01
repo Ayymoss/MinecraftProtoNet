@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x22, ProtocolState.Play, true)]
-public class ForgetLevelChunkPacket : IClientPacket
+[Packet(0x21, ProtocolState.Play, true)]
+public class ForgetLevelChunkPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }
     public int ChunkZ { get; set; }

@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x09, ProtocolState.Play)]
-public class BlockUpdatePacket : IClientPacket
+[Packet(0x08, ProtocolState.Play)]
+public class BlockUpdatePacket : IClientboundPacket
 {
     public Vector3<double> Position { get; set; }
     public int BlockId { get; set; }

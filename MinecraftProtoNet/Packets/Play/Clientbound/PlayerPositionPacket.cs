@@ -7,8 +7,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x42, ProtocolState.Play)]
-public class PlayerPositionPacket : IClientPacket
+[Packet(0x41, ProtocolState.Play)]
+public class PlayerPositionPacket : IClientboundPacket
 {
     public int TeleportId { get; set; }
     public Vector3<double> Position { get; set; }

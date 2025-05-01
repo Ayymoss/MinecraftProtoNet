@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x13, ProtocolState.Play)]
-public class ContainerSetContentPacket : IClientPacket
+[Packet(0x12, ProtocolState.Play)]
+public class ContainerSetContentPacket : IClientboundPacket
 {
     public int WindowId { get; set; }
     public int StateId { get; set; }

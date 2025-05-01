@@ -1,8 +1,9 @@
-﻿using System.Numerics;
+﻿using System.Globalization;
+using System.Numerics;
 
 namespace MinecraftProtoNet.Models.Core;
 
-public class Vector3<TNumber> where TNumber : INumber<TNumber>
+public class Vector3<TNumber> : IFormattable where TNumber : INumber<TNumber>
 {
     public Vector3()
     {
@@ -94,9 +95,21 @@ public class Vector3<TNumber> where TNumber : INumber<TNumber>
         );
     }
 
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        formatProvider ??= CultureInfo.CurrentCulture;
+        format = string.IsNullOrEmpty(format) ? "N2" : format;
+
+        var xStr = X.ToString(format, formatProvider);
+        var yStr = Y.ToString(format, formatProvider);
+        var zStr = Z.ToString(format, formatProvider);
+
+        return $"({xStr}, {yStr}, {zStr})";
+    }
+
     public override string ToString()
     {
-        return $"({X}, {Y}, {Z})";
+        return ToString("N4", CultureInfo.CurrentCulture);
     }
 
     public static Vector3<TNumber> Zero => new(TNumber.Zero, TNumber.Zero, TNumber.Zero);

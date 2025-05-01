@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2A, ProtocolState.Play)]
-public class LevelParticlesPacket : IClientPacket
+[Packet(0x29, ProtocolState.Play)]
+public class LevelParticlesPacket : IClientboundPacket
 {
     public bool LongDistance { get; set; }
     public bool AlwaysVisible { get; set; }

@@ -2,7 +2,7 @@
 
 namespace MinecraftProtoNet.Packets.Base;
 
-public interface IServerPacket : IPacket
+public interface IServerboundPacket : IPacket
 {
     void Serialize(ref PacketBufferWriter buffer);
 }

@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 [Packet(0x7E, ProtocolState.Play)]
-public class UpdateRecipesPacket : IClientPacket
+public class UpdateRecipesPacket : IClientboundPacket
 {
     public Dictionary<int, Recipe> Recipes { get; set; } = new();
 

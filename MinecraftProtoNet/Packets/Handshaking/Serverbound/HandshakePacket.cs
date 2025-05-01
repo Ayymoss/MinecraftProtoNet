@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Handshaking.Serverbound;
 
 [Packet(0x00, ProtocolState.Handshaking)]
-public class HandshakePacket : IServerPacket
+public class HandshakePacket : IServerboundPacket
 {
     public int ProtocolVersion { get; set; }
     public string ServerAddress { get; set; } = string.Empty;
@@ -16,8 +16,6 @@ public class HandshakePacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
         buffer.WriteVarInt(ProtocolVersion);
         buffer.WriteString(ServerAddress);
         buffer.WriteUnsignedShort(ServerPort);

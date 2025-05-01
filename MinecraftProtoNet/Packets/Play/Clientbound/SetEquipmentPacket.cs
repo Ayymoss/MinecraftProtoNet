@@ -9,8 +9,8 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Implement this packet
-[Packet(0x60, ProtocolState.Play)]
-public class SetEquipmentPacket : IClientPacket
+[Packet(0x5F, ProtocolState.Play)]
+public class SetEquipmentPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public Equipment[] Equipment { get; set; }

@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 
 [Packet(0x0E, ProtocolState.Configuration)]
-public class SelectKnownPacksPacket : IClientPacket
+public class SelectKnownPacksPacket : IClientboundPacket
 {
     public Packs[] KnownPacks { get; set; }
 

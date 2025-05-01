@@ -1,21 +1,22 @@
 ﻿using System.Text.Json;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Status.Clientbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
+using MinecraftProtoNet.Services;
 
 namespace MinecraftProtoNet.Handlers;
 
+[HandlesPacket(typeof(StatusResponsePacket))]
+[HandlesPacket(typeof(PongResponsePacket))]
 public class StatusHandler : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
-    [
-        (ProtocolState.Status, 0x00),
-        (ProtocolState.Status, 0x01)
-    ];
+        PacketRegistry.GetHandlerRegistrations(typeof(StatusHandler));
 
-    public async Task HandleAsync(IClientPacket packet, IMinecraftClient client)
+    public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {

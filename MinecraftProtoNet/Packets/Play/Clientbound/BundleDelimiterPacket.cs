@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 [Packet(0x00, ProtocolState.Play)]
-public class BundleDelimiterPacket : IClientPacket
+public class BundleDelimiterPacket : IClientboundPacket
 {
     // TODO: The implication for this packet needs to be implemented.
     public void Deserialize(ref PacketBufferReader buffer)

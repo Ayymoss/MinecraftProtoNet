@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
 [Packet(0x18, ProtocolState.Play)]
-public class InteractPacket : IServerPacket
+public class InteractPacket : IServerboundPacket
 {
     public required int EntityId { get; set; }
     public required InteractType Type { get; set; }
@@ -20,8 +20,6 @@ public class InteractPacket : IServerPacket
 
     public void Serialize(ref PacketBufferWriter buffer)
     {
-        buffer.WriteVarInt(this.GetPacketAttributeValue(p => p.PacketId));
-
         buffer.WriteVarInt(EntityId);
         buffer.WriteVarInt((byte)Type);
 

@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Status.Clientbound;
 
 [Packet(0x01, ProtocolState.Status)]
-public class PongResponsePacket : IClientPacket
+public class PongResponsePacket : IClientboundPacket
 {
     public long Payload { get; set; }
 

@@ -1,13 +1,12 @@
-﻿using Humanizer;
-using MinecraftProtoNet.Attributes;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x23, ProtocolState.Play)]
-public class GameEventPacket : IClientPacket
+[Packet(0x22, ProtocolState.Play)]
+public class GameEventPacket : IClientboundPacket
 {
     public EventFlag Event { get; set; }
     public float Value { get; set; }

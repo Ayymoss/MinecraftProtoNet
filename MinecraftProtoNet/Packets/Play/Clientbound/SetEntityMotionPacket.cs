@@ -6,8 +6,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x5F, ProtocolState.Play, true)]
-public class SetEntityMotionPacket : IClientPacket
+[Packet(0x5E, ProtocolState.Play, true)]
+public class SetEntityMotionPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
     public Vector3<short> Velocity { get; set; }

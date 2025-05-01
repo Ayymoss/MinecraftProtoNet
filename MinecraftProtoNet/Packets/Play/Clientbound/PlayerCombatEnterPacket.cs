@@ -5,8 +5,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3D, ProtocolState.Play)]
-public class PlayerCombatEnterPacket : IClientPacket
+[Packet(0x3C, ProtocolState.Play)]
+public class PlayerCombatEnterPacket : IClientboundPacket
 {
     public void Deserialize(ref PacketBufferReader buffer)
     {

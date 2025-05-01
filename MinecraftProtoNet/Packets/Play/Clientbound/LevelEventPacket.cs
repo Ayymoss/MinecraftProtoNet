@@ -7,8 +7,8 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x29, ProtocolState.Play)]
-public class LevelEventPacket : IClientPacket
+[Packet(0x28, ProtocolState.Play)]
+public class LevelEventPacket : IClientboundPacket
 {
     public int EventId { get; set; }
     public Vector3<double>  Position { get; set; }
