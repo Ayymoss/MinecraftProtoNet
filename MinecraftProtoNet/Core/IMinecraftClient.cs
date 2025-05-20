@@ -17,7 +17,5 @@ public interface IMinecraftClient
     Task DisconnectAsync();
     Task SendPacketAsync(IServerboundPacket packet);
 
-    // TODO: Move these
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
-    Task PhysicsTickAsync();
 }

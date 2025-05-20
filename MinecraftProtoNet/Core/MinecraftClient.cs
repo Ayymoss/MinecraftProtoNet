@@ -9,15 +9,20 @@ using MinecraftProtoNet.Packets.Handshaking.Serverbound;
 using MinecraftProtoNet.Packets.Login.Serverbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
-using MinecraftProtoNet.Services;
+// MinecraftProtoNet.Services is still needed for IPacketService if it's there, but we add more specific ones.
+// For this task, we are adding service implementations, so specific using for Services namespace is good.
 using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Abstractions; // Added
+using MinecraftProtoNet.Services; // Added (or ensured if already present for other services)
 using MinecraftProtoNet.Utilities;
 using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
-public partial class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
+public class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
 {
+    private readonly IPhysicsService _physicsService = new PhysicsService();
+    private readonly IPathFollowerService _pathFollowerService = new PathFollowerService();
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     public ClientState State { get; } = new();
     public AuthResult AuthResult { get; set; }
@@ -209,8 +214,8 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
                 var y = float.Parse(coords[1]);
                 var z = float.Parse(coords[2]);
 
-                InitializePathFinder();
-                var result = FollowPathTo(new Vector3<double>(x, y, z));
+                _pathFollowerService.Initialize(State.Level); // Changed
+                var result = _pathFollowerService.FollowPathTo(State.LocalPlayer.Entity, new Vector3<double>(x, y, z)); // Changed
 
                 if (!result)
                 {
@@ -565,8 +570,8 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
             }
 
             var targetPosition = sender.Entity.Position;
-            InitializePathFinder();
-            var result = FollowPathTo(targetPosition);
+            _pathFollowerService.Initialize(State.Level); // Changed
+            var result = _pathFollowerService.FollowPathTo(State.LocalPlayer.Entity, targetPosition); // Changed
 
             if (!result)
             {
@@ -661,5 +666,17 @@ public partial class MinecraftClient(Connection connection, IPacketService packe
         });
 
         State.LocalPlayer.Entity.YawPitch = new Vector2<float>(yaw, pitch);
+    }
+
+    // The old PhysicsTickAsync was in MinecraftClient.Physics.cs.
+    // It is now replaced by this implementation.
+    public async Task PhysicsTickAsync()
+    {
+        if (!State.LocalPlayer.HasEntity) return;
+        // The PathFollowerService's UpdatePathFollowingInput will be called by the PhysicsService via a delegate.
+        // This ensures that input decisions (like wanting to jump or sprint based on path) are made *before* physics calculations for the tick.
+        await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync,
+            (entity) => _pathFollowerService.UpdatePathFollowingInput(entity)
+        );
     }
 }
