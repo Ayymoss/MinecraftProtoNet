@@ -242,8 +242,8 @@ namespace MinecraftProtoNet.Services
                     var nextNode = path[i + 1];
                     var vectorToNext = nextNode - targetNode; // Vector from current targetNode to the one after it
 
-                    var currentDirHorz = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z).NormalizedSafe();
-                    var nextDirHorz = new Vector3<double>(vectorToNext.X, 0, vectorToNext.Z).NormalizedSafe();
+                    var currentDirHorz = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z).Normalized();
+                    var nextDirHorz = new Vector3<double>(vectorToNext.X, 0, vectorToNext.Z).Normalized();
 
                     if (currentDirHorz.LengthSquared() > Epsilon && nextDirHorz.LengthSquared() > Epsilon)
                     {

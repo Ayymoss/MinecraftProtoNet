@@ -18,4 +18,6 @@ public interface IMinecraftClient
     Task SendPacketAsync(IServerboundPacket packet);
 
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
+
+    Task PhysicsTickAsync();
 }
