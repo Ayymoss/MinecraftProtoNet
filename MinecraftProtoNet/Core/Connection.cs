@@ -186,6 +186,12 @@ public sealed class Connection : IDisposable
 
     public async Task SendPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken = default)
     {
+        if (packet == null)
+        {
+            AnsiConsole.MarkupLine("[[Connection ERROR]] Attempted to send a null packet. This may be due to an earlier failure in packet creation (e.g., chat signing initialization).");
+            return;
+        }
+
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var outputStream = GetOutputStream();
