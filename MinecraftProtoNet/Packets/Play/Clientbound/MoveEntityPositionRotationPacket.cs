@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2F, ProtocolState.Play, true)]
+[Packet(0x35, ProtocolState.Play, true)]
 public class MoveEntityPositionRotationPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

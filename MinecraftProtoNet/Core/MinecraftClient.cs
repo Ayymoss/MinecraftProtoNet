@@ -47,7 +47,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         connection.EnableCompression(threshold);
     }
 
-    public async Task ConnectAsync(string host, int port)
+    public async Task ConnectAsync(string host, int port, bool isSnapshot = false)
     {
         AnsiConsole.MarkupLine(
             $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{ProtocolState.ToString()}[/]");
@@ -57,9 +57,14 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
         const int intention = 2; // 1 Status - 2 Login - 3 Transfer
+
+        // 775 is the protocol version for 1.21.x
+        // Snapshot uses bit 30 set | 287 (for 26.1 Snapshot 1)
+        var protocolVersion = isSnapshot ? (1 << 30) | 287 : 775;
+        
         var handshakePacket = new HandshakePacket
         {
-            ProtocolVersion = 770,
+            ProtocolVersion = protocolVersion,
             ServerAddress = host,
             ServerPort = (ushort)port,
             NextState = intention // TODO: This should be intention dependant by the caller
@@ -168,9 +173,13 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
         if (command == "!say")
         {
-            // TODO: This causes server exception due to invalid packet, too large? // Clean up new public key changes & CreateChatSignature
-
-            var packetToSend = ChatSigning.CreateSignedChatPacket(AuthResult, string.Join("", bodyMessage.Split(" ").Skip(1).ToArray()));
+            var messageContent = string.Join(" ", bodyMessage.Split(" ").Skip(1));
+            var packetToSend = ChatSigning.CreateSignedChatPacket(AuthResult, messageContent);
+            if (packetToSend == null)
+            {
+                Console.WriteLine("[WARN] Failed to create signed chat packet, falling back to unsigned.");
+                packetToSend = new ChatPacket(messageContent);
+            }
             await SendPacketAsync(packetToSend);
         }
 
@@ -678,5 +687,27 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync,
             (entity) => _pathFollowerService.UpdatePathFollowingInput(entity)
         );
+    }
+
+    public async Task SendChatSessionUpdate()
+    {
+        if (AuthResult.ChatSession is null)
+        {
+            Console.WriteLine("[WARN] Skipping ChatSessionUpdate: AuthResult.ChatSession is null.");
+            // Log.Warning("Skipping ChatSessionUpdate: AuthResult.ChatSession is null.");
+            return;
+        }
+
+        Console.WriteLine($"[DEBUG] Sending ChatSessionUpdatePacket. SessionId: {AuthResult.ChatSession.ChatContext.ChatSessionGuid}");
+
+        await SendPacketAsync(new ChatSessionUpdatePacket
+        {
+            SessionId = AuthResult.ChatSession.ChatContext.ChatSessionGuid,
+            ExpiresAt = AuthResult.ChatSession.ExpiresAtEpochMs,
+            PublicKey = AuthResult.ChatSession.PublicKeyDer,
+            KeySignature = AuthResult.ChatSession.MojangSignature
+        });
+
+        Console.WriteLine("[green]Sent ChatSessionUpdatePacket.[/]");
     }
 }

@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3A, ProtocolState.Play)]
+[Packet(0x40, ProtocolState.Play)]
 public class PlayerChatPacket : IClientboundPacket
 {
     public HeaderPayload Header { get; set; }

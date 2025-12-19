@@ -101,7 +101,7 @@ public ref struct PacketBufferWriter
     public void WriteUUID(Guid uuid)
     {
         EnsureCapacity(16);
-        if (!uuid.TryWriteBytes(_buffer[_writePosition..]))
+        if (!uuid.TryWriteBytes(_buffer[_writePosition..], true, out _))
         {
             throw new InvalidOperationException("Not enough space to write UUID.");
         }

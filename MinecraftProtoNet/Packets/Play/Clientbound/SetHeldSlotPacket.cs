@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x62, ProtocolState.Play)]
+[Packet(0x68, ProtocolState.Play)]
 public class SetHeldSlotPacket : IClientboundPacket
 {
     public short HeldSlot { get; set; }

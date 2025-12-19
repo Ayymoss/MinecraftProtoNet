@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x68, ProtocolState.Play)]
+[Packet(0x6E, ProtocolState.Play)]
 public class SetSimulationDistancePacket : IClientboundPacket
 {
     public int SimulationDistance { get; set; }

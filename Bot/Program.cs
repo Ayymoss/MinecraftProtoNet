@@ -20,7 +20,7 @@ public static class Program
             return;
         }
 
-        await client.ConnectAsync("10.10.1.20", 25565);
+        await client.ConnectAsync("10.10.1.20", 25565, true);
 
         Console.ReadKey();
         await client.DisconnectAsync();

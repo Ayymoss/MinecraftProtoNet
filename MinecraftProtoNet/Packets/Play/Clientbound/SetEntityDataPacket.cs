@@ -9,7 +9,7 @@ using Spectre.Console;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Partially implemented.
-[Packet(0x5C, ProtocolState.Play)]
+[Packet(0x62, ProtocolState.Play)]
 public class SetEntityDataPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
@@ -67,21 +67,19 @@ public class SetEntityDataPacket : IClientboundPacket
         OptionalUuid = 13,
         BlockState = 14,
         OptionalBlockState = 15,
-        NbtTag = 16,
-        Particle = 17,
-        Particles = 18,
-        VillagerData = 19,
-        OptionalVarInt = 20,
-        Pose = 21,
-        CatVariant = 22,
-        WolfVariant = 23,
-        FrogVariant = 24,
-        OptionalGlobalPos = 25,
-        PaintingVariant = 26,
-        SnifferState = 27,
-        ArmadilloState = 28,
-        Vector3 = 29,
-        Quaternion = 30,
+        Particle = 16,
+        VillagerData = 17,
+        OptionalVarInt = 18,
+        Pose = 19,
+        CatVariant = 20,
+        WolfVariant = 21,
+        FrogVariant = 22,
+        OptionalGlobalPos = 23,
+        PaintingVariant = 24,
+        SnifferState = 25,
+        ArmadilloState = 26,
+        Vector3 = 27,
+        Quaternion = 28,
     }
 
     private object? GetValue(ref PacketBufferReader buffer, MetadataType type)

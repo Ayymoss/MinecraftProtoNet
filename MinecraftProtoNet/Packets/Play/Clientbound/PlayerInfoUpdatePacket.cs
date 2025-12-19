@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x3F, ProtocolState.Play)]
+[Packet(0x45, ProtocolState.Play)]
 public class PlayerInfoUpdatePacket : IClientboundPacket
 {
     // TODO: Properly implement the object types.

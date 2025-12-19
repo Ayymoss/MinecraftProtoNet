@@ -167,7 +167,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
     public Guid ReadUuid()
     {
         var bytes = ReadBuffer(16);
-        return new Guid(bytes);
+        return new Guid(bytes, true);
     }
 
     public bool ReadBoolean()

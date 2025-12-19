@@ -13,11 +13,12 @@ public interface IMinecraftClient
     Task<bool> AuthenticateAsync();
     void EnableEncryption(byte[] sharedSecret);
     void EnableCompression(int threshold);
-    Task ConnectAsync(string host, int port);
+    Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
     Task SendPacketAsync(IServerboundPacket packet);
 
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
 
     Task PhysicsTickAsync();
+    Task SendChatSessionUpdate();
 }

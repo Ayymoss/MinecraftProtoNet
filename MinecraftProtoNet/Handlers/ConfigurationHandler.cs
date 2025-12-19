@@ -24,6 +24,7 @@ public class ConfigurationHandler : IPacketHandler
 
     public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
+        Console.WriteLine($"[DEBUG] ConfigurationHandler handling packet: {packet.GetType().Name}");
         switch (packet)
         {
             case SelectKnownPacksPacket selectKnownPacksPacket:
@@ -35,6 +36,7 @@ public class ConfigurationHandler : IPacketHandler
                 break;
             case FinishConfigurationPacket finishConfigurationPacket:
             {
+                Console.WriteLine("[DEBUG] Handling FinishConfigurationPacket...");
                 // Setup the client environment
                 var blockJsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-1.21.5.json"); // TODO: Rehome
                 var blockJsonString = await File.ReadAllTextAsync(blockJsonFilePath);
@@ -57,11 +59,20 @@ public class ConfigurationHandler : IPacketHandler
                     .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
                 ClientState.InitialiseItemRegistry(itemData);
 
-                // Continue to play.
+                // Correct Order:
+                // 1. Send ClientInformation (Mandatory in Config)
+                await client.SendPacketAsync(new Packets.Configuration.Serverbound.ClientInformationPacket());
+                
+                // 2. Send FinishConfiguration (Signals end of Config)
                 await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
+                
+                // 3. Switch to Play State
                 client.ProtocolState = ProtocolState.Play;
                 AnsiConsole.MarkupLine(
                     $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.ProtocolState.ToString()}[/]");
+                
+                // 4. Send ChatSessionUpdate (This is a PLAY packet, must be sent after state switch)
+                await client.SendChatSessionUpdate();
                 break;
             }
             case RegistryDataPacket registryDataPacket:

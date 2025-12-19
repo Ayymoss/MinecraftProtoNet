@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Packets.Play.Serverbound;
@@ -15,21 +16,41 @@ public static class ChatSigning
 
         try
         {
+
+            Console.WriteLine($"[DEBUG Sign] AuthUUID: {auth.Uuid}, SessionUUID: {chatSessionUuid}");
+            
+            // 1. Write constant 1 (protocol version marker for signed messages)
             bufferWriter.WriteSignedInt(1);
-            bufferWriter.WriteUUID(auth.Uuid);
-            bufferWriter.WriteUUID(chatSessionUuid);
+            Console.WriteLine($"[DEBUG Sign] Wrote constant int 1");
+            
+            // 2. SignedMessageLink: sender UUID, session UUID, message index
+            // Debug: Show UUID bytes to verify format matches Java's big-endian (MSB first, LSB second)
+            var authUuidBytes = GuidToJavaBytes(auth.Uuid);
+            var sessionUuidBytes = GuidToJavaBytes(chatSessionUuid);
+            Console.WriteLine($"[DEBUG Sign] AuthUUID bytes (Java format): {Convert.ToHexString(authUuidBytes)}");
+            Console.WriteLine($"[DEBUG Sign] SessionUUID bytes (Java format): {Convert.ToHexString(sessionUuidBytes)}");
+            
+            bufferWriter.WriteBuffer(authUuidBytes);
+            bufferWriter.WriteBuffer(sessionUuidBytes);
             bufferWriter.WriteSignedInt(messageIndex);
+            Console.WriteLine($"[DEBUG Sign] MessageIndex: {messageIndex}");
+            
+            // 3. SignedMessageBody: salt, timestamp (seconds), message, lastSeen
             bufferWriter.WriteSignedLong(salt);
+            Console.WriteLine($"[DEBUG Sign] Salt: {salt} (0x{salt:X16})");
 
             var timestampSeconds = timestampMillis / 1000L;
+            Console.WriteLine($"[DEBUG Sign] Timestamp: {timestampMillis} (ms) -> {timestampSeconds} (s)");
             bufferWriter.WriteSignedLong(timestampSeconds);
 
             var messageBytes = Encoding.UTF8.GetBytes(message);
             bufferWriter.WriteSignedInt(messageBytes.Length);
             bufferWriter.WriteBuffer(messageBytes);
+            Console.WriteLine($"[DEBUG Sign] Message: '{message}' ({messageBytes.Length} bytes)");
 
             var lastSeenCount = Math.Min(lastSeenSignatures.Count, 20);
             bufferWriter.WriteSignedInt(lastSeenCount);
+            Console.WriteLine($"[DEBUG Sign] LastSeenCount: {lastSeenCount}");
 
             var startIndex = Math.Max(0, lastSeenSignatures.Count - lastSeenCount);
             for (var i = startIndex; i < lastSeenSignatures.Count; i++)
@@ -159,21 +180,18 @@ public static class ChatSigning
         byte[] acknowledgedBytes = [0, 0, 0];
         var numSeen = Math.Min(chatContext.LastSeenSignatures.Count, 20);
 
+        // Reference: acknowledged.set(i, true) where i is the position in the tracking array
+        // Bits 0-19 correspond to positions 0-19 in the 20-message window
+        // Bit 0 = oldest tracked message, Bit 19 = newest (if window is full)
         for (var i = 0; i < numSeen; i++)
         {
-            var bitIndex = (20 - numSeen) + i;
-
-            if (bitIndex is >= 0 and < 20)
-            {
-                var byteIndex = bitIndex / 8;
-                var bitInByte = bitIndex % 8;
-                acknowledgedBytes[byteIndex] |= (byte)(1 << bitInByte);
-            }
-            else
-            {
-                Console.WriteLine($"[WARN] Calculated invalid bitIndex {bitIndex} for acknowledgment (numSeen={numSeen}, i={i}).");
-            }
+            // Set bit i directly - this matches the reference implementation
+            var bitIndex = i;
+            var byteIndex = bitIndex / 8;
+            var bitInByte = bitIndex % 8;
+            acknowledgedBytes[byteIndex] |= (byte)(1 << bitInByte);
         }
+        Console.WriteLine($"[DEBUG PreSign] Acknowledged bitset: [{acknowledgedBytes[0]:X2}, {acknowledgedBytes[1]:X2}, {acknowledgedBytes[2]:X2}] for {numSeen} messages");
 
         chatContext.UnacknowledgedMessagesCount = 0;
 
@@ -226,5 +244,49 @@ public static class ChatSigning
         }
 
         auth.ChatSession.ChatContext.AddReceivedMessageSignature(receivedSignature);
+    }
+
+    /// <summary>
+    /// Converts a C# Guid to Java UUID byte format.
+    /// Java UUID: writes mostSigBits (long, big-endian) then leastSigBits (long, big-endian)
+    /// C# Guid internal format is different, so we need to extract the bytes correctly.
+    /// </summary>
+    private static byte[] GuidToJavaBytes(Guid guid)
+    {
+        // Get the raw bytes of the Guid
+        Span<byte> guidBytes = stackalloc byte[16];
+        guid.TryWriteBytes(guidBytes);
+        
+        // C# Guid internal layout (little-endian for first 3 fields):
+        // Bytes 0-3: Data1 (int, LE -> need to swap to BE)
+        // Bytes 4-5: Data2 (short, LE -> need to swap to BE)
+        // Bytes 6-7: Data3 (short, LE -> need to swap to BE)
+        // Bytes 8-15: Data4 (already in correct order)
+        
+        // Convert to Java UUID format (big-endian: MSB first, LSB second)
+        var result = new byte[16];
+        
+        // Data1: swap 4 bytes
+        result[0] = guidBytes[3];
+        result[1] = guidBytes[2];
+        result[2] = guidBytes[1];
+        result[3] = guidBytes[0];
+        
+        // Data2: swap 2 bytes  
+        result[4] = guidBytes[5];
+        result[5] = guidBytes[4];
+        
+        // Data3: swap 2 bytes
+        result[6] = guidBytes[7];
+        result[7] = guidBytes[6];
+        
+        // Data4: copy as-is (bytes 8-15)
+        guidBytes[8..16].CopyTo(result.AsSpan(8));
+        
+        Console.WriteLine($"[DEBUG GuidToJavaBytes] Input: {guid}");
+        Console.WriteLine($"[DEBUG GuidToJavaBytes] Raw C# bytes: {Convert.ToHexString(guidBytes)}");
+        Console.WriteLine($"[DEBUG GuidToJavaBytes] Java format:  {Convert.ToHexString(result)}");
+        
+        return result;
     }
 }

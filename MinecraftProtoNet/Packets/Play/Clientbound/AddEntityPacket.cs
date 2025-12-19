@@ -24,8 +24,8 @@ public class AddEntityPacket : IClientboundPacket
         EntityUuid = buffer.ReadUuid(); // TODO: Upon connecting we get a UUID from everyone.
         Type = buffer.ReadVarInt();
         Position = new Vector3<double>(buffer.ReadDouble(), buffer.ReadDouble(), buffer.ReadDouble());
+        Velocity = new Vector3<double>(buffer.ReadSignedShort(), buffer.ReadSignedShort(), buffer.ReadSignedShort());
         PitchYawAndHeadYaw = new Vector3<double>(buffer.ReadSignedByte(), buffer.ReadSignedByte(), buffer.ReadSignedByte());
         Data = buffer.ReadVarInt();
-        Velocity = new Vector3<double>(buffer.ReadSignedShort(), buffer.ReadSignedShort(), buffer.ReadSignedShort());
     }
 }

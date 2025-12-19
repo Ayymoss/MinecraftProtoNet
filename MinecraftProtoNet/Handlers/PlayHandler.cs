@@ -40,6 +40,9 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(ForgetLevelChunkPacket))]
 [HandlesPacket(typeof(PlayerInfoUpdatePacket))]
 [HandlesPacket(typeof(PlayerInfoRemovePacket))]
+[HandlesPacket(typeof(SetEntityDataPacket))]
+[HandlesPacket(typeof(UpdateAttributesPacket))]
+[HandlesPacket(typeof(SoundPacket))]
 public class PlayHandler : IPacketHandler
 {
     private bool _playerLoaded;

@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x22, ProtocolState.Play)]
+[Packet(0x26, ProtocolState.Play)]
 public class GameEventPacket : IClientboundPacket
 {
     public EventFlag Event { get; set; }
