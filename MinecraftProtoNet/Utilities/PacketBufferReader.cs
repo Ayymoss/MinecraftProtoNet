@@ -214,6 +214,45 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return array;
     }
 
+    /// <summary>
+    /// Reads a VarInt-prefixed array of VarInts.
+    /// </summary>
+    public int[] ReadVarIntArray()
+    {
+        var length = ReadVarInt();
+        var array = new int[length];
+        for (var i = 0; i < length; i++)
+        {
+            array[i] = ReadVarInt();
+        }
+        return array;
+    }
+
+    /// <summary>
+    /// Reads a chat component (JSON text component) as a string.
+    /// </summary>
+    public string ReadChatComponent()
+    {
+        // Chat components are NBT-encoded in 26.1+
+        var nbt = ReadNbtTag();
+        return NbtToPlainText(nbt);
+    }
+
+    /// <summary>
+    /// Extracts plain text from an NBT chat component.
+    /// </summary>
+    private static string NbtToPlainText(NbtTag nbt)
+    {
+        // Simple extraction - just return the tag's value as string
+        return nbt switch
+        {
+            NbtCompound compound when compound.Value.FirstOrDefault(t => t.Name == "text") is { } textTag 
+                => NbtToPlainText(textTag),
+            { } tag => tag.ToString() ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
     private T ReadObject<T>()
     {
         switch (typeof(T))

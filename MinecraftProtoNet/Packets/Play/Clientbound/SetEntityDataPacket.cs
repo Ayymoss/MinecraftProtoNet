@@ -9,7 +9,7 @@ using Spectre.Console;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Partially implemented.
-[Packet(0x62, ProtocolState.Play)]
+[Packet(0x62, ProtocolState.Play, true)]
 public class SetEntityDataPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
@@ -28,7 +28,7 @@ public class SetEntityDataPacket : IClientboundPacket
             var typeId = buffer.ReadVarInt();
             
             // Safety: if type is out of known range, consume rest of buffer to avoid corruption
-            if (typeId < 0 || typeId > (int)MetadataType.HumanoidArm)
+            if (typeId is < 0 or > (int)MetadataType.HumanoidArm)
             {
                 AnsiConsole.MarkupLine($"[yellow]Warning:[/] [white]Unknown metadata type ID:[/] {typeId}");
                 _ = buffer.ReadRestBuffer();

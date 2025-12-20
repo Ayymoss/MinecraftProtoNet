@@ -1,4 +1,4 @@
-using MinecraftProtoNet.Actions;
+using MinecraftProtoNet.Packets.Play.Serverbound;
 
 namespace MinecraftProtoNet.Commands.Implementations;
 
@@ -13,11 +13,11 @@ public class CmdCommand : ICommand
     {
         if (!ctx.HasMinArgs(1))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !cmd <command>");
+            await ctx.SendChatAsync("Usage: !cmd <command>");
             return;
         }
 
         var command = ctx.GetRemainingArgsAsString(0);
-        await ChatActions.SendCommandAsync(ctx, command);
+        await ctx.SendPacketAsync(new ChatCommandPacket(command));
     }
 }

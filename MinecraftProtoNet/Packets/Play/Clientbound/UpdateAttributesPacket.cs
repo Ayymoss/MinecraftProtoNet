@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x82, ProtocolState.Play)]
+[Packet(0x82, ProtocolState.Play, true)]
 public class UpdateAttributesPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

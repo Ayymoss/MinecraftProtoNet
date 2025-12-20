@@ -13,6 +13,6 @@ public class ForwardCommand : ICommand
     {
         var isMoving = MovementActions.ToggleForward(ctx);
         var message = isMoving ? "Moving forward!" : "Stopped moving forward!";
-        await ctx.SendUnsignedChatAsync(message);
+        await ctx.SendChatAsync(message);
     }
 }

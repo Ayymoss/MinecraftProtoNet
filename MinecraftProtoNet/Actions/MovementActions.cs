@@ -24,13 +24,16 @@ public static class MovementActions
 
     /// <summary>
     /// Uses pathfinding to navigate to the target coordinates.
+    /// Uses the client's shared PathFollowerService to ensure the physics loop will process the path.
     /// </summary>
-    public static bool PathfindTo(IActionContext ctx, Vector3<double> target, IPathFollowerService pathService)
+    public static bool PathfindTo(IActionContext ctx, Vector3<double> target)
     {
         if (!ctx.State.LocalPlayer.HasEntity) return false;
+        var pathService = ctx.Client.PathFollowerService;
         pathService.Initialize(ctx.State.Level);
         return pathService.FollowPathTo(ctx.State.LocalPlayer.Entity, target);
     }
+
 
     /// <summary>
     /// Rotates the player to look at specific coordinates.

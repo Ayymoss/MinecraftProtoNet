@@ -76,6 +76,12 @@ public class PlayHandler : IPacketHandler
             }
             case LoginPacket loginPacket:
             {
+                // Store server settings
+                client.State.ServerSettings.EnforcesSecureChat = loginPacket.EnforcesSecureChat;
+                client.State.ServerSettings.IsHardcore = loginPacket.IsHardcore;
+                client.State.ServerSettings.ViewDistance = loginPacket.ViewDistance;
+                client.State.ServerSettings.SimulationDistance = loginPacket.SimulationDistance;
+                
                 if (client.AuthResult.ChatSession is not null)
                 {
                     await client.SendPacketAsync(new ChatSessionUpdatePacket
@@ -91,13 +97,16 @@ public class PlayHandler : IPacketHandler
                 entity.EntityId = loginPacket.EntityId;
                 break;
             }
+
             case AddEntityPacket addEntityPacket:
             {
-                const int playerEntityType = 148;
+                // Player entity type ID in Minecraft 26.1 - verify with entity registry if this changes
+                const int playerEntityType = 155;
                 if (addEntityPacket.Type is not playerEntityType) break;
                 await client.State.Level.AddEntityAsync(addEntityPacket.EntityUuid, addEntityPacket.EntityId, addEntityPacket.Position);
                 break;
             }
+
             case RemoveEntitiesPacket removeEntitiesPacket:
             {
                 var entities = client.State.Level.GetAllEntityIds().Where(x => removeEntitiesPacket.Entities.Contains(x));

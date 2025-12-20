@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 /// <summary>
 /// Marks the end of a chunk batch. Contains the size of the batch.
 /// </summary>
-[Packet(0x0B, ProtocolState.Play)]
+[Packet(0x0B, ProtocolState.Play, true)]
 public class ChunkBatchFinishedPacket : IClientboundPacket
 {
     public int BatchSize { get; set; }

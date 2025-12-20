@@ -7,17 +7,16 @@ public class PosCommand : ICommand
     public string Description => "Display the sender's position";
     public string[] Aliases => ["position"];
 
-    public Task ExecuteAsync(CommandContext ctx)
+    public async Task ExecuteAsync(CommandContext ctx)
     {
         if (ctx.Sender?.HasEntity != true)
         {
-            Console.WriteLine("Sender position not available.");
-            return Task.CompletedTask;
+            await ctx.SendChatAsync("Sender position not available.");
+            return;
         }
 
         var entity = ctx.Sender.Entity;
-        var playerPos = $"{ctx.Sender.Username} -> {entity.Position.X:N2}, {entity.Position.Y:N2}, {entity.Position.Z:N2}";
-        Console.WriteLine($"Last position: {playerPos}");
-        return Task.CompletedTask;
+        var playerPos = $"{ctx.Sender.Username} -> {entity?.Position.X:N2}, {entity?.Position.Y:N2}, {entity?.Position.Z:N2}";
+        await ctx.SendChatAsync($"Last position: {playerPos}");
     }
 }

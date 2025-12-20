@@ -15,7 +15,7 @@ public class DropCommand : ICommand
 
         if (ctx.State.LocalPlayer.Entity.HeldItem.ItemId is null)
         {
-            await ctx.SendUnsignedChatAsync("You are not holding anything.");
+            await ctx.SendChatAsync("You are not holding anything.");
             return;
         }
 

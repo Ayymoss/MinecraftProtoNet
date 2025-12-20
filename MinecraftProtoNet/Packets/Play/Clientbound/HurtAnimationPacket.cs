@@ -1,11 +1,11 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x24, ProtocolState.Play)]
+[Packet(0x29, ProtocolState.Play)]
 public class HurtAnimationPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

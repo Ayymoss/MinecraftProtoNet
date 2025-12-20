@@ -13,6 +13,6 @@ public class SneakCommand : ICommand
     {
         var isSneaking = await MovementActions.ToggleSneakingAsync(ctx);
         var message = isSneaking ? "Sneaking!" : "Stopped sneaking.";
-        await ctx.SendUnsignedChatAsync(message);
+        await ctx.SendChatAsync(message);
     }
 }

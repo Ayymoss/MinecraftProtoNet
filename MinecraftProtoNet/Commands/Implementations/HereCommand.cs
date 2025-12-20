@@ -1,5 +1,4 @@
 using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Core.Abstractions;
 
 namespace MinecraftProtoNet.Commands.Implementations;
@@ -11,8 +10,6 @@ public class HereCommand : ICommand
     public string Description => "Pathfind to the sender's position";
     public string[] Aliases => ["come"];
 
-    private readonly IPathFollowerService _pathFollowerService = new PathFollowerService();
-
     public Task ExecuteAsync(CommandContext ctx)
     {
         if (ctx.Sender?.HasEntity != true)
@@ -22,7 +19,7 @@ public class HereCommand : ICommand
         }
 
         var targetPosition = ctx.Sender.Entity.Position;
-        var result = MovementActions.PathfindTo(ctx, targetPosition, _pathFollowerService);
+        var result = MovementActions.PathfindTo(ctx, targetPosition);
 
         if (!result)
         {

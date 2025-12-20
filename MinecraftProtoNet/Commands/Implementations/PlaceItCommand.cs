@@ -21,7 +21,7 @@ public class PlaceItCommand : ICommand
             !ctx.TryGetArg(1, out float y) ||
             !ctx.TryGetArg(2, out float z))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !placeit <x> <y> <z>");
+            await ctx.SendChatAsync("Usage: !placeit <x> <y> <z>");
             return;
         }
 

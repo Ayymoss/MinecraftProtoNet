@@ -1,4 +1,5 @@
 ﻿using MinecraftProtoNet.Auth.Dtos;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.State.Base;
 
@@ -10,6 +11,12 @@ public interface IMinecraftClient
     ClientState State { get; }
     int ProtocolVersion { get; set; }
     AuthResult AuthResult { get; set; }
+    
+    /// <summary>
+    /// The shared path follower service for pathfinding operations.
+    /// </summary>
+    IPathFollowerService PathFollowerService { get; }
+    
     Task<bool> AuthenticateAsync();
     void EnableEncryption(byte[] sharedSecret);
     void EnableCompression(int threshold);

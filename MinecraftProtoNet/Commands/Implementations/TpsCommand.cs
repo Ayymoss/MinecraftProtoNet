@@ -9,10 +9,10 @@ public class TpsCommand : ICommand
     public string Description => "Display server TPS and tick interval";
     public string[] Aliases => [];
 
-    public Task ExecuteAsync(CommandContext ctx)
+    public async Task ExecuteAsync(CommandContext ctx)
     {
         var (tps, mspt) = QueryActions.GetServerPerformance(ctx);
-        Console.WriteLine($"TPS: {tps:N2} | MSPT: {mspt:N2}ms");
-        return Task.CompletedTask;
+        var message = $"TPS: {tps:N2} | MSPT: {mspt:N2}ms";
+        await ctx.SendChatAsync(message);
     }
 }

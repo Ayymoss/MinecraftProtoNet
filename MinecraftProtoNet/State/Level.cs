@@ -103,7 +103,8 @@ public class Level
     }
 
     /// <summary>
-    /// Adds an entity to an existing player
+    /// Adds an entity to an existing player, or creates the player if they don't exist yet.
+    /// This handles the case where AddEntityPacket arrives before PlayerInfoUpdatePacket.
     /// </summary>
     public async Task<Player> AddEntityAsync(Guid uuid, int entityId, Vector3<double>? position = null, Vector2<float>? yawPitch = null)
     {
@@ -111,9 +112,14 @@ public class Level
         {
             await _semaphore.WaitAsync();
 
+            // Get or create player - handles case where AddEntityPacket arrives before PlayerInfoUpdatePacket
             if (!_players.TryGetValue(uuid, out var player))
             {
-                throw new InvalidOperationException($"Cannot add entity for unknown player UUID: {uuid}");
+                player = new Player
+                {
+                    Uuid = uuid
+                };
+                _players[uuid] = player;
             }
 
             // Create or update entity
@@ -156,6 +162,7 @@ public class Level
             if (_semaphore.CurrentCount is 0) _semaphore.Release();
         }
     }
+
 
     /// <summary>
     /// Removes a player from the registry

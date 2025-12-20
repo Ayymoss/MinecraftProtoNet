@@ -18,14 +18,14 @@ public class PlaceCommand : ICommand
 
         if (ctx.State.LocalPlayer.Entity.HeldItem.ItemId is null)
         {
-            await ctx.SendUnsignedChatAsync("You are not holding anything.");
+            await ctx.SendChatAsync("You are not holding anything.");
             return;
         }
 
         var success = await InteractionActions.PlaceBlockAsync(ctx);
         if (!success)
         {
-            await ctx.SendUnsignedChatAsync("Cannot place block here.");
+            await ctx.SendChatAsync("Cannot place block here.");
         }
     }
 }

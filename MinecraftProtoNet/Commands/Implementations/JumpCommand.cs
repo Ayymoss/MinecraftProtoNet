@@ -13,6 +13,6 @@ public class JumpCommand : ICommand
     {
         var isJumping = MovementActions.ToggleJumping(ctx);
         var message = isJumping ? "Jumping!" : "Stopped jumping!";
-        await ctx.SendUnsignedChatAsync(message);
+        await ctx.SendChatAsync(message);
     }
 }

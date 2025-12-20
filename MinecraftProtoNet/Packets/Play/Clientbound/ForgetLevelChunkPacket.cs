@@ -1,11 +1,11 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x21, ProtocolState.Play, true)]
+[Packet(0x25, ProtocolState.Play, true)]
 public class ForgetLevelChunkPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }

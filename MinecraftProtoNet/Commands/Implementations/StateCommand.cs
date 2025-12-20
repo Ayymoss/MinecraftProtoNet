@@ -14,12 +14,12 @@ public class StateCommand : ICommand
         var state = QueryActions.GetPlayerState(ctx);
         if (state is null)
         {
-            await ctx.SendUnsignedChatAsync("Player state not available.");
+            await ctx.SendChatAsync("Player state not available.");
             return;
         }
 
         var message = $"Pos: {state.Position.X:N2}, {state.Position.Y:N2}, {state.Position.Z:N2}, " +
                       $"Sp: {state.IsSprinting}, J: {state.IsJumping}, Sn: {state.IsSneaking}";
-        await ctx.SendUnsignedChatAsync(message);
+        await ctx.SendChatAsync(message);
     }
 }

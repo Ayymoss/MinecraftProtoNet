@@ -32,12 +32,7 @@ public interface IActionContext
     Task SendPacketAsync(IServerboundPacket packet);
 
     /// <summary>
-    /// Sends a signed chat message using the player's private key.
+    /// Sends a chat message. Automatically uses signed or unsigned chat based on server configuration.
     /// </summary>
-    Task SendSignedChatAsync(string message);
-
-    /// <summary>
-    /// Sends an unsigned chat message (may be rejected by servers requiring signatures).
-    /// </summary>
-    Task SendUnsignedChatAsync(string message);
+    Task SendChatAsync(string message);
 }

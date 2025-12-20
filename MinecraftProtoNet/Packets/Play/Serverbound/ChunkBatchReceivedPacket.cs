@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Serverbound;
 /// Sent by the client after receiving a ChunkBatchFinished packet to acknowledge receipt
 /// and inform the server about desired chunk loading rate.
 /// </summary>
-[Packet(0x0A, ProtocolState.Play)]
+[Packet(0x0A, ProtocolState.Play, true)]
 public class ChunkBatchReceivedPacket : IServerboundPacket
 {
     /// <summary>

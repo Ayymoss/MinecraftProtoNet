@@ -15,7 +15,7 @@ public class GetBlockCommand : ICommand
             !ctx.TryGetArg(1, out int y) ||
             !ctx.TryGetArg(2, out int z))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !getblock <x> <y> <z>");
+            await ctx.SendChatAsync("Usage: !getblock <x> <y> <z>");
             return;
         }
 

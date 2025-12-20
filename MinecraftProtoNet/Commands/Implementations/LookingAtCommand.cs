@@ -14,7 +14,7 @@ public class LookingAtCommand : ICommand
         var hit = QueryActions.GetLookedAtBlock(ctx);
         if (hit is null)
         {
-            await ctx.SendUnsignedChatAsync("I'm not looking at a block.");
+            await ctx.SendChatAsync("I'm not looking at a block.");
             return;
         }
 
@@ -32,7 +32,7 @@ public class LookingAtCommand : ICommand
 
         foreach (var message in messages)
         {
-            await ctx.SendUnsignedChatAsync(message);
+            await ctx.SendChatAsync(message);
             await Task.Delay(100);
         }
     }

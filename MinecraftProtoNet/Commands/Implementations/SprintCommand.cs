@@ -13,6 +13,6 @@ public class SprintCommand : ICommand
     {
         var isSprinting = await MovementActions.ToggleSprintingAsync(ctx);
         var message = isSprinting ? "Sprinting!" : "Stopped sprinting.";
-        await ctx.SendUnsignedChatAsync(message);
+        await ctx.SendChatAsync(message);
     }
 }

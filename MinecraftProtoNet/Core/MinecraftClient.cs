@@ -24,9 +24,11 @@ public class MinecraftClient : IMinecraftClient
     private readonly Connection _connection;
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService = new PhysicsService();
-    private readonly IPathFollowerService _pathFollowerService = new PathFollowerService();
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly CommandRegistry _commandRegistry = new();
+
+    public IPathFollowerService PathFollowerService { get; } = new PathFollowerService();
+
 
     public ClientState State { get; } = new();
     public AuthResult AuthResult { get; set; }
@@ -203,9 +205,10 @@ public class MinecraftClient : IMinecraftClient
         // The PathFollowerService's UpdatePathFollowingInput will be called by the PhysicsService via a delegate.
         // This ensures that input decisions (like wanting to jump or sprint based on path) are made *before* physics calculations for the tick.
         await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync,
-            (entity) => _pathFollowerService.UpdatePathFollowingInput(entity)
+            (entity) => PathFollowerService.UpdatePathFollowingInput(entity)
         );
     }
+
 
     public async Task SendChatSessionUpdate()
     {

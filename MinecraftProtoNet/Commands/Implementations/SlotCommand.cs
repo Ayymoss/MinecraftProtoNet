@@ -19,19 +19,19 @@ public class SlotCommand : ICommand
         {
             if (slot is < 0 or > 8)
             {
-                await ctx.SendUnsignedChatAsync("Slot must be between 0 and 8.");
+                await ctx.SendChatAsync("Slot must be between 0 and 8.");
                 return;
             }
 
             var success = await InteractionActions.SetHeldSlotAsync(ctx, slot);
             if (!success)
             {
-                await ctx.SendUnsignedChatAsync("Failed to change slot.");
+                await ctx.SendChatAsync("Failed to change slot.");
             }
         }
         else
         {
-            await ctx.SendUnsignedChatAsync($"Slot Held: {entity.HeldSlot} (0-8)");
+            await ctx.SendChatAsync($"Slot Held: {entity.HeldSlot} (0-8)");
         }
     }
 }

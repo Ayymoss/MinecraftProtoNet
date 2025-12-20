@@ -16,7 +16,7 @@ public class LookAtCommand : ICommand
             !ctx.TryGetArg(1, out float y) ||
             !ctx.TryGetArg(2, out float z))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !lookat <x> <y> <z> [face]");
+            await ctx.SendChatAsync("Usage: !lookat <x> <y> <z> [face]");
             return;
         }
 

@@ -1,9 +1,12 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/SolutionFiles/">
     <File Path=".gitignore" />
   </Folder>
-  <Project Path="Bot\Bot.csproj" Type="C#" />
-  <Project Path="MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" Type="C#" />
-  <Project Path="MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" Type="C#" />
-  <Project Path="MinecraftProtoNet\MinecraftProtoNet.csproj" Type="C#" />
+  <Folder Name="/Tools/">
+    <Project Path="Tools/PacketIdSync/PacketIdSync.csproj" />
+  </Folder>
+  <Project Path="Bot\Bot.csproj" />
+  <Project Path="MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" />
+  <Project Path="MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" />
+  <Project Path="MinecraftProtoNet\MinecraftProtoNet.csproj" />
 </Solution>

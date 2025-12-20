@@ -13,11 +13,11 @@ public class SayCommand : ICommand
     {
         if (!ctx.HasMinArgs(1))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !say <message>");
+            await ctx.SendChatAsync("Usage: !say <message>");
             return;
         }
 
         var message = ctx.GetRemainingArgsAsString(0);
-        await ChatActions.SendSignedMessageAsync(ctx, message);
+        await ctx.SendChatAsync(message);
     }
 }

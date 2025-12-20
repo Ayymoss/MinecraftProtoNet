@@ -16,7 +16,7 @@ public class GotoCommand : ICommand
             !ctx.TryGetArg(1, out float y) ||
             !ctx.TryGetArg(2, out float z))
         {
-            await ctx.SendUnsignedChatAsync("Usage: !goto <x> <y> <z> [speed]");
+            await ctx.SendChatAsync("Usage: !goto <x> <y> <z> [speed]");
             return;
         }
 
@@ -24,6 +24,6 @@ public class GotoCommand : ICommand
         speed = speed > 0 ? speed : 0.25f;
 
         await MovementActions.MoveToAsync(ctx, new Vector3<double>(x, y, z), speed);
-        await ctx.SendUnsignedChatAsync($"Moving to {x:N2}, {y:N2}, {z:N2}");
+        await ctx.SendChatAsync($"Moving to {x:N2}, {y:N2}, {z:N2}");
     }
 }

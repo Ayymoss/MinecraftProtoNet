@@ -14,7 +14,7 @@ public class AttackCommand : ICommand
         var success = await InteractionActions.AttackLookedAtEntityAsync(ctx);
         if (!success)
         {
-            await ctx.SendUnsignedChatAsync("I'm not looking at a player.");
+            await ctx.SendChatAsync("I'm not looking at a player.");
         }
     }
 }
