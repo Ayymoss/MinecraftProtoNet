@@ -107,7 +107,7 @@ public class MinecraftAuthenticator
             var requestData = new
             {
                 accessToken = authResult.MinecraftAccessToken,
-                selectedProfile = authResult.Uuid,
+                selectedProfile = authResult.Uuid.ToString("N"), // UUID without hyphens for Mojang API
                 serverId = serverHash
             };
 

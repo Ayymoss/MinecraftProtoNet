@@ -1,5 +1,4 @@
-﻿using System.Numerics;
-using MinecraftProtoNet.Attributes;
+﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -7,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x28, ProtocolState.Play)]
+[Packet(0x2D, ProtocolState.Play)]
 public class LevelEventPacket : IClientboundPacket
 {
     public int EventId { get; set; }

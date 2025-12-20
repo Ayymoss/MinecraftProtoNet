@@ -84,6 +84,9 @@ public class LoginHandler : IPacketHandler
             }
 
             AnsiConsole.MarkupLine("[green]Mojang authentication successful.[/]");
+            
+            // Small delay to ensure Mojang's session has propagated before server queries it
+            await Task.Delay(100);
         }
         else
         {

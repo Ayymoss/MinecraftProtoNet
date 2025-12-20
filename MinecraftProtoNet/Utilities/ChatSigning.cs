@@ -1,5 +1,4 @@
-﻿using System.Buffers.Binary;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Packets.Play.Serverbound;
@@ -16,41 +15,29 @@ public static class ChatSigning
 
         try
         {
-
-            Console.WriteLine($"[DEBUG Sign] AuthUUID: {auth.Uuid}, SessionUUID: {chatSessionUuid}");
-            
             // 1. Write constant 1 (protocol version marker for signed messages)
             bufferWriter.WriteSignedInt(1);
-            Console.WriteLine($"[DEBUG Sign] Wrote constant int 1");
             
             // 2. SignedMessageLink: sender UUID, session UUID, message index
-            // Debug: Show UUID bytes to verify format matches Java's big-endian (MSB first, LSB second)
             var authUuidBytes = GuidToJavaBytes(auth.Uuid);
             var sessionUuidBytes = GuidToJavaBytes(chatSessionUuid);
-            Console.WriteLine($"[DEBUG Sign] AuthUUID bytes (Java format): {Convert.ToHexString(authUuidBytes)}");
-            Console.WriteLine($"[DEBUG Sign] SessionUUID bytes (Java format): {Convert.ToHexString(sessionUuidBytes)}");
             
             bufferWriter.WriteBuffer(authUuidBytes);
             bufferWriter.WriteBuffer(sessionUuidBytes);
             bufferWriter.WriteSignedInt(messageIndex);
-            Console.WriteLine($"[DEBUG Sign] MessageIndex: {messageIndex}");
             
             // 3. SignedMessageBody: salt, timestamp (seconds), message, lastSeen
             bufferWriter.WriteSignedLong(salt);
-            Console.WriteLine($"[DEBUG Sign] Salt: {salt} (0x{salt:X16})");
 
             var timestampSeconds = timestampMillis / 1000L;
-            Console.WriteLine($"[DEBUG Sign] Timestamp: {timestampMillis} (ms) -> {timestampSeconds} (s)");
             bufferWriter.WriteSignedLong(timestampSeconds);
 
             var messageBytes = Encoding.UTF8.GetBytes(message);
             bufferWriter.WriteSignedInt(messageBytes.Length);
             bufferWriter.WriteBuffer(messageBytes);
-            Console.WriteLine($"[DEBUG Sign] Message: '{message}' ({messageBytes.Length} bytes)");
 
             var lastSeenCount = Math.Min(lastSeenSignatures.Count, 20);
             bufferWriter.WriteSignedInt(lastSeenCount);
-            Console.WriteLine($"[DEBUG Sign] LastSeenCount: {lastSeenCount}");
 
             var startIndex = Math.Max(0, lastSeenSignatures.Count - lastSeenCount);
             for (var i = startIndex; i < lastSeenSignatures.Count; i++)
@@ -78,24 +65,25 @@ public static class ChatSigning
     }
 
     /// <summary>
-    /// Creates the RSA-SHA256 signature for a chat message based on the specification.
+    /// Creates the RSA-SHA256 signature for a chat message with explicit last seen signatures.
     /// </summary>
     /// <param name="auth">Authentication result containing player UUID, private key, and chat session context.</param>
     /// <param name="message">The chat message content (1-256 bytes UTF8).</param>
     /// <param name="timestamp">Timestamp in milliseconds since epoch (UTC).</param>
     /// <param name="salt">A random 64-bit salt.</param>
+    /// <param name="lastSeenSignatures">List of signatures to include in the signed data.</param>
     /// <returns>A 256-byte signature, or null if signing is not possible or fails.</returns>
-    public static byte[]? CreateChatSignature(AuthResult auth, string message, long timestamp, long salt)
+    public static byte[]? CreateChatSignatureWithLastSeen(AuthResult auth, string message, long timestamp, long salt, List<byte[]> lastSeenSignatures)
     {
         if (auth.PlayerPrivateKey == null || auth.ChatSession == null)
         {
-            Console.WriteLine("[WARN] Cannot create chat signature: Missing private key or chat session info.");
+            Log.Warning("Cannot create chat signature: Missing private key or chat session info.");
             return null;
         }
 
         if (string.IsNullOrEmpty(message) || Encoding.UTF8.GetByteCount(message) > 256)
         {
-            Console.WriteLine("[WARN] Cannot create chat signature: Invalid message length.");
+            Log.Warning("Cannot create chat signature: Invalid message length.");
             return null;
         }
 
@@ -103,34 +91,50 @@ public static class ChatSigning
         var messageIndex = chatContext.Index;
 
         var dataToSign = PrepareSignatureData(auth, chatContext.ChatSessionGuid, messageIndex, salt, timestamp, message,
-            chatContext.LastSeenSignatures);
+            lastSeenSignatures);
 
         if (dataToSign == null)
         {
-            Console.WriteLine("[ERROR] Failed to prepare data for signing.");
+            Log.Error("Failed to prepare data for signing.");
             return null;
         }
-
-        Console.WriteLine($"[DEBUG SignData] Data to sign ({dataToSign.Length} bytes): {Convert.ToHexString(dataToSign)}");
 
         try
         {
             var signature = auth.PlayerPrivateKey.SignData(dataToSign, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
             if (signature.Length == 256) return signature;
-            Console.WriteLine($"[ERROR] Generated signature has incorrect length: {signature.Length}. Expected 256.");
+            Log.Error("Generated signature has incorrect length: {SigLength}. Expected 256.", signature.Length);
             return null;
         }
         catch (CryptographicException ex)
         {
-            Console.WriteLine($"[ERROR] Cryptographic exception during signing: {ex.Message}");
+            Log.Error(ex, "Cryptographic exception during signing");
             return null;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Unexpected exception during signing: {ex.Message}");
+            Log.Error(ex, "Unexpected exception during signing");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Creates the RSA-SHA256 signature for a chat message based on the specification.
+    /// This is a legacy method - consider using CreateChatSignatureWithLastSeen instead.
+    /// </summary>
+    [Obsolete("Use CreateChatSignatureWithLastSeen with explicit signature list from GenerateAndApplyUpdate")]
+    public static byte[]? CreateChatSignature(AuthResult auth, string message, long timestamp, long salt)
+    {
+        if (auth.PlayerPrivateKey == null || auth.ChatSession == null)
+        {
+            Log.Warning("Cannot create chat signature: Missing private key or chat session info.");
+            return null;
+        }
+
+        // Generate update to get signatures - note: this will clear the offset
+        var (_, _, signaturesForSigning, _) = auth.ChatSession.ChatContext.GenerateAndApplyUpdate();
+        return CreateChatSignatureWithLastSeen(auth, message, timestamp, salt, signaturesForSigning);
     }
 
     /// <summary>
@@ -144,70 +148,35 @@ public static class ChatSigning
     {
         if (auth?.PlayerPrivateKey == null || auth.ChatSession == null)
         {
-            Console.WriteLine("[ERROR] Cannot create signed chat packet: Auth context invalid.");
+            Log.Error("Cannot create signed chat packet: Auth context invalid.");
             return null;
         }
 
         if (string.IsNullOrEmpty(messageContent) || Encoding.UTF8.GetByteCount(messageContent) > 256)
         {
-            Console.WriteLine("[ERROR] Cannot create signed chat packet: Invalid message length.");
+            Log.Error("Cannot create signed chat packet: Invalid message length.");
             return null;
         }
 
         var chatContext = auth.ChatSession.ChatContext;
         var nextIndex = chatContext.Index + 1;
-        var messageCountToSend = chatContext.UnacknowledgedMessagesCount;
-
-        Console.WriteLine(
-            $"[DEBUG PreSign] Preparing to sign message. Next Index: {nextIndex}, Unacked Count: {messageCountToSend}, Current Seen Sig Count: {chatContext.LastSeenSignatures.Count}");
-        if (chatContext.LastSeenSignatures.Count > 0)
-        {
-            Console.WriteLine("[DEBUG PreSign] Current LastSeenSignatures (Oldest to Newest):");
-            for (var i = 0; i < chatContext.LastSeenSignatures.Count; i++)
-            {
-                var sig = chatContext.LastSeenSignatures[i];
-                Console.WriteLine(
-                    $"  [{i}]: {Convert.ToHexString(sig.Take(4).ToArray())}...{Convert.ToHexString(sig.TakeLast(4).ToArray())}");
-            }
-        }
-        else
-        {
-            Console.WriteLine("[DEBUG PreSign] Current LastSeenSignatures: Empty");
-        }
+        
+        // Generate the update - this clears the offset and builds the acknowledged bitset
+        var (offset, acknowledged, signaturesForSigning, checksum) = chatContext.GenerateAndApplyUpdate();
 
         chatContext.Index = nextIndex;
 
-        byte[] acknowledgedBytes = [0, 0, 0];
-        var numSeen = Math.Min(chatContext.LastSeenSignatures.Count, 20);
-
-        // Reference: acknowledged.set(i, true) where i is the position in the tracking array
-        // Bits 0-19 correspond to positions 0-19 in the 20-message window
-        // Bit 0 = oldest tracked message, Bit 19 = newest (if window is full)
-        for (var i = 0; i < numSeen; i++)
-        {
-            // Set bit i directly - this matches the reference implementation
-            var bitIndex = i;
-            var byteIndex = bitIndex / 8;
-            var bitInByte = bitIndex % 8;
-            acknowledgedBytes[byteIndex] |= (byte)(1 << bitInByte);
-        }
-        Console.WriteLine($"[DEBUG PreSign] Acknowledged bitset: [{acknowledgedBytes[0]:X2}, {acknowledgedBytes[1]:X2}, {acknowledgedBytes[2]:X2}] for {numSeen} messages");
-
-        chatContext.UnacknowledgedMessagesCount = 0;
-
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var salt = Random.Shared.NextInt64();
-        Console.WriteLine(
-            $"[DEBUG PreSign] Calling CreateChatSignature with: Index={nextIndex}, Timestamp={timestamp}, Salt={salt}, Msg='{messageContent}'");
-        var signature = CreateChatSignature(auth, messageContent, timestamp, salt);
+        
+        // Create signature using the signatures collected for signing
+        var signature = CreateChatSignatureWithLastSeen(auth, messageContent, timestamp, salt, signaturesForSigning);
 
         if (signature == null)
         {
-            Console.WriteLine("[ERROR] Failed to create chat signature. Aborting packet creation.");
+            Log.Error("Failed to create chat signature. Aborting packet creation.");
             return null;
         }
-
-        Console.WriteLine($"[DEBUG PreSign] Generated Signature ({signature.Length} bytes): {Convert.ToHexString(signature)}");
 
         var packet = new ChatPacket
         {
@@ -215,9 +184,9 @@ public static class ChatSigning
             Timestamp = timestamp,
             Salt = salt,
             Signature = signature,
-            MessageCount = messageCountToSend,
-            Acknowledged = acknowledgedBytes,
-            Checksum = 0, // TODO: Placeholder for checksum; calculate if needed
+            MessageCount = offset,
+            Acknowledged = acknowledged,
+            Checksum = checksum,
         };
 
         return packet;
@@ -229,21 +198,22 @@ public static class ChatSigning
     /// </summary>
     /// <param name="auth">Authentication context containing the ChatSession.</param>
     /// <param name="receivedSignature">The 256-byte signature from the received message.</param>
-    public static void ChatMessageReceived(AuthResult auth, byte[]? receivedSignature)
+    /// <param name="wasShown">Whether the message was shown to the user (default true).</param>
+    public static void ChatMessageReceived(AuthResult auth, byte[]? receivedSignature, bool wasShown = true)
     {
         if (auth?.ChatSession?.ChatContext == null)
         {
-            Console.WriteLine("[WARN] Cannot process received chat message: Chat context not available.");
+            Log.Warning("Cannot process received chat message: Chat context not available.");
             return;
         }
 
         if (receivedSignature == null)
         {
-            Console.WriteLine("[WARN] Received null signature. Ignoring.");
+            Log.Warning("Received null signature. Ignoring.");
             return;
         }
 
-        auth.ChatSession.ChatContext.AddReceivedMessageSignature(receivedSignature);
+        auth.ChatSession.ChatContext.AddPending(receivedSignature, wasShown);
     }
 
     /// <summary>
@@ -282,10 +252,6 @@ public static class ChatSigning
         
         // Data4: copy as-is (bytes 8-15)
         guidBytes[8..16].CopyTo(result.AsSpan(8));
-        
-        Console.WriteLine($"[DEBUG GuidToJavaBytes] Input: {guid}");
-        Console.WriteLine($"[DEBUG GuidToJavaBytes] Raw C# bytes: {Convert.ToHexString(guidBytes)}");
-        Console.WriteLine($"[DEBUG GuidToJavaBytes] Java format:  {Convert.ToHexString(result)}");
         
         return result;
     }

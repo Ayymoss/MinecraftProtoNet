@@ -42,6 +42,7 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(PlayerInfoRemovePacket))]
 [HandlesPacket(typeof(SetEntityDataPacket))]
 [HandlesPacket(typeof(UpdateAttributesPacket))]
+[HandlesPacket(typeof(LevelEventPacket))]
 [HandlesPacket(typeof(SoundPacket))]
 public class PlayHandler : IPacketHandler
 {
@@ -150,13 +151,7 @@ public class PlayHandler : IPacketHandler
 
                 if (signatureBytes is not null)
                 {
-                    Console.WriteLine(
-                        $"[DEBUG OnReceive] Received Player Chat Signature ({signatureBytes.Length} bytes): {Convert.ToHexString(signatureBytes)}");
                     ChatSigning.ChatMessageReceived(client.AuthResult, signatureBytes);
-                }
-                else
-                {
-                    Console.WriteLine("[DEBUG OnReceive] Received Player Chat Packet *without* signature.");
                 }
 
                 _ = Task.Run(async () => await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message));
