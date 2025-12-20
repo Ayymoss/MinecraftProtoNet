@@ -5,16 +5,18 @@ namespace MinecraftProtoNet.Handlers.Meta;
 
 public class AStarPathFinder(Level level)
 {
-    private const int MaxSearchIterations = 1000;
+    private const int MaxSearchIterations = 2000;
     private const float DiagonalCost = 1.414f;
     private const int MaxJumpHeight = 1;
     private const int MaxFallHeight = 3;
 
+    public record struct PathResult(List<Vector3<double>>? Path, bool ReachedTarget, float DistanceToTarget);
+
     /// <summary>
     /// Find a path from start to target position
     /// </summary>
-    /// <returns>List of points in the path, or empty list if no path found</returns>
-    public List<Vector3<double>>? FindPath(Vector3<double> start, Vector3<double> target, int maxIterations = MaxSearchIterations)
+    /// <returns>A PathResult containing the points, reach status, and final distance.</returns>
+    public PathResult FindPath(Vector3<double> start, Vector3<double> target, int maxIterations = MaxSearchIterations)
     {
         var startBlock = new Vector3<int>(
             (int)Math.Floor(start.X),
@@ -31,6 +33,7 @@ public class AStarPathFinder(Level level)
         var openSet = new PriorityQueue<PathNode>();
         var closedSet = new HashSet<(int x, int y, int z)>();
         var nodeCache = new Dictionary<(int x, int y, int z), PathNode>();
+        
         var startNode = new PathNode(startBlock)
         {
             G = 0,
@@ -40,7 +43,9 @@ public class AStarPathFinder(Level level)
         openSet.Enqueue(startNode);
         nodeCache[(startBlock.X, startBlock.Y, startBlock.Z)] = startNode;
 
+        PathNode? bestNode = startNode;
         var iterations = 0;
+        
         while (openSet.Count > 0 && iterations < maxIterations)
         {
             iterations++;
@@ -48,9 +53,15 @@ public class AStarPathFinder(Level level)
             var current = openSet.Dequeue();
             var currentPos = (current.Position.X, current.Position.Y, current.Position.Z);
 
+            if (current.H < bestNode.H)
+            {
+                bestNode = current;
+            }
+
             if (current.Position.X == targetBlock.X && current.Position.Y == targetBlock.Y && current.Position.Z == targetBlock.Z)
             {
-                return ReconstructPath(current);
+                var path = ReconstructPath(current);
+                return new PathResult(path, true, 0);
             }
 
             closedSet.Add(currentPos);
@@ -61,7 +72,13 @@ public class AStarPathFinder(Level level)
                 var neighborPos = (neighbor.X, neighbor.Y, neighbor.Z);
                 if (closedSet.Contains(neighborPos)) continue;
 
-                var tentativeG = current.G + CalculateDistance(current.Position, neighbor);
+                var neighborType = GetPathType(neighbor.X, neighbor.Y, neighbor.Z);
+                var malus = neighborType.GetMalus();
+                
+                // If malus is -1, it's effectively blocked
+                if (malus < 0) continue;
+
+                var tentativeG = current.G + CalculateDistance(current.Position, neighbor) + malus;
 
                 if (!nodeCache.TryGetValue(neighborPos, out var neighborNode))
                 {
@@ -82,7 +99,9 @@ public class AStarPathFinder(Level level)
             }
         }
 
-        return null;
+        // Return the best found partial path
+        var partialPath = ReconstructPath(bestNode);
+        return new PathResult(partialPath, false, bestNode.H);
     }
 
     /// <summary>
@@ -136,31 +155,51 @@ public class AStarPathFinder(Level level)
     /// <summary>
     /// Check if position is walkable
     /// </summary>
-    private bool IsWalkable(int x, int y, int z)
+    /// <summary>
+    /// Gets the path type at a position, considering the entity's height.
+    /// </summary>
+    private PathType GetPathType(int x, int y, int z)
     {
-        var currentBlock = level.GetBlockAt(x, y, z);
-        var blockAbove = level.GetBlockAt(x, y + 1, z);
-        var blockBelow = level.GetBlockAt(x, y - 1, z);
+        var feetType = PathfindingContext.GetPathTypeFromState(level.GetBlockAt(x, y, z));
+        var headType = PathfindingContext.GetPathTypeFromState(level.GetBlockAt(x, y + 1, z));
 
-        if (currentBlock == null || blockAbove == null) return false;
+        // If either block is definitively blocked, the position is blocked.
+        if (feetType.GetMalus() < 0 || headType.GetMalus() < 0)
+            return PathType.Blocked;
 
-        // Position is walkable if:
-        // 1. Current block is air or passable liquid
-        // 2. Block above is air or passable (for headroom)
-        // 3. Block below is solid (not air) unless in liquid
+        // If either is dangerous, return the dangerous one (prioritize damage over movement)
+        if (feetType == PathType.Lava || headType == PathType.Lava) return PathType.Lava;
+        if (feetType == PathType.DamageFire || headType == PathType.DamageFire) return PathType.DamageFire;
+        if (feetType == PathType.DamageOther || headType == PathType.DamageOther) return PathType.DamageOther;
 
-        var currentPassable = currentBlock.IsAir || currentBlock.IsLiquid;
-        var hasHeadroom = blockAbove.IsAir || blockAbove.IsLiquid;
-
-        if (currentBlock.IsLiquid) return hasHeadroom;
-
-        var hasSolidGround = false;
-        if (blockBelow != null)
+        var result = feetType;
+        if (feetType == PathType.Water && headType == PathType.Open)
         {
-            hasSolidGround = blockBelow is { IsAir: false, IsLiquid: false };
+            result = PathType.WaterBorder; // Used here to represent "Surface Water"
         }
 
-        return currentPassable && hasHeadroom && (hasSolidGround || blockBelow == null);
+        // Add wall proximity check: only apply if the current result is relatively safe.
+        // We only upgrade to WallNeighbor if WallNeighbor's malus is higher than current.
+        if (result.GetMalus() < PathType.WallNeighbor.GetMalus())
+        {
+            for (var dx = -1; dx <= 1; dx++)
+            {
+                for (var dz = -1; dz <= 1; dz++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    
+                    var nFeet = PathfindingContext.GetPathTypeFromState(level.GetBlockAt(x + dx, y, z + dz));
+                    var nHead = PathfindingContext.GetPathTypeFromState(level.GetBlockAt(x + dx, y + 1, z + dz));
+                    
+                    if (nFeet == PathType.Blocked || nHead == PathType.Blocked)
+                    {
+                        return PathType.WallNeighbor;
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -189,57 +228,72 @@ public class AStarPathFinder(Level level)
                 var nx = position.X + dx;
                 var nz = position.Z + dz;
 
+                // Diagonal movement check (can't move diagonally if both sides are blocked)
                 if (dx != 0 && dz != 0 && !isInLiquid)
                 {
-                    if (!IsWalkable(position.X + dx, position.Y, position.Z) || !IsWalkable(position.X, position.Y, position.Z + dz))
+                    if (GetPathType(position.X + dx, position.Y, position.Z) == PathType.Blocked || 
+                        GetPathType(position.X, position.Y, position.Z + dz) == PathType.Blocked)
                     {
                         continue;
                     }
                 }
 
-                if (IsWalkable(nx, position.Y, nz))
+                // Level move
+                if (GetPathType(nx, position.Y, nz) != PathType.Blocked)
                 {
-                    neighbors.Add(new Vector3<int>(nx, position.Y, nz));
-                }
-
-                if (!isInLiquid)
-                {
-                    for (var dy = 1; dy <= MaxJumpHeight; dy++)
+                    var below = level.GetBlockAt(nx, position.Y - 1, nz);
+                    if (PathfindingContext.GetPathTypeFromState(below) == PathType.Blocked || isInLiquid)
                     {
-                        var blockToLand = level.GetBlockAt(nx, position.Y + dy, nz);
-                        var blockAboveLanding = level.GetBlockAt(nx, position.Y + dy + 1, nz);
-
-                        var canLand = blockToLand != null && blockAboveLanding != null &&
-                                      (blockToLand.IsAir || blockToLand.IsLiquid) &&
-                                      (blockAboveLanding.IsAir || blockAboveLanding.IsLiquid);
-
-                        if (!canLand) continue;
-                        var blockBelow = level.GetBlockAt(nx, position.Y + dy - 1, nz);
-                        var hasSolidGround = blockBelow is { IsAir: false, IsLiquid: false };
-
-                        if (!hasSolidGround && !blockToLand.IsLiquid) continue;
-                        neighbors.Add(new Vector3<int>(nx, position.Y + dy, nz));
-                        break;
+                        neighbors.Add(new Vector3<int>(nx, position.Y, nz));
                     }
                 }
 
+                // Jump move
+                // If in liquid, we allow jumping (bobbing) to exit water onto a ledge.
+                // If NOT in liquid, we MUST have support (solid block below) to jump.
+                var belowCurrent = level.GetBlockAt(position.X, position.Y - 1, position.Z);
+                var isSupported = PathfindingContext.GetPathTypeFromState(belowCurrent) == PathType.Blocked;
+
+                if (isInLiquid || isSupported)
+                {
+                    for (var dy = 1; dy <= MaxJumpHeight; dy++)
+                    {
+                        if (GetPathType(nx, position.Y + dy, nz) != PathType.Blocked)
+                        {
+                            var belowJump = level.GetBlockAt(nx, position.Y + dy - 1, nz);
+                            if (PathfindingContext.GetPathTypeFromState(belowJump) == PathType.Blocked)
+                            {
+                                neighbors.Add(new Vector3<int>(nx, position.Y + dy, nz));
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Fall move
                 for (var dy = 1; dy <= MaxFallHeight; dy++)
                 {
-                    if (!IsWalkable(nx, position.Y - dy, nz)) continue;
-                    neighbors.Add(new Vector3<int>(nx, position.Y - dy, nz));
-                    break;
+                    if (GetPathType(nx, position.Y - dy, nz) != PathType.Blocked)
+                    {
+                        var belowFall = level.GetBlockAt(nx, position.Y - dy - 1, nz);
+                        if (PathfindingContext.GetPathTypeFromState(belowFall) == PathType.Blocked)
+                        {
+                            neighbors.Add(new Vector3<int>(nx, position.Y - dy, nz));
+                            break;
+                        }
+                    }
                 }
             }
         }
 
         if (!isInLiquid) return neighbors;
 
-        if (IsWalkable(position.X, position.Y + 1, position.Z))
+        if (GetPathType(position.X, position.Y + 1, position.Z) != PathType.Blocked)
         {
             neighbors.Add(new Vector3<int>(position.X, position.Y + 1, position.Z));
         }
 
-        if (IsWalkable(position.X, position.Y - 1, position.Z))
+        if (GetPathType(position.X, position.Y - 1, position.Z) != PathType.Blocked)
         {
             neighbors.Add(new Vector3<int>(position.X, position.Y - 1, position.Z));
         }

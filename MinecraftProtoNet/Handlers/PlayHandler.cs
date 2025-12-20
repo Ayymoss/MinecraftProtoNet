@@ -1,6 +1,7 @@
 ﻿using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
+using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
@@ -144,7 +145,7 @@ public class PlayHandler : IPacketHandler
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.IsHurtFromYaw = hurtAnimationPacket.Yaw;
+                entity.HurtFromYaw = hurtAnimationPacket.Yaw;
                 break;
             }
             case ContainerSetSlotPacket containerSetSlotPacket:
@@ -181,6 +182,13 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerPositionPacket playerPositionPacket:
             {
+                if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
+                var entity = client.State.LocalPlayer.Entity;
+
+                // Stop pathing immediately on teleport to avoid race conditions and illegal movements
+                client.PathFollowerService.StopFollowingPath(entity);
+                entity.HasPendingTeleport = true;
+
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
                 if (!_playerLoaded)
                 {
@@ -228,10 +236,27 @@ public class PlayHandler : IPacketHandler
                 }
 
                 // --- Position update ---
-                if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
-                client.State.LocalPlayer.Entity.Position = playerPositionPacket.Position;
-                //client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
-                client.State.LocalPlayer.Entity.YawPitch = playerPositionPacket.YawPitch;
+                var flags = playerPositionPacket.Flags;
+                
+                // Update position
+                var posX = flags.HasFlag(PlayerPositionPacket.PositionFlags.X) ? entity.Position.X + playerPositionPacket.Position.X : playerPositionPacket.Position.X;
+                var posY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y) ? entity.Position.Y + playerPositionPacket.Position.Y : playerPositionPacket.Position.Y;
+                var posZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Z) ? entity.Position.Z + playerPositionPacket.Position.Z : playerPositionPacket.Position.Z;
+                entity.Position = new Vector3<double>(posX, posY, posZ);
+
+                // Update velocity 
+                var velX = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_X) ? entity.Velocity.X + playerPositionPacket.Velocity.X : playerPositionPacket.Velocity.X;
+                var velY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Y) ? entity.Velocity.Y + playerPositionPacket.Velocity.Y : playerPositionPacket.Velocity.Y;
+                var velZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Z) ? entity.Velocity.Z + playerPositionPacket.Velocity.Z : playerPositionPacket.Velocity.Z;
+                entity.Velocity = new Vector3<double>(velX, velY, velZ);
+
+                // Update Rotation
+                var yaw = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y_ROT) ? entity.YawPitch.X + playerPositionPacket.YawPitch.X : playerPositionPacket.YawPitch.X;
+                var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
+                entity.YawPitch = new Vector2<float>(yaw, pitch);
+
+                Console.WriteLine($"[TELEPORT_DEBUG] Applied TeleportId={playerPositionPacket.TeleportId}, NewPos={entity.Position}, NewVel={entity.Velocity}, Flags={flags}");
+                entity.IsOnGround = false; // Reset on-ground state until next physics tick
                 break;
             }
             case KeepAlivePacket keepAlivePacket:

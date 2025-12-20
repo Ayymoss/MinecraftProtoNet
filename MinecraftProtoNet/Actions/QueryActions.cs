@@ -54,7 +54,7 @@ public static class QueryActions
         var entity = ctx.State.LocalPlayer.Entity;
         return new PlayerStateInfo(
             entity.Position,
-            entity.IsSprintingNew || entity.WantsToSprint,
+            entity.IsSprinting || entity.WantsToSprint,
             entity.IsJumping,
             entity.IsSneaking
         );

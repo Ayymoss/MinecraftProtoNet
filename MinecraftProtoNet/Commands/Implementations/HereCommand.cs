@@ -10,22 +10,22 @@ public class HereCommand : ICommand
     public string Description => "Pathfind to the sender's position";
     public string[] Aliases => ["come"];
 
-    public Task ExecuteAsync(CommandContext ctx)
+    public async Task ExecuteAsync(CommandContext ctx)
     {
         if (ctx.Sender?.HasEntity != true)
         {
-            Console.WriteLine("Sender position not available.");
-            return Task.CompletedTask;
+            await ctx.SendChatAsync("I don't know where you are!");
+            return;
         }
 
         var targetPosition = ctx.Sender.Entity.Position;
+        await ctx.SendChatAsync("On my way!");
+        
         var result = MovementActions.PathfindTo(ctx, targetPosition);
 
         if (!result)
         {
-            Console.WriteLine("I can't reach your position.");
+            await ctx.SendChatAsync("I can't get any closer to your position.");
         }
-
-        return Task.CompletedTask;
     }
 }

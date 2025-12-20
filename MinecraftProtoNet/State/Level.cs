@@ -396,7 +396,7 @@ public class Level
                 for (var z = minBz; z <= maxBz; z++)
                 {
                     var blockState = GetBlockAt(x, y, z);
-                    if (blockState is not { IsAir: false, IsLiquid: false, IsSolid: true }) continue;
+                    if (blockState is not { BlocksMotion: true }) continue;
 
                     // I'm only supporting floor slabs for now. Everything else is a full block.
                     var blockBox = new AABB(x, y, z, x + 1, y + 1, z + 1);

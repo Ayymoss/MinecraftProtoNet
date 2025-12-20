@@ -3,446 +3,393 @@ using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Physics;
 using MinecraftProtoNet.State;
-using MinecraftProtoNet.State.Base;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using static MinecraftProtoNet.Physics.PhysicsConstants;
 
-namespace MinecraftProtoNet.Services
+namespace MinecraftProtoNet.Services;
+
+/// <summary>
+/// Handles physics simulation for entities.
+/// Orchestrates MovementCalculator and CollisionResolver.
+/// Based on Java's LivingEntity movement methods.
+/// </summary>
+public class PhysicsService : IPhysicsService
 {
-    public class PhysicsService : IPhysicsService
+    /// <summary>
+    /// Performs a physics tick for the given entity.
+    /// </summary>
+    public async Task PhysicsTickAsync(
+        Entity entity,
+        Level level,
+        Func<IServerboundPacket, Task> sendPacketAsync,
+        Action<Entity>? prePhysicsCallback = null)
     {
-        // Constants copied from MinecraftClient.Physics.cs
-        private const double JumpVerticalVelocity = 0.506;
-        private const double SprintJumpForwardBoost = 0.17;
+        // 1. Pre-physics callback (e.g., pathfinding input)
+        prePhysicsCallback?.Invoke(entity);
 
-        private const double Gravity = -0.08;
-        private const double AirDrag = 0.98;
-        private const double GroundFriction = 0.6;
-        private const double Slipperiness = 0.91; // Typically from block properties, but used as a general factor here
-
-        private const double TerminalVelocity = -3.92;
-        private const double BaseGroundAcceleration = 0.117;
-        private const double SprintMultiplier = 1.3;
-        private const double SneakMultiplier = 0.3;
-        private const double AirAcceleration = 0.0037;
-
-        private const double PlayerBoundingBoxWidth = 0.6; // Used for PlayerCollisionRange
-        private const double PlayerCollisionRange = PlayerBoundingBoxWidth * 1.3;
-        private const double PlayerCollisionPushStrength = 0.1;
-        private const double MaxPushVelocity = 0.15;
-
-        private const double KnockBackBaseStrength = 0.25;
-        private const double KnockBackVerticalBoost = 0.4;
-
-        private const double Epsilon = 1.0E-7;
-        private const double StepHeight = 0.6;
-
-        public async Task PhysicsTickAsync(Entity entity, Level level, Func<IServerboundPacket, Task> sendPacketDelegate, Action<Entity> updatePathFollowingInput)
+        // 1.5 Protocol Sync: Handle pending teleport
+        if (entity.HasPendingTeleport)
         {
-            // Original: if (!State.LocalPlayer.HasEntity) return; - This check should be done by the caller
+            entity.HasPendingTeleport = false;
             
-            updatePathFollowingInput(entity);
-            ApplyJumpingInput(entity);
-            ApplyMovementInput(entity);
-            HandleEntityCollisions(entity, level);
-            ApplyKnockBack(entity);
-
-            var desiredDelta = entity.Velocity;
-            var actualDelta = MoveEntityWithCollisions(entity, level, desiredDelta);
-            var significantPositionChange = Math.Abs(actualDelta.X) > Epsilon ||
-                                            Math.Abs(actualDelta.Y) > Epsilon ||
-                                            Math.Abs(actualDelta.Z) > Epsilon;
-
-            bool stoppedByCollisionX;
-            bool stoppedByCollisionZ;
-            if (!significantPositionChange && !entity.IsHurt)
-            {
-                stoppedByCollisionX = Math.Abs(desiredDelta.X) > Epsilon && Math.Abs(actualDelta.X) < Epsilon;
-                stoppedByCollisionZ = Math.Abs(desiredDelta.Z) > Epsilon && Math.Abs(actualDelta.Z) < Epsilon;
-                await UpdateSprintStateAndSendPackets(entity, (stoppedByCollisionX, stoppedByCollisionZ), false, sendPacketDelegate);
-                return;
-            }
-
-            stoppedByCollisionX = Math.Abs(desiredDelta.X) > Epsilon && Math.Abs(actualDelta.X) < Epsilon;
-            stoppedByCollisionZ = Math.Abs(desiredDelta.Z) > Epsilon && Math.Abs(actualDelta.Z) < Epsilon;
-
-            await UpdateSprintStateAndSendPackets(entity, (stoppedByCollisionX, stoppedByCollisionZ), true, sendPacketDelegate);
-        }
-
-        private void ApplyJumpingInput(Entity entity)
-        {
-            if (entity is not { IsJumping: true, IsOnGround: true }) return;
-
-            // Removed: if (_currentPath != null) block, as PathFollowerService should handle its velocity adjustments.
-            // If specific logic for pathfinding jump reset is needed, it must be coordinated with PathFollowerService.
-
-            entity.Velocity.Y = JumpVerticalVelocity;
-
-            if (!entity.IsSprintingNew || !(Math.Abs(SprintJumpForwardBoost) > Epsilon)) return;
-
-            var yawRadians = entity.YawPitch.X * (Math.PI / 180.0);
-            var lookX = -Math.Sin(yawRadians);
-            var lookZ = Math.Cos(yawRadians);
-            var boostX = lookX * SprintJumpForwardBoost;
-            var boostZ = lookZ * SprintJumpForwardBoost;
-            entity.Velocity.X += boostX;
-            entity.Velocity.Z += boostZ;
-        }
-
-        private void ApplyMovementInput(Entity entity)
-        {
-            // 1. Apply Friction/Drag
-            var friction = entity.IsOnGround ? GroundFriction * Slipperiness : AirDrag;
-            entity.Velocity.X *= friction;
-            entity.Velocity.Z *= friction;
-
-            // 2. Apply Gravity
-            entity.Velocity.Y += Gravity;
-            entity.Velocity.Y *= AirDrag;
-            if (entity.Velocity.Y < TerminalVelocity)
-            {
-                entity.Velocity.Y = TerminalVelocity;
-            }
-
-            // 3. Calculate and Apply Input Acceleration
-            double moveX = 0;
-            double moveZ = 0;
-            if (entity.Forward) moveZ += 1.0;
-            if (entity.Backward) moveZ -= 1.0;
-            if (entity.Left) moveX -= 1.0;
-            if (entity.Right) moveX += 1.0;
-
-            var inputLength = Math.Sqrt(moveX * moveX + moveZ * moveZ);
-
-            if (inputLength > Epsilon)
-            {
-                moveX /= inputLength;
-                moveZ /= inputLength;
-
-                double currentTickAcceleration;
-                if (entity.IsOnGround)
-                {
-                    currentTickAcceleration = BaseGroundAcceleration;
-                    if (entity is { IsSprintingNew: true, IsSneaking: false })
-                    {
-                        currentTickAcceleration *= SprintMultiplier;
-                    }
-                    else if (entity.IsSneaking)
-                    {
-                        currentTickAcceleration *= SneakMultiplier;
-                    }
-                }
-                else
-                {
-                    currentTickAcceleration = AirAcceleration;
-                }
-
-                var moveInfluence = currentTickAcceleration;
-
-                var yawRadians = entity.YawPitch.X * (Math.PI / 180.0);
-                var sinYaw = Math.Sin(yawRadians);
-                var cosYaw = Math.Cos(yawRadians);
-                var worldMoveX = (moveX * cosYaw - moveZ * sinYaw) * moveInfluence;
-                var worldMoveZ = (moveX * sinYaw + moveZ * cosYaw) * moveInfluence;
-
-                entity.Velocity.X += worldMoveX;
-                entity.Velocity.Z += worldMoveZ;
-            }
-        }
-
-        private void HandleEntityCollisions(Entity entity, Level level)
-        {
-            var allEntityIds = level.GetAllEntityIds();
-            if (allEntityIds.Length is 0) return;
-
-            foreach (var otherId in allEntityIds)
-            {
-                if (otherId == entity.EntityId) continue;
-                var otherEntity = level.GetEntityOfId(otherId);
-                if (otherEntity == null) continue;
-
-                var dy = entity.Position.Y - otherEntity.Position.Y;
-                if (Math.Abs(dy) > 1.0) continue; // Simplified vertical check
-
-                var dx = entity.Position.X - otherEntity.Position.X;
-                var dz = entity.Position.Z - otherEntity.Position.Z;
-                var distanceSquared = dx * dx + dz * dz;
-
-                if (distanceSquared >= PlayerCollisionRange * PlayerCollisionRange) continue;
-
-                var pushDistance = Math.Sqrt(distanceSquared);
-                if (pushDistance < 0.01) // Avoid division by zero or very small numbers
-                {
-                    // If entities are exactly on top of each other, push them apart in a random direction
-                    var randomAngle = new Random().NextDouble() * 2 * Math.PI;
-                    dx = Math.Cos(randomAngle);
-                    dz = Math.Sin(randomAngle);
-                    pushDistance = 0.01; // Ensure there's some distance to calculate push direction
-                }
-
-                var pushDirectionX = dx / pushDistance;
-                var pushDirectionZ = dz / pushDistance;
-
-                var pushStrength = PlayerCollisionPushStrength * (1.0 - (pushDistance / PlayerCollisionRange));
-
-                var pushX = pushDirectionX * pushStrength;
-                var pushZ = pushDirectionZ * pushStrength;
-
-                // Clamp push velocity to avoid excessive speeds from collisions
-                pushX = Math.Clamp(pushX, -MaxPushVelocity, MaxPushVelocity);
-                pushZ = Math.Clamp(pushZ, -MaxPushVelocity, MaxPushVelocity);
-
-                entity.Velocity.X += pushX;
-                entity.Velocity.Z += pushZ;
-            }
-        }
-
-        private void ApplyKnockBack(Entity entity)
-        {
-            if (!entity.IsHurt || !entity.IsHurtFromYaw.HasValue) return; // Check if IsHurtFromYaw has a value
-            var lookingYaw = entity.YawPitch.X + 90; // Convert Minecraft yaw (0 south) to unit circle yaw (0 east)
-            var hurtFromYaw = entity.IsHurtFromYaw.Value;
-
-            // Calculate the direction of knockback based on entity's look direction and hurt direction
-            // This logic might need adjustment based on how hurtFromYaw is defined (e.g. absolute angle or relative)
-            // Assuming hurtFromYaw is an absolute angle from where the damage came
-            var lookingRadians = lookingYaw * (Math.PI / 180);
-            var hurtRadians = hurtFromYaw * (Math.PI / 180);
-            var attackAngle = lookingRadians + hurtRadians; // This might be simpler if hurtFromYaw is relative to entity's front
-
-            entity.Velocity.X += -Math.Sin(attackAngle) * KnockBackBaseStrength;
-            entity.Velocity.Z += Math.Cos(attackAngle) * KnockBackBaseStrength;
-            entity.Velocity.Y += KnockBackVerticalBoost;
-
-            entity.IsHurtFromYaw = null; // Reset hurt state
-        }
-
-        private async Task UpdateSprintStateAndSendPackets(Entity entity, (bool collidedX, bool collidedZ) collisionFlags,
-            bool sendPositionPacket, Func<IServerboundPacket, Task> sendPacketDelegate)
-        {
-            var wantsToMove = entity.Forward || entity.Backward || entity.Left || entity.Right;
-
-            if (entity is { WantsToSprint: true, IsSprintingNew: false } && wantsToMove && entity.Forward &&
-                collisionFlags is { collidedX: false, collidedZ: false } && entity.Hunger > 6)
-            {
-                await sendPacketDelegate(new PlayerCommandPacket { EntityId = entity.EntityId, Action = PlayerAction.StartSprint });
-                entity.IsSprintingNew = true;
-            }
-            else if (entity.IsSprintingNew && (!wantsToMove || !entity.Forward || collisionFlags.collidedX || collisionFlags.collidedZ ||
-                                               !entity.WantsToSprint || entity.Hunger <= 6))
-            {
-                await sendPacketDelegate(new PlayerCommandPacket { EntityId = entity.EntityId, Action = PlayerAction.StopSprint });
-                entity.IsSprintingNew = false;
-            }
-
-            var flags = MovementFlags.None;
-            if (entity.IsOnGround)
-            {
-                flags = MovementFlags.OnGround;
-            }
-
-            if (sendPositionPacket)
-            {
-                await sendPacketDelegate(new MovePlayerPositionRotationPacket
-                {
-                    X = entity.Position.X,
-                    Y = entity.Position.Y,
-                    Z = entity.Position.Z,
-                    Yaw = entity.YawPitch.X,
-                    Pitch = entity.YawPitch.Y,
-                    Flags = flags
-                });
-            }
-        }
-
-        private Vector3<double> MoveEntityWithCollisions(Entity entity, Level level, Vector3<double> delta)
-        {
-            var originalBoundingBox = entity.GetBoundingBox();
-            var currentBoundingBox = originalBoundingBox;
-            var wasOnGround = entity.IsOnGround;
-            var landedThisTick = false;
-
-            var expandedBox = currentBoundingBox.Expand(
-                delta.X > 0 ? delta.X : 0,
-                delta.Y > 0 ? delta.Y : 0,
-                delta.Z > 0 ? delta.Z : 0
-            ).Expand(
-                delta.X < 0 ? -delta.X : 0,
-                delta.Y < 0 ? -delta.Y : 0,
-                delta.Z < 0 ? -delta.Z : 0
-            ).Expand(Epsilon); // Expand by epsilon for safety
-
-            var potentialColliders = level.GetCollidingBlockAABBs(expandedBox);
-            var originalDeltaX = delta.X;
-            var originalDeltaZ = delta.Z;
-
-            // Y-axis
-            var adjustedDeltaY = potentialColliders
-                .Aggregate(delta.Y, (current, blockBox) => currentBoundingBox.CalculateYOffset(blockBox, current));
-            if (Math.Abs(adjustedDeltaY - delta.Y) > Epsilon)
-            {
-                if (delta.Y < 0) landedThisTick = true;
-                entity.Velocity.Y = 0;
-            }
-            currentBoundingBox = currentBoundingBox.Offset(0, adjustedDeltaY, 0);
-            delta.Y = adjustedDeltaY;
-            entity.IsOnGround = landedThisTick;
-
-
-            // X-axis
-            var adjustedDeltaX = potentialColliders
-                .Aggregate(delta.X, (current, blockBox) => currentBoundingBox.CalculateXOffset(blockBox, current));
-            currentBoundingBox = currentBoundingBox.Offset(adjustedDeltaX, 0, 0);
-            if (Math.Abs(adjustedDeltaX - delta.X) > Epsilon) entity.Velocity.X = 0;
-            delta.X = adjustedDeltaX;
-
-            // Z-axis
-            var adjustedDeltaZ = potentialColliders
-                .Aggregate(delta.Z, (current, blockBox) => currentBoundingBox.CalculateZOffset(blockBox, current));
-            currentBoundingBox = currentBoundingBox.Offset(0, 0, adjustedDeltaZ);
-            if (Math.Abs(adjustedDeltaZ - delta.Z) > Epsilon) entity.Velocity.Z = 0;
-            delta.Z = adjustedDeltaZ;
-
-            var collidedHorizontally = (Math.Abs(delta.X - originalDeltaX) > Epsilon || Math.Abs(delta.Z - originalDeltaZ) > Epsilon);
-            if (collidedHorizontally && wasOnGround && !entity.IsSneaking)
-            {
-                var stepAttemptDelta = PerformStepUp(level, originalBoundingBox, originalDeltaX, originalDeltaZ, potentialColliders);
-                var stepSqDist = stepAttemptDelta.X * stepAttemptDelta.X + stepAttemptDelta.Z * stepAttemptDelta.Z;
-                var initialSqDist = delta.X * delta.X + delta.Z * delta.Z; // Use the already resolved XZ delta
-
-                if (stepSqDist > initialSqDist + Epsilon)
-                {
-                    delta = new Vector3<double>(stepAttemptDelta.X, stepAttemptDelta.Y, stepAttemptDelta.Z);
-                    currentBoundingBox = originalBoundingBox.Offset(delta); // Recalculate currentBoundingBox based on step
-                    entity.IsOnGround = true; // Stepping implies landing
-                    entity.Velocity.Y = 0; // Stop vertical movement after step
-                }
-            }
+            // Perform a quick ground check for the current (teleported) position
+            // This ensures we send the correct OnGround state in the sync packet.
+            var collision = CollisionResolver.MoveWithCollisions(entity.GetBoundingBox(), level, new Vector3<double>(0, -0.05, 0), false, false);
             
-            entity.UpdatePositionFromAABB(currentBoundingBox);
-            return new Vector3<double>(delta.X, delta.Y, delta.Z);
+            // Heuristic for initial spawn: If chunks aren't loaded, don't claim to be falling if Y is an integer.
+            // This prevents the server from rejecting our position and creating a teleport loop.
+            int chunkX = (int)Math.Floor(entity.Position.X) >> 4;
+            int chunkZ = (int)Math.Floor(entity.Position.Z) >> 4;
+            if (!level.HasChunk(chunkX, chunkZ))
+            {
+                // If chunk is missing, we can't detect ground. 
+                // Assume grounded if Y is an integer (classic floor level like 64.0)
+                entity.IsOnGround = Math.Abs(entity.Position.Y - Math.Floor(entity.Position.Y)) < 0.001;
+                Console.WriteLine($"[TELEPORT_DEBUG] Chunk ({chunkX}, {chunkZ}) missing for teleport sync. Heuristic Gnd={entity.IsOnGround} (PosY={entity.Position.Y:F4})");
+            }
+            else
+            {
+                entity.IsOnGround = collision.LandedOnGround;
+                Console.WriteLine($"[TELEPORT_DEBUG] Chunk loaded. Detected Gnd={entity.IsOnGround}");
+            }
+
+            var flags = entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None;
+            if (entity.HorizontalCollision) flags |= MovementFlags.HorizontalCollision;
+
+            await sendPacketAsync(new MovePlayerPositionRotationPacket
+            {
+                X = entity.Position.X,
+                Y = entity.Position.Y,
+                Z = entity.Position.Z,
+                Yaw = entity.YawPitch.X,
+                Pitch = entity.YawPitch.Y,
+                Flags = flags
+            });
+            
+            Console.WriteLine($"[TELEPORT_DEBUG] Sent teleport acknowledgement sync packet: Pos={entity.Position}, OnGround={entity.IsOnGround}");
+            return;
         }
 
-        private Vector3<double> PerformStepUp(Level level, AABB originalBox, double desiredDeltaX, double desiredDeltaZ,
-            List<AABB> potentialColliders) // potentialColliders can be reused from MoveEntityWithCollisions
+        // 1.7 World Loading Check: Skip physics if center chunk is not loaded
+        int curChunkX = (int)Math.Floor(entity.Position.X) >> 4;
+        int curChunkZ = (int)Math.Floor(entity.Position.Z) >> 4;
+        if (!level.HasChunk(curChunkX, curChunkZ))
         {
-            // --- 1. Check Vertical Clearance for Step Height ---
-            var stepCheckBox = originalBox.Offset(0, StepHeight + Epsilon, 0);
-            // Check if any of the *original* potential colliders (those near the initial movement path)
-            // would intersect with the box *after* it's hypothetically raised by StepHeight.
-            // This is a simplification; true step-up might involve checking new colliders after vertical move.
-            bool canStepUp = potentialColliders.All(blockBox => !blockBox.Intersects(stepCheckBox));
-            
-            // More robust check: also consider blocks directly above the stepped-up position,
-            // not just those that were near the initial horizontal path.
-            if (canStepUp)
+            // If the world isn't loaded yet, stay at the current position.
+            // This prevents falling through the virtual world and getting into teleport loops.
+            // Use the same OnGround state as before to avoid triggering server-side move checks.
+            await sendPacketAsync(new MovePlayerPositionRotationPacket
             {
-                 // Check region from original top to stepHeight above.
-                var checkRegion = originalBox.Expand(0, StepHeight, 0).Offset(0, Epsilon, 0);
-                var ceilingColliders = level.GetCollidingBlockAABBs(checkRegion);
-                // Ensure no blocks obstruct the space *into which* we are trying to step up.
-                if (ceilingColliders.Any(blockBox => blockBox.Max.Y > originalBox.Max.Y + Epsilon && blockBox.Intersects(stepCheckBox)))
+                X = entity.Position.X,
+                Y = entity.Position.Y,
+                Z = entity.Position.Z,
+                Yaw = entity.YawPitch.X,
+                Pitch = entity.YawPitch.Y,
+                Flags = entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None
+            });
+            return;
+        }
+
+        // 2. Capture block friction and fluid state at start of tick
+        var blockFriction = MovementCalculator.GetBlockFriction(level, entity.Position);
+        UpdateFluidState(entity, level);
+
+        if (entity.IsInWater || entity.Velocity.Y != 0)
+        {
+            Console.WriteLine($"[PHYSICS_DEBUG] Tick start: Pos={entity.Position}, Vel={entity.Velocity}, InWater={entity.IsInWater}, FluidH={entity.FluidHeight:F2}, Jmp={entity.IsJumping}, Gnd={entity.IsOnGround}");
+        }
+
+        // 3. Handle Jump / Swimming (Source: LivingEntity.aiStep)
+        if (entity.IsJumping)
+        {
+            if (entity.IsInWater || entity.IsInLava)
+            {
+                // Swim up if in liquid. Matching Java's unconditional jumpInLiquid() behavior.
+                // We trust IsInWater/IsInLava which relies on bounding box intersection.
+                if (true) // Simplification: If we are in the block, we can swim.
                 {
-                    canStepUp = false;
+                    entity.Velocity = MovementCalculator.ApplyFluidJump(entity.Velocity);
+                    Console.WriteLine($"[PHYSICS_DEBUG] Swimming Up: NewVelY={entity.Velocity.Y:F4}");
+                }
+                else if (entity.IsOnGround)
+                {
+                    // Regular jump if in shallow liquid on ground
+                    entity.Velocity = MovementCalculator.ApplyJump(
+                        entity.Velocity,
+                        entity.YawPitch.X,
+                        entity.IsSprinting,
+                        BaseJumpPower);
+                    Console.WriteLine($"[PHYSICS_DEBUG] Shallow Fluid Jump: NewVelY={entity.Velocity.Y:F4}");
                 }
             }
-
-            if (!canStepUp)
+            else if (entity.IsOnGround)
             {
-                return Vector3<double>.Zero; // Cannot step up
+                // Standard ground jump
+                entity.Velocity = MovementCalculator.ApplyJump(
+                    entity.Velocity,
+                    entity.YawPitch.X,
+                    entity.IsSprinting,
+                    BaseJumpPower);
             }
+        }
 
-            // --- 2. Perform Step Movement Sequence (Vertical, then Horizontal) ---
-            // Try moving up by StepHeight, then horizontally, then back down to find support.
+        // 4. Calculate Input Acceleration
+        var (moveX, moveZ) = entity.Input.GetNormalizedMoveVector();
+        if (Math.Abs(moveX) > 0.0001f || Math.Abs(moveZ) > 0.0001f)
+        {
+            var effectiveSpeed = MovementCalculator.GetEffectiveSpeed(
+                BaseMovementSpeed,
+                entity.IsSprinting,
+                entity.IsSneaking);
 
-            var horizontalStepX = desiredDeltaX;
-            var horizontalStepZ = desiredDeltaZ;
+            var frictionSpeed = MovementCalculator.GetFrictionInfluencedSpeed(
+                blockFriction,
+                effectiveSpeed,
+                entity.IsOnGround);
 
-            // 2a. Move Up
-            var currentStepY = StepHeight; // Attempt to move up by full step height
-            var stepUpBox = originalBox; // Start from original box for this sub-movement simulation
+            var acceleration = MovementCalculator.CalculateInputAcceleration(
+                moveX,
+                moveZ,
+                entity.YawPitch.X,
+                frictionSpeed);
 
-            // Check for collisions when moving up
-            var stepUpColliders = level.GetCollidingBlockAABBs(stepUpBox.Offset(0, currentStepY, 0).Expand(Epsilon));
-            currentStepY = stepUpColliders.Aggregate(currentStepY, (current, blockBox) => stepUpBox.CalculateYOffset(blockBox, current));
-            stepUpBox = stepUpBox.Offset(0, currentStepY, 0); // Actual vertical position after potential collision
+            entity.Velocity += acceleration;
+        }
 
-            // 2b. Move Horizontally (X then Z) at the new height
-            var currentStepX = horizontalStepX;
-            var stepXColliders = level.GetCollidingBlockAABBs(stepUpBox.Offset(currentStepX, 0, 0).Expand(Epsilon));
-            currentStepX = stepXColliders.Aggregate(currentStepX, (current, blockBox) => stepUpBox.CalculateXOffset(blockBox, current));
-            stepUpBox = stepUpBox.Offset(currentStepX, 0, 0);
+        // 5. Handle Climbing (Source: LivingEntity.handleOnClimbable)
+        entity.Velocity = MovementCalculator.HandleClimbing(entity.Velocity, false, entity.IsSneaking);
 
-            var currentStepZ = horizontalStepZ;
-            var stepZColliders = level.GetCollidingBlockAABBs(stepUpBox.Offset(0, 0, currentStepZ).Expand(Epsilon));
-            currentStepZ = stepZColliders.Aggregate(currentStepZ, (current, blockBox) => stepUpBox.CalculateZOffset(blockBox, current));
-            stepUpBox = stepUpBox.Offset(0, 0, currentStepZ);
+        // 6. Apply Entity Collisions
+        var pushVelocity = CollisionResolver.ResolveEntityCollisions(entity, level);
+        entity.Velocity += pushVelocity;
 
+        // 7. Apply Knockback
+        ApplyKnockback(entity);
 
-            // --- 3. Settle Down onto the Step ---
-            // After moving X and Z at the stepped-up height, try to move down to find solid ground.
-            // The entity should not float if it stepped up partially.
-            double finalDownY = 0;
-            // Check down a bit more than currentStepY to ensure we find ground if it's there.
-            var checkDownDist = currentStepY + 1.0; 
-            var checkDownBox = stepUpBox.Offset(0, -checkDownDist, 0); // AABB for checking downwards
-            var downColliders = level.GetCollidingBlockAABBs(checkDownBox);
+        // 8. MOVE with collision resolution
+        var collisionResult = MoveWithCollisions(entity, level);
 
-            // Find the highest solid ground below the current stepUpBox position
-            var highestGroundY = originalBox.Min.Y - 1.0; // Start below original position
-            var foundGround = false;
-            foreach (var blockBox in downColliders)
+        // 9. Update state from collision result
+        entity.IsOnGround = collisionResult.LandedOnGround;
+        entity.HorizontalCollision = collisionResult.HorizontalCollision;
+
+        // 10. POST-MOVE: Apply Gravity and Friction / Damping
+        if (entity.IsInWater || entity.IsInLava)
+        {
+            entity.Velocity = MovementCalculator.ApplyFluidPhysics(
+                entity.Velocity,
+                DefaultGravity,
+                entity.IsSprinting,
+                entity.IsInWater,
+                entity.IsInLava);
+        }
+        else
+        {
+            // Horizontal friction
+            entity.Velocity = MovementCalculator.ApplyHorizontalFriction(
+                entity.Velocity,
+                blockFriction,
+                entity.IsOnGround);
+
+            // Gravity and vertical drag
+            entity.Velocity = MovementCalculator.ApplyGravity(entity.Velocity, DefaultGravity);
+        }
+
+        // Final clamp to prevent jitter
+        entity.Velocity = MovementCalculator.ClampMinimumMovement(entity.Velocity);
+
+        // 11. Sprint state and packets
+        UpdateSprintState(entity, collisionResult);
+        await SendMovementPacketsAsync(entity, collisionResult, sendPacketAsync);
+    }
+
+    private void UpdateFluidState(Entity entity, Level level)
+    {
+        var box = entity.GetBoundingBox();
+        var minX = (int)Math.Floor(box.Min.X);
+        var minY = (int)Math.Floor(box.Min.Y);
+        var minZ = (int)Math.Floor(box.Min.Z);
+        var maxX = (int)Math.Floor(box.Max.X);
+        var maxY = (int)Math.Floor(box.Max.Y);
+        var maxZ = (int)Math.Floor(box.Max.Z);
+
+        var inWater = false;
+        var inLava = false;
+        var maxFluidHeight = 0.0;
+
+        for (var x = minX; x <= maxX; x++)
+        {
+            for (var y = minY; y <= maxY; y++)
             {
-                // Is this block below our feet and higher than previously found ground?
-                if (blockBox.Max.Y <= stepUpBox.Min.Y + Epsilon && blockBox.Max.Y > highestGroundY)
+                for (var z = minZ; z <= maxZ; z++)
                 {
-                    // Check for horizontal overlap
-                    if (blockBox.Max.X > stepUpBox.Min.X && blockBox.Min.X < stepUpBox.Max.X &&
-                        blockBox.Max.Z > stepUpBox.Min.Z && blockBox.Min.Z < stepUpBox.Max.Z)
+                    var block = level.GetBlockAt(x, y, z);
+                    if (block == null) continue;
+
+                    var isWater = block.Name.Contains("water", StringComparison.OrdinalIgnoreCase);
+                    var isLava = block.Name.Contains("lava", StringComparison.OrdinalIgnoreCase);
+
+                    if (isWater || isLava)
                     {
-                        highestGroundY = blockBox.Max.Y;
-                        foundGround = true;
+                        // Check if entity's AABB intersects the fluid block
+                        var blockBox = new AABB(x, y, z, x + 1, y + 1, z + 1);
+                        if (box.Intersects(blockBox))
+                        {
+                            if (isWater) inWater = true;
+                            if (isLava) inLava = true;
+                            
+                            // Height of fluid in this column relative to the entity's feet
+                            var height = (y + 1) - box.Min.Y;
+                            maxFluidHeight = Math.Max(maxFluidHeight, height);
+                        }
                     }
                 }
             }
-            
-            if (foundGround)
-            {
-                finalDownY = highestGroundY - stepUpBox.Min.Y; // Calculate downward offset
-                if (finalDownY > Epsilon) finalDownY = 0; // Don't move up if ground is somehow higher
-                if (finalDownY < -checkDownDist) finalDownY = -checkDownDist; // Safety clamp
-            }
-            else // If no ground found after stepping, this step is invalid (e.g. stepping over a ledge)
-            {
-                return Vector3<double>.Zero;
-            }
-
-            stepUpBox = stepUpBox.Offset(0, finalDownY, 0);
-
-            // --- 4. Calculate Final Delta ---
-            // The final delta is the difference between the original box's min corner and the final stepUpBox's min corner.
-            var finalDelta = stepUpBox.Min - originalBox.Min;
-
-            // If the step up resulted in less horizontal movement than simply colliding, it's not a valid step.
-            // (This check was originally in MoveEntityWithCollisions, makes sense here too)
-            if (finalDelta.X * finalDelta.X + finalDelta.Z * finalDelta.Z < desiredDeltaX * desiredDeltaX + desiredDeltaZ * desiredDeltaZ - Epsilon &&
-                Math.Abs(finalDelta.Y - currentStepY - finalDownY) < Epsilon) // Ensure Y is part of the step
-            {
-                 // This condition means we moved up, but then didn't move as far horizontally as intended.
-                 // Could happen if the step itself is blocked.
-            }
-
-
-            // Ensure we actually moved up, otherwise it's not a step.
-            if (finalDelta.Y < Epsilon)
-            {
-                return Vector3<double>.Zero;
-            }
-            
-            return finalDelta;
         }
+
+        entity.IsInWater = inWater;
+        entity.IsInLava = inLava;
+        entity.FluidHeight = maxFluidHeight;
+    }
+
+
+
+    /// <summary>
+    /// Applies knockback velocity if the entity was hurt.
+    /// </summary>
+    private void ApplyKnockback(Entity entity)
+    {
+        if (!entity.IsHurt || entity.HurtFromYaw is not { } hurtYaw)
+        {
+            return;
+        }
+
+        // Calculate knockback direction
+        var attackAngle = (entity.YawPitch.X + 90 + hurtYaw) * (Math.PI / 180);
+
+        entity.Velocity = new Vector3<double>(
+            entity.Velocity.X - Math.Sin(attackAngle) * DefaultKnockback,
+            entity.Velocity.Y + DefaultKnockback, // Vertical boost
+            entity.Velocity.Z + Math.Cos(attackAngle) * DefaultKnockback
+        );
+
+        // Clear hurt state
+        entity.HurtFromYaw = null;
+    }
+
+    /// <summary>
+    /// Moves the entity with collision resolution.
+    /// </summary>
+    private CollisionResult MoveWithCollisions(Entity entity, Level level)
+    {
+        var result = CollisionResolver.MoveWithCollisions(
+            entity.GetBoundingBox(),
+            level,
+            entity.Velocity,
+            entity.IsOnGround,
+            entity.IsSneaking,
+            entity.IsInWater || entity.IsInLava);
+
+        // Update entity position
+        entity.UpdatePositionFromAABB(result.FinalBoundingBox);
+
+        // Zero out velocity components that collided
+        if (result.CollidedX)
+        {
+            entity.Velocity = new Vector3<double>(0, entity.Velocity.Y, entity.Velocity.Z);
+        }
+
+        if (result.CollidedY)
+        {
+            entity.Velocity = new Vector3<double>(entity.Velocity.X, 0, entity.Velocity.Z);
+        }
+
+        if (result.CollidedZ)
+        {
+            entity.Velocity = new Vector3<double>(entity.Velocity.X, entity.Velocity.Y, 0);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Updates sprint state based on input and collisions.
+    /// Source: Java's LocalPlayer.sendIsSprintingIfNeeded()
+    /// </summary>
+    private void UpdateSprintState(Entity entity, CollisionResult collision)
+    {
+        var wantsToMove = entity.Input.HasMovement;
+        var hasForwardImpulse = entity.Input.HasForwardImpulse;
+        var canSprint = entity.Hunger > 6 && !entity.IsSneaking;
+
+        // Start sprinting conditions
+        if (entity.WantsToSprint && !entity.IsSprinting &&
+            wantsToMove && hasForwardImpulse &&
+            !collision.HorizontalCollision && canSprint)
+        {
+            entity.IsSprinting = true;
+        }
+        // Stop sprinting conditions
+        else if (entity.IsSprinting &&
+                 (!wantsToMove || !hasForwardImpulse ||
+                  collision.HorizontalCollision || !entity.WantsToSprint ||
+                  entity.Hunger <= 6))
+        {
+            entity.IsSprinting = false;
+        }
+    }
+
+    /// <summary>
+    /// Sends movement packets to the server.
+    /// Source: Java's LocalPlayer.sendPosition() and sendIsSprintingIfNeeded()
+    /// </summary>
+    private async Task SendMovementPacketsAsync(
+        Entity entity,
+        CollisionResult collision,
+        Func<IServerboundPacket, Task> sendPacketAsync)
+    {
+        // Send sprint state change if needed
+        if (entity.IsSprinting != entity.WasSprinting)
+        {
+            var action = entity.IsSprinting
+                ? PlayerAction.StartSprint
+                : PlayerAction.StopSprint;
+
+            await sendPacketAsync(new PlayerCommandPacket
+            {
+                EntityId = entity.EntityId,
+                Action = action
+            });
+
+            entity.WasSprinting = entity.IsSprinting;
+        }
+
+        // Send position packet if we moved
+        var actualDelta = collision.ActualDelta;
+        var significantMove = Math.Abs(actualDelta.X) > Epsilon ||
+                              Math.Abs(actualDelta.Y) > Epsilon ||
+                              Math.Abs(actualDelta.Z) > Epsilon;
+
+        if (!significantMove && !entity.IsHurt)
+        {
+            return;
+        }
+
+        var flags = entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None;
+        if (entity.HorizontalCollision)
+        {
+            flags |= MovementFlags.HorizontalCollision;
+        }
+
+        await sendPacketAsync(new MovePlayerPositionRotationPacket
+        {
+            X = entity.Position.X,
+            Y = entity.Position.Y,
+            Z = entity.Position.Z,
+            Yaw = entity.YawPitch.X,
+            Pitch = entity.YawPitch.Y,
+            Flags = flags
+        });
     }
 }

@@ -7,6 +7,7 @@ public class PalettedContainer
     private IPalette _palette;
     private BitStorage? _storage;
     private readonly PaletteType _paletteType;
+    private readonly Lock _lock = new();
 
     public PalettedContainer(PaletteType paletteType)
     {
@@ -16,84 +17,109 @@ public class PalettedContainer
 
     public int? Get(int index)
     {
-        if (_storage is null) return null;
+        lock (_lock)
+        {
+            if (_storage is null)
+            {
+                try
+                {
+                    return _palette.RegistryIdFor(0);
+                }
+                catch (IndexOutOfRangeException)
+                {
+                    return null;
+                }
+            }
 
-        var paletteId = _storage.Get(index);
-        return _palette.RegistryIdFor(paletteId);
+            var paletteId = _storage.Get(index);
+            return _palette.RegistryIdFor(paletteId);
+        }
     }
 
     public void Read(ref PacketBufferReader reader)
     {
         var bitsPerEntry = reader.ReadUnsignedByte();
-        _palette = CreatePalette(bitsPerEntry);
-        _palette.Read(ref reader);
+        var newPalette = CreatePalette(bitsPerEntry);
+        newPalette.Read(ref reader);
 
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
+        BitStorage? newStorage = null;
 
-        if (bitsPerEntry is 0) return;
-
-        var entriesPerLong = 64 / bitsPerEntry;
-        var numberOfLongs = (size + entriesPerLong - 1) / entriesPerLong;
-        var bitData = new long[numberOfLongs];
-
-        for (var i = 0; i < numberOfLongs; i++)
+        if (bitsPerEntry > 0)
         {
-            bitData[i] = reader.ReadSignedLong();
+            var entriesPerLong = 64 / bitsPerEntry;
+            var numberOfLongs = (size + entriesPerLong - 1) / entriesPerLong;
+            var bitData = new long[numberOfLongs];
+
+            for (var i = 0; i < numberOfLongs; i++)
+            {
+                bitData[i] = reader.ReadSignedLong();
+            }
+
+            newStorage = new BitStorage(bitsPerEntry, size, bitData);
         }
 
-        _storage = new BitStorage(bitsPerEntry, size, bitData);
+        lock (_lock)
+        {
+            _palette = newPalette;
+            _storage = newStorage;
+        }
     }
 
     public void Set(int index, int registryId)
     {
-        if (_storage is null)
+        lock (_lock)
         {
-            if (_palette is SingleValuePalette singleValuePalette)
+            if (_storage is null)
             {
-                try
+                if (_palette is SingleValuePalette singleValuePalette)
                 {
-                    singleValuePalette.IdFor(registryId);
-                    return;
-                }
-                catch (InvalidOperationException)
-                {
-                    var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
-                    _palette = CreatePalette(4);
-                    _storage = new BitStorage(4, size, null);
-
-                    var oldRegistryId = singleValuePalette.RegistryIdFor(0);
-                    var oldPaletteId = _palette.IdFor(oldRegistryId);
-
-                    for (var i = 0; i < size; i++)
+                    try
                     {
-                        _storage.Set(i, oldPaletteId);
+                        singleValuePalette.IdFor(registryId);
+                        return;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
+                        _palette = CreatePalette(4);
+                        _storage = new BitStorage(4, size, null);
+
+                        var oldRegistryId = singleValuePalette.RegistryIdFor(0);
+                        var oldPaletteId = _palette.IdFor(oldRegistryId);
+
+                        for (var i = 0; i < size; i++)
+                        {
+                            _storage.Set(i, oldPaletteId);
+                        }
                     }
                 }
+                else
+                {
+                    var bitsNeeded = Math.Max(4, (int)Math.Ceiling(Math.Log2(registryId + 1)));
+                    var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
+                    _storage = new BitStorage(bitsNeeded, size, null);
+                    _palette = CreatePalette(bitsNeeded);
+                }
             }
-            else
-            {
-                var bitsNeeded = Math.Max(4, (int)Math.Ceiling(Math.Log2(registryId + 1)));
-                var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
-                _storage = new BitStorage(bitsNeeded, size, null);
-                _palette = CreatePalette(bitsNeeded);
-            }
-        }
 
-        try
-        {
-            var paletteId = _palette.IdFor(registryId);
-            _storage.Set(index, paletteId);
-        }
-        catch (InvalidOperationException)
-        {
-            UpgradePalette();
-            var paletteId = _palette.IdFor(registryId);
-            _storage.Set(index, paletteId);
+            try
+            {
+                var paletteId = _palette.IdFor(registryId);
+                _storage!.Set(index, paletteId);
+            }
+            catch (InvalidOperationException)
+            {
+                UpgradePalette();
+                var paletteId = _palette.IdFor(registryId);
+                _storage!.Set(index, paletteId);
+            }
         }
     }
 
     private void UpgradePalette()
     {
+        // Must be called within a lock
         var currentBits = _palette switch
         {
             SingleValuePalette => 0,

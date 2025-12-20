@@ -32,6 +32,9 @@ namespace MinecraftProtoNet.Services
         private AStarPathFinder? _pathFinder;
         private List<Vector3<double>>? _currentPath;
         private int _currentPathIndex;
+        private Vector3<double>? _originalTarget;
+        private bool _isPartialPath;
+        private float _lastMinDistance = float.MaxValue;
 
         public void Initialize(Level level)
         {
@@ -42,25 +45,25 @@ namespace MinecraftProtoNet.Services
         {
             if (_pathFinder == null)
             {
-                StopFollowingPath(entity); // Pass entity
+                StopFollowingPath(entity);
                 return false;
             }
 
-            // entity is already available as a parameter, no need for State.LocalPlayer.HasEntity
-            // if (entity == null) { StopFollowingPath(entity); return false; } // This check might be redundant if entity is guaranteed non-null
-
+            _originalTarget = target;
             var start = entity.Position;
-            _currentPath = _pathFinder.FindPath(start, target);
+            var result = _pathFinder.FindPath(start, target);
 
-            if (_currentPath is not { Count: > 1 }) // Path needs at least start and one target node
+            if (result.Path is not { Count: > 1 })
             {
-                _currentPath = null;
-                _currentPathIndex = 0;
-                ClearMovementInputs(entity);
+                StopFollowingPath(entity);
                 return false;
             }
 
-            _currentPathIndex = 1; // Start by aiming for the second node in the path (index 1)
+            _currentPath = result.Path;
+            _isPartialPath = !result.ReachedTarget;
+            _lastMinDistance = result.DistanceToTarget;
+            _currentPathIndex = 1;
+
             return true;
         }
 
@@ -68,6 +71,9 @@ namespace MinecraftProtoNet.Services
         {
             _currentPath = null;
             _currentPathIndex = 0;
+            _originalTarget = null;
+            _isPartialPath = false;
+            _lastMinDistance = float.MaxValue;
             // entity is passed as parameter, no need for State.LocalPlayer.HasEntity
             if (entity != null) // Ensure entity is not null before clearing inputs
             {
@@ -89,12 +95,77 @@ namespace MinecraftProtoNet.Services
         {
             if (_currentPath == null || _currentPathIndex >= _currentPath.Count)
             {
-                if (_currentPath != null) // If there was a path but it's now completed/invalid
+                // Check if we have an original target from a partial path
+                var hasPartialTarget = _originalTarget != null && _isPartialPath;
+                
+                if (hasPartialTarget)
+                {
+                    // Try to recompute, but if it fails, continue toward original target anyway
+                    var start = entity.Position;
+                    var result = _pathFinder!.FindPath(start, _originalTarget!);
+
+                    var isProgress = result.ReachedTarget || result.DistanceToTarget < _lastMinDistance - 0.1f;
+                    var isStuckAtTip = _currentPathIndex >= (_currentPath?.Count ?? 0) && result.Path?.Count > 1;
+
+                    if (result.Path is { Count: > 1 } && (isProgress || isStuckAtTip))
+                    {
+                        _currentPath = result.Path;
+                        _isPartialPath = !result.ReachedTarget;
+                        _lastMinDistance = result.DistanceToTarget;
+                        _currentPathIndex = 1;
+                        Console.WriteLine($"[PATH_DEBUG] Recomputed path. Partial={_isPartialPath}, DistToTarget={_lastMinDistance:F2}");
+                        return;
+                    }
+                    
+                    // Recomputation failed - but we have a target, so continue toward it directly
+                    Console.WriteLine("[PATH_DEBUG] Recomputation failed - continuing toward original target directly.");
+                    goto ContinueTowardTarget;
+                }
+
+                // No partial target - clean up
+                if (_currentPath != null)
                 {
                     StopFollowingPath(entity);
                 }
                 return;
             }
+            
+            goto NormalPathFollowing;
+            
+            ContinueTowardTarget:
+            {
+                // Emergency fallback: move toward original target directly
+                var airCurrentPos = entity.Position;
+                var airTargetPos = _originalTarget!;
+                var airVectorToTarget = airTargetPos - airCurrentPos;
+                var airHorizontalVector = new Vector3<double>(airVectorToTarget.X, 0, airVectorToTarget.Z);
+                
+                if (airHorizontalVector.LengthSquared() > Epsilon * Epsilon)
+                {
+                    var airEyePosition = airCurrentPos + new Vector3<double>(0, Entity.PlayerEyeHeight, 0);
+                    var airTargetCenter = new Vector3<double>(Math.Floor(airTargetPos.X) + 0.5, airTargetPos.Y, Math.Floor(airTargetPos.Z) + 0.5);
+                    var airVectorToTargetCenter = airTargetCenter - airEyePosition;
+                    var airHorizontalVectorForYaw = new Vector3<double>(airVectorToTargetCenter.X, 0, airVectorToTargetCenter.Z);
+                    
+                    if (airHorizontalVectorForYaw.LengthSquared() > Epsilon * Epsilon)
+                    {
+                        var airTargetYaw = (float)(Math.Atan2(-airHorizontalVectorForYaw.X, airHorizontalVectorForYaw.Z) * (180.0 / Math.PI));
+                        entity.YawPitch = new Vector2<float>(airTargetYaw, entity.YawPitch.Y);
+                    }
+                    
+                    var airHorizontalDirection = airHorizontalVector.Normalized();
+                    var airYawRadians = entity.YawPitch.X * (Math.PI / 180.0);
+                    var airSinNegativeYaw = Math.Sin(-airYawRadians);
+                    var airCosNegativeYaw = Math.Cos(-airYawRadians);
+                    var airLocalMoveZ = airHorizontalDirection.X * airSinNegativeYaw + airHorizontalDirection.Z * airCosNegativeYaw;
+                    
+                    entity.Forward = airLocalMoveZ > PathInputThreshold;
+                    Console.WriteLine($"[PATH_DEBUG] Airborne fallback: FWD={entity.Forward}, Yaw={entity.YawPitch.X:F1}");
+                }
+                return;
+            }
+            
+            NormalPathFollowing:
 
             var targetNode = _currentPath[_currentPathIndex];
             var currentPosition = entity.Position;
@@ -102,24 +173,88 @@ namespace MinecraftProtoNet.Services
             // If it's an instance property, it would be entity.PlayerEyeHeight
             var currentEyePosition = currentPosition + new Vector3<double>(0, Entity.PlayerEyeHeight, 0); 
 
-            // --- Waypoint Reached Check ---
+            // --- Waypoint Reached Check (Adopted from Java PathNavigation) ---
             var vectorToTarget = targetNode - currentPosition;
             var horizontalVectorToTarget = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z);
             var horizontalDistanceToTargetSq = horizontalVectorToTarget.LengthSquared();
+            
+            // Java PathNavigation uses BBWidth for reach threshold:
+            // maxDistanceToWaypoint = width > 0.75 ? width/2 : 0.75 - width/2
+            // For Player (0.6): 0.75 - 0.3 = 0.45. We'll use 0.45.
+            var reachThreshold = 0.45;
+            var heightDiff = Math.Abs(targetNode.Y - currentPosition.Y);
+            
+            // Stricter reach for vertical transitions (jumps/drops)
+            if (heightDiff > 0.1) reachThreshold = 0.2; 
 
-            if (horizontalDistanceToTargetSq < PathNodeReachThresholdSq)
+            // Tighten height check for vertical transitions to prevent early completion in air
+            // UP transitions (swimming/jumping) need to be very precise (0.2m)
+            // DOWN transitions (dropping) can be looser (0.5m) to prevent oscillation
+            var verticalReachThreshold = targetNode.Y > currentPosition.Y ? 0.2 : 0.5;
+            
+            bool reached = horizontalDistanceToTargetSq < (reachThreshold * reachThreshold) && heightDiff < verticalReachThreshold;
+
+            // Strict grounding/fluid check: 
+            // We cannot complete a waypoint if we are unsupported in the air (e.g., bobbing at jump apex).
+            // We must either be on the ground or swimming in fluid.
+            if (reached && !entity.IsOnGround && !entity.IsInWater && !entity.IsInLava)
             {
+                reached = false;
+            }
+            
+            // Java "Passed" Check: If we are close and the next node is behind us
+            if (!reached && _currentPathIndex + 1 < _currentPath.Count)
+            {
+                var nextNode = _currentPath[_currentPathIndex + 1];
+                var mobToCurrent = targetNode - currentPosition;
+                var mobToNext = nextNode - currentPosition;
+                var mobToCurrentHoriz = new Vector3<double>(mobToCurrent.X, 0, mobToCurrent.Z);
+                var mobToNextHoriz = new Vector3<double>(mobToNext.X, 0, mobToNext.Z);
+                
+                if (mobToCurrentHoriz.LengthSquared() < 1.0) // Only if we are fairly close to current
+                {
+                    if (mobToNextHoriz.Dot(mobToCurrentHoriz) < 0)
+                    {
+                        reached = true; // We passed it
+                        Console.WriteLine($"[PATH_DEBUG] Passed waypoint {_currentPathIndex} (DotProduct check)");
+                    }
+                }
+            }
+
+            if (reached)
+            {
+                Console.WriteLine($"[PATH_DEBUG] Reached waypoint {_currentPathIndex}: {targetNode}");
                 _currentPathIndex++;
                 if (_currentPathIndex >= _currentPath.Count)
                 {
-                    StopFollowingPath(entity);
-                    return;
+                    if (!_isPartialPath)
+                    {
+                        Console.WriteLine("[PATH_DEBUG] Path completed.");
+                        StopFollowingPath(entity);
+                        return;
+                    }
+                    
+                    // It was a partial path. Instead of targeting the last (now passed) waypoint,
+                    // target the ORIGINAL destination to maintain forward momentum.
+                    // This is critical for water-to-land transitions where we're bobbing up.
+                    Console.WriteLine("[PATH_DEBUG] Reached tip of partial path. Targeting original destination...");
+                    if (_originalTarget != null)
+                    {
+                        targetNode = _originalTarget;
+                        vectorToTarget = targetNode - currentPosition;
+                        horizontalVectorToTarget = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z);
+                        horizontalDistanceToTargetSq = horizontalVectorToTarget.LengthSquared();
+                    }
                 }
-                // Update targetNode and related vectors for the new waypoint
-                targetNode = _currentPath[_currentPathIndex];
-                vectorToTarget = targetNode - currentPosition;
-                horizontalVectorToTarget = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z);
-                horizontalDistanceToTargetSq = horizontalVectorToTarget.LengthSquared();
+                else
+                {
+                    // Update targetNode and related vectors for the new waypoint
+                    targetNode = _currentPath[_currentPathIndex];
+                    vectorToTarget = targetNode - currentPosition;
+                    horizontalVectorToTarget = new Vector3<double>(vectorToTarget.X, 0, vectorToTarget.Z);
+                    horizontalDistanceToTargetSq = horizontalVectorToTarget.LengthSquared();
+                    Console.WriteLine($"[PATH_DEBUG] New waypoint {_currentPathIndex}: {targetNode}");
+                }
             }
 
             // --- Update Look Direction (Yaw) ---
@@ -150,6 +285,8 @@ namespace MinecraftProtoNet.Services
                 entity.Left = localMoveX < -PathInputThreshold; // Corrected: was localMoveX > PathInputThreshold for Left
                 entity.Right = localMoveX > PathInputThreshold;
 
+                Console.WriteLine($"[PATH_DEBUG] Input: FWD={entity.Forward}, BCK={entity.Backward}, LFT={entity.Left}, RGT={entity.Right}, SPRINT={entity.IsSprinting}, Yaw={entity.YawPitch.X:F1}");
+
                 var shouldSprint = CalculateIfShouldSprint(entity, currentPosition, _currentPath, _currentPathIndex);
                 if (shouldSprint && entity.Forward) // Only sprint if moving forward
                 {
@@ -168,7 +305,8 @@ namespace MinecraftProtoNet.Services
 
             // --- Jump Logic (includes anticipation) ---
             var needsToJump = false;
-            if (entity.IsOnGround) // Only consider jumping if on ground
+            // Only consider jumping if on ground OR in water (to swim)
+            if (entity.IsOnGround || entity.IsInWater) 
             {
                 // Check height difference to the immediate next node
                 var heightDiffNext = targetNode.Y - currentPosition.Y;
@@ -184,12 +322,18 @@ namespace MinecraftProtoNet.Services
                 // Condition for needing to jump:
                 // 1. Next node is significantly higher OR
                 // 2. Node after next is significantly higher AND next node isn't a drop
+                // 3. Swimming up: Target node is above us and we are in water
+                // 4. Stuck against a wall (HorizontalCollision), but NOT if we are dropping
                 var jumpRequiredSoon = (heightDiffNext > RequiredJumpHeightThreshold) ||
-                                       (hasNextNextNode && heightDiffNextNextActual > RequiredJumpHeightThreshold && heightDiffNext > -0.2);
+                                       (hasNextNextNode && heightDiffNextNextActual > RequiredJumpHeightThreshold && heightDiffNext > -0.2) ||
+                                       (entity.IsInWater && heightDiffNext > 0.1) ||
+                                       (entity.HorizontalCollision && heightDiffNext >= -0.2); // Don't jump if dropping significantly
 
-                if (jumpRequiredSoon && horizontalDistanceToTargetSq < JumpAnticipationDistanceSq)
+                if (jumpRequiredSoon && (horizontalDistanceToTargetSq < JumpAnticipationDistanceSq || entity.HorizontalCollision))
                 {
                     needsToJump = true;
+                    if (entity.IsInWater && heightDiffNext > 0.1) Console.WriteLine($"[PATH_DEBUG] Decided to swim up: TargetY={targetNode.Y:F2}, CurrentY={currentPosition.Y:F2}");
+                    else if (entity.HorizontalCollision && heightDiffNext < RequiredJumpHeightThreshold) Console.WriteLine("[PATH_DEBUG] Jumping due to horizontal collision.");
                 }
             }
 
@@ -199,9 +343,9 @@ namespace MinecraftProtoNet.Services
             }
             else
             {
-                // Stop jumping only if on ground and no jump is immediately needed.
-                // This prevents interrupting an ongoing jump if IsOnGround becomes true mid-air.
-                if (entity.IsOnGround) 
+                // Stop jumping if on ground OR if in water but don't need to swim up.
+                // We keep jumping if we are in the middle of a land jump (not on ground and not in water).
+                if (entity.IsOnGround || entity.IsInWater) 
                 {
                     entity.StopJumping();
                 }

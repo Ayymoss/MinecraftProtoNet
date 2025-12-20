@@ -4,6 +4,11 @@ using MinecraftProtoNet.Utilities;
 
 namespace Bot;
 
+// TODO: We need to code-gen for blocks, registries etc
+
+/*
+ * IMPORTANT: USE THE `minecraft-26.1-REFERENCE-ONLY` as the foundational truth lookup as it is the client/server sourcecode. Everything from the Java client will be there. We just need to resolve the C#-implementation for the same components.
+ */
 public static class Program
 {
     public static async Task Main()

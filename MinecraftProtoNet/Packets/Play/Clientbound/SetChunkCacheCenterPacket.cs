@@ -9,11 +9,11 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class SetChunkCacheCenterPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }
-    public int ChunkY { get; set; }
+    public int ChunkZ { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
         ChunkX = buffer.ReadVarInt();
-        ChunkY = buffer.ReadVarInt();
+        ChunkZ = buffer.ReadVarInt();
     }
 }

@@ -76,7 +76,7 @@ public class CommandRegistry
         var command = GetCommand(commandName);
         if (command == null)
         {
-            Console.WriteLine($"[WARN] Unknown command: {commandName}");
+            await context.SendChatAsync($"Unknown command: {commandName}");
             return false;
         }
 

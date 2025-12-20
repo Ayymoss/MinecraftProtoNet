@@ -38,7 +38,7 @@ public class ConfigurationHandler : IPacketHandler
             {
                 Console.WriteLine("[DEBUG] Handling FinishConfigurationPacket...");
                 // Setup the client environment
-                var blockJsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-1.21.5.json"); // TODO: Rehome
+                var blockJsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-26.1.json"); // TODO: Rehome
                 var blockJsonString = await File.ReadAllTextAsync(blockJsonFilePath);
                 var blockData = JsonSerializer.Deserialize<Dictionary<string, BlockRoot>>(blockJsonString) ?? [];
                 var blockStateData = blockData
@@ -52,7 +52,7 @@ public class ConfigurationHandler : IPacketHandler
                 ClientState.InitializeBiomeRegistry(biomes);
 
                 var registryJsonFilePath =
-                    Path.Combine(AppContext.BaseDirectory, "StaticFiles", "registries-1.21.5.json"); // TODO: Rehome
+                    Path.Combine(AppContext.BaseDirectory, "StaticFiles", "registries-26.1.json"); // TODO: Rehome
                 var registryJsonString = await File.ReadAllTextAsync(registryJsonFilePath);
                 var registry = JsonSerializer.Deserialize<Dictionary<string, RegistryRoot>>(registryJsonString) ?? [];
                 var itemData = registry["minecraft:item"].Entries
