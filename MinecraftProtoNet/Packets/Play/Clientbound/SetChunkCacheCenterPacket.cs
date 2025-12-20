@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x57, ProtocolState.Play)]
+[Packet(0x5D, ProtocolState.Play)]
 public class SetChunkCacheCenterPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }

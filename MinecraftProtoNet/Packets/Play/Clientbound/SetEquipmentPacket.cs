@@ -9,7 +9,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Implement this packet
-[Packet(0x5F, ProtocolState.Play)]
+[Packet(0x65, ProtocolState.Play)]
 public class SetEquipmentPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

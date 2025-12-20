@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x05, ProtocolState.Play)]
+[Packet(0x06, ProtocolState.Play)]
 public class ChatCommandPacket(string command) : IServerboundPacket
 {
     public string Command { get; set; } = command;

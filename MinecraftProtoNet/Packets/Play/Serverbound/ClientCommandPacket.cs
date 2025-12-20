@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x0A, ProtocolState.Play)]
+[Packet(0x0B, ProtocolState.Play)]
 public class ClientCommandPacket : IServerboundPacket
 {
     public required Action ActionId { get; set; }

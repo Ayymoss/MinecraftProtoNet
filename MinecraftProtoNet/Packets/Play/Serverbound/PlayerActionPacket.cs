@@ -8,7 +8,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x27, ProtocolState.Play)]
+[Packet(0x28, ProtocolState.Play)]
 public class PlayerActionPacket : IServerboundPacket
 {
     public required StatusType Status { get; set; }

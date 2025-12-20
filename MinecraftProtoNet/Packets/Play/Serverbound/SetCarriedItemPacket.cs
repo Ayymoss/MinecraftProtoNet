@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x33, ProtocolState.Play)]
+[Packet(0x34, ProtocolState.Play)]
 public class SetCarriedItemPacket : IServerboundPacket
 {
     public required short Slot { get; set; }

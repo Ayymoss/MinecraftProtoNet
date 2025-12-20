@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x28, ProtocolState.Play)]
+[Packet(0x29, ProtocolState.Play)]
 public class PlayerCommandPacket : IServerboundPacket
 {
     public required int EntityId { get; set; }

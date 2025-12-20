@@ -44,6 +44,14 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(UpdateAttributesPacket))]
 [HandlesPacket(typeof(LevelEventPacket))]
 [HandlesPacket(typeof(SoundPacket))]
+[HandlesPacket(typeof(SetEquipmentPacket))]
+[HandlesPacket(typeof(TickingStatePacket))]
+[HandlesPacket(typeof(TickingStepPacket))]
+[HandlesPacket(typeof(ServerDataPacket))]
+[HandlesPacket(typeof(SetChunkCacheCenterPacket))]
+[HandlesPacket(typeof(TrackedWaypointPacket))]
+[HandlesPacket(typeof(ChunkBatchFinishedPacket))]
+[HandlesPacket(typeof(TakeItemEntityPacket))]
 public class PlayHandler : IPacketHandler
 {
     private bool _playerLoaded;
@@ -287,6 +295,12 @@ public class PlayHandler : IPacketHandler
                 var (chunkX, chunkZ) = (levelChunkWithLightPacket.ChunkX, levelChunkWithLightPacket.ChunkZ);
                 client.State.Level.Chunks.AddOrUpdate((chunkX, chunkZ), levelChunkWithLightPacket.Chunk,
                     (_, _) => levelChunkWithLightPacket.Chunk);
+                break;
+            }
+            case ChunkBatchFinishedPacket:
+            {
+                // Respond to chunk batch finished to acknowledge receipt and keep chunks flowing
+                await client.SendPacketAsync(new ChunkBatchReceivedPacket { DesiredChunksPerTick = 7.0f });
                 break;
             }
             case ForgetLevelChunkPacket forgetLevelChunkPacket:

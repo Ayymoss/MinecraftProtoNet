@@ -10,16 +10,12 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class SetEntityMotionPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
-    public Vector3<short> Velocity { get; set; }
+    public Vector3<double> Velocity { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
         EntityId = buffer.ReadVarInt();
-        Velocity = new Vector3<short>
-        {
-            X = buffer.ReadSignedShort(),
-            Y = buffer.ReadSignedShort(),
-            Z = buffer.ReadSignedShort()
-        };
+        Velocity = buffer.ReadLpVec3();
     }
 }
+

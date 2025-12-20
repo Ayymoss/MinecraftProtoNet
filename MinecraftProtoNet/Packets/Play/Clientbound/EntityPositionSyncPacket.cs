@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x23, ProtocolState.Play, false)]
+[Packet(0x23, ProtocolState.Play, true)]
 public class EntityPositionSyncPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

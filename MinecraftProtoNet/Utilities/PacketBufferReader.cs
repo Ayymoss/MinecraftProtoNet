@@ -306,6 +306,48 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return value;
     }
 
+    /// <summary>
+    /// Reads a low-precision Vec3 (LpVec3) format used for entity motion in MC 26.1+.
+    /// This is a compressed format that encodes a Vec3 in 1-7 bytes.
+    /// </summary>
+    public Vector3<double> ReadLpVec3()
+    {
+        const int DataBitsMask = 32767; // 15 bits
+        const double MaxQuantizedValue = 32766.0;
+        const int ContinuationFlag = 4;
+
+        var lowest = ReadUnsignedByte();
+        if (lowest == 0)
+        {
+            return new Vector3<double>(0, 0, 0);
+        }
+
+        var middle = ReadUnsignedByte();
+        var highest = ReadUnsignedInt();
+
+        // Combine into 48-bit buffer
+        long buffer = ((long)highest << 16) | ((long)middle << 8) | lowest;
+
+        // Extract scale from lowest 2 bits, with optional continuation
+        long scale = lowest & 3;
+        if ((lowest & ContinuationFlag) == ContinuationFlag)
+        {
+            scale |= ((long)ReadVarInt() & 0xFFFFFFFFL) << 2;
+        }
+
+        // Unpack X, Y, Z from bit positions 3, 18, 33 (15 bits each)
+        var x = Unpack(buffer >> 3) * scale;
+        var y = Unpack(buffer >> 18) * scale;
+        var z = Unpack(buffer >> 33) * scale;
+
+        return new Vector3<double>(x, y, z);
+
+        static double Unpack(long value)
+        {
+            return Math.Min(value & DataBitsMask, MaxQuantizedValue) * 2.0 / MaxQuantizedValue - 1.0;
+        }
+    }
+
     [Pure]
     public static int ReadVarInt(ReadOnlySpan<byte> buffer, out int bytesRead)
     {

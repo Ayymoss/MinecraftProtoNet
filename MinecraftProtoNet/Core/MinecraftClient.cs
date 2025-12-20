@@ -1,6 +1,8 @@
 ﻿using System.Net.Sockets;
+using MinecraftProtoNet.Actions;
 using MinecraftProtoNet.Auth;
 using MinecraftProtoNet.Auth.Dtos;
+using MinecraftProtoNet.Commands;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -9,25 +11,39 @@ using MinecraftProtoNet.Packets.Handshaking.Serverbound;
 using MinecraftProtoNet.Packets.Login.Serverbound;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
-// MinecraftProtoNet.Services is still needed for IPacketService if it's there, but we add more specific ones.
-// For this task, we are adding service implementations, so specific using for Services namespace is good.
 using MinecraftProtoNet.State.Base;
-using MinecraftProtoNet.Core.Abstractions; // Added
-using MinecraftProtoNet.Services; // Added (or ensured if already present for other services)
+using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
-public class MinecraftClient(Connection connection, IPacketService packetService) : IMinecraftClient
+public class MinecraftClient : IMinecraftClient
 {
+    private readonly Connection _connection;
+    private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService = new PhysicsService();
     private readonly IPathFollowerService _pathFollowerService = new PathFollowerService();
     private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private readonly CommandRegistry _commandRegistry = new();
+
     public ClientState State { get; } = new();
     public AuthResult AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
+
+    public MinecraftClient(Connection connection, IPacketService packetService)
+    {
+        _connection = connection;
+        _packetService = packetService;
+        _commandRegistry.AutoRegisterCommands();
+    }
+
+    /// <summary>
+    /// Creates an action context for invoking actions from external code (API, console, etc.)
+    /// </summary>
+    public IActionContext CreateActionContext() => new ActionContext(this, State, AuthResult);
 
     public async Task<bool> AuthenticateAsync()
     {
@@ -39,12 +55,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
     public void EnableEncryption(byte[] sharedSecret)
     {
-        connection.EnableEncryption(sharedSecret);
+        _connection.EnableEncryption(sharedSecret);
     }
 
     public void EnableCompression(int threshold)
     {
-        connection.EnableCompression(threshold);
+        _connection.EnableCompression(threshold);
     }
 
     public async Task ConnectAsync(string host, int port, bool isSnapshot = false)
@@ -52,7 +68,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         AnsiConsole.MarkupLine(
             $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{ProtocolState.ToString()}[/]");
 
-        await connection.ConnectAsync(host, port);
+        await _connection.ConnectAsync(host, port);
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
@@ -61,7 +77,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         // 775 is the protocol version for 1.21.x
         // Snapshot uses bit 30 set | 287 (for 26.1 Snapshot 1)
         var protocolVersion = isSnapshot ? (1 << 30) | 287 : 775;
-        
+
         var handshakePacket = new HandshakePacket
         {
             ProtocolVersion = protocolVersion,
@@ -96,12 +112,12 @@ public class MinecraftClient(Connection connection, IPacketService packetService
     public async Task DisconnectAsync()
     {
         await _cancellationTokenSource.CancelAsync();
-        connection.Dispose();
+        _connection.Dispose();
     }
 
     public async Task SendPacketAsync(IServerboundPacket packet)
     {
-        await connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
+        await _connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
     }
 
     private async Task ListenForPacketsAsync(CancellationToken cancellationToken)
@@ -110,10 +126,10 @@ public class MinecraftClient(Connection connection, IPacketService packetService
         {
             try
             {
-                var packetBuffer = await connection.ReadPacketBytesAsync(cancellationToken);
+                var packetBuffer = await _connection.ReadPacketBytesAsync(cancellationToken);
                 var reader = new PacketBufferReader(packetBuffer);
                 var packetId = reader.ReadVarInt();
-                var packet = packetService.CreateIncomingPacket(ProtocolState, packetId);
+                var packet = _packetService.CreateIncomingPacket(ProtocolState, packetId);
                 packet.Deserialize(ref reader);
 
                 if (packet is UnknownPacket)
@@ -129,7 +145,7 @@ public class MinecraftClient(Connection connection, IPacketService packetService
                     AnsiConsole.WriteLine(packet.GetPropertiesAsString()); // Some strings include brackets.
                 }
 
-                await packetService.HandlePacketAsync(packet, this);
+                await _packetService.HandlePacketAsync(packet, this);
             }
             catch (EndOfStreamException ex)
             {
@@ -166,516 +182,18 @@ public class MinecraftClient(Connection connection, IPacketService packetService
 
     public async Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage)
     {
-        if (!State.LocalPlayer.HasEntity) return;
-        var entity = State.LocalPlayer.Entity;
-        var sender = State.Level.GetPlayerByUuid(senderGuid);
-        var command = bodyMessage.Split(" ")[0];
+        if (!bodyMessage.StartsWith("!")) return;
 
-        if (command == "!say")
-        {
-            var messageContent = string.Join(" ", bodyMessage.Split(" ").Skip(1));
-            var packetToSend = ChatSigning.CreateSignedChatPacket(AuthResult, messageContent);
-            if (packetToSend == null)
-            {
-                Console.WriteLine("[WARN] Failed to create signed chat packet, falling back to unsigned.");
-                packetToSend = new ChatPacket(messageContent);
-            }
-            await SendPacketAsync(packetToSend);
-        }
+        var parts = bodyMessage[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
 
-        if (command == "!getblock")
-        {
-            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (coords.Length is 3)
-            {
-                var x = int.Parse(coords[0]);
-                var y = int.Parse(coords[1]);
-                var z = int.Parse(coords[2]);
-                var block = State.Level.GetBlockAt(x, y, z);
-                var message = block != null
-                    ? $"Block: ({block.Id}) {block.Name}"
-                    : $"Block not found at {x}, {y}, {z}";
-                //await SendPacketAsync(new ChatPacket(message));
-            }
-        }
+        var commandName = parts[0];
+        var args = parts.Skip(1).ToArray();
 
-        if (command == "!goto")
-        {
-            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (coords.Length is 3 or 4)
-            {
-                var x = float.Parse(coords[0]);
-                var y = float.Parse(coords[1]);
-                var z = float.Parse(coords[2]);
-                var speed = 0.25f;
-                if (coords.Length is 5) float.TryParse(coords[4], out speed);
-                ClientManagerHelpers.InterpolateToCoordinates(this, new Vector3<double>(x, y, z), speed);
-                await SendPacketAsync(new ChatPacket($"Moving to {x:N2}, {y:N2}, {z:N2}"));
-            }
-        }
-
-        if (command == "!gotopath")
-        {
-            var coords = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (coords.Length is 3)
-            {
-                var x = float.Parse(coords[0]);
-                var y = float.Parse(coords[1]);
-                var z = float.Parse(coords[2]);
-
-                _pathFollowerService.Initialize(State.Level); // Changed
-                var result = _pathFollowerService.FollowPathTo(State.LocalPlayer.Entity, new Vector3<double>(x, y, z)); // Changed
-
-                if (!result)
-                {
-                    await SendPacketAsync(new ChatPacket("I can't reach that position."));
-                    return;
-                }
-
-                await SendPacketAsync(new ChatPacket("Moving to that position."));
-            }
-        }
-
-        if (command == "!ping")
-        {
-            await SendPacketAsync(new Packets.Play.Serverbound.PingRequestPacket
-                { Payload = TimeProvider.System.GetLocalNow().ToUnixTimeMilliseconds() });
-        }
-
-        if (command == "!tps")
-        {
-            Console.WriteLine($"TPS: {State.Level.GetCurrentServerTps():N2} | MSPT: {State.Level.TickInterval:N2}ms");
-            //await SendPacketAsync(new ChatPacket($"TPS: {State.Level.GetCurrentServerTps():N2} " +
-            //$"| MSPT: {State.Level.TickInterval:N2}ms "));
-        }
-
-        if (command == "!attack")
-        {
-            var entities = State.Level.GetAllPlayers().Where(x => x.HasEntity).Select(x => x.Entity!);
-            var target = entity.GetLookingAtEntity(entity, entities, 3.5);
-            if (target is null)
-            {
-                await SendPacketAsync(new ChatPacket("I'm not looking at a player."));
-                return;
-            }
-
-            var yawPitchToTarget = entity.GetYawPitchToTarget(entity, target);
-            await SendPacketAsync(new MovePlayerRotationPacket
-            {
-                Yaw = yawPitchToTarget.X,
-                Pitch = yawPitchToTarget.Y,
-                Flags = MovementFlags.None
-            });
-
-            await SendPacketAsync(new InteractPacket
-            {
-                EntityId = target.EntityId,
-                Type = InteractType.Attack,
-                SneakKeyPressed = entity.IsSneaking
-            });
-            await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
-        }
-
-        if (command == "!swing")
-        {
-            var message = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (Enum.TryParse<Hand>(string.Join(" ", message), true, out var swing))
-                await SendPacketAsync(new SwingPacket { Hand = swing });
-        }
-
-        if (command == "!cmd")
-        {
-            var message = bodyMessage.Split(" ").Skip(1).ToArray();
-            await SendPacketAsync(new ChatCommandPacket(string.Join(" ", message)));
-        }
-
-        if (command == "!slot")
-        {
-            var message = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (message.Length is 1)
-            {
-                var slot = short.Parse(message[0]);
-                if (slot is < 0 or > 8)
-                {
-                    await SendPacketAsync(new ChatPacket("Slot must be between 0 and 8."));
-                    return;
-                }
-
-                await SendPacketAsync(new SetCarriedItemPacket { Slot = slot });
-                entity.HeldSlot = slot;
-            }
-            else
-            {
-                await SendPacketAsync(new ChatPacket($"Slot Held: {entity.HeldSlot} (0-8)"));
-            }
-        }
-
-        if (command == "!place")
-        {
-            if (entity.HeldItem.ItemId is null)
-            {
-                await SendPacketAsync(new ChatPacket("You are not holding anything."));
-                return;
-            }
-
-            await PlaceHelper();
-        }
-
-        if (command == "!lookat")
-        {
-            var args = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (args.Length is 3 or 4)
-            {
-                var x = float.Parse(args[0]);
-                var y = float.Parse(args[1]);
-                var z = float.Parse(args[2]);
-
-                var face = BlockFace.Top;
-                if (args.Length >= 4 && Enum.TryParse<BlockFace>(args[3], true, out var parsedFace))
-                {
-                    face = parsedFace;
-                }
-
-                await LookAtHelper(x, y, z, face);
-            }
-        }
-
-        if (command == "!state")
-        {
-            await SendPacketAsync(
-                new ChatPacket(
-                    $"Pos: {entity.Position:N2}, Sp: {entity.IsSprintingNew || entity.WantsToSprint}, J: {entity.IsJumping}, Sn: {entity.IsSneaking}"));
-        }
-
-        if (command == "!forward")
-        {
-            if (!entity.Forward)
-            {
-                entity.Forward = true;
-                await SendPacketAsync(new ChatPacket("Moving forward!"));
-            }
-            else
-            {
-                entity.Forward = false;
-                await SendPacketAsync(new ChatPacket("Stopping moving forward!"));
-            }
-        }
-
-        if (command == "!jump")
-        {
-            if (!entity.IsJumping)
-            {
-                entity.StartJumping();
-                await SendPacketAsync(new ChatPacket("Jumping!"));
-            }
-            else
-            {
-                entity.StopJumping();
-                await SendPacketAsync(new ChatPacket("Stopped jumping!"));
-            }
-        }
-
-        if (command == "!placeit")
-        {
-            var args = bodyMessage.Split(" ").Skip(1).ToArray();
-            if (args.Length is 3)
-            {
-                var x = float.Parse(args[0]);
-                var y = float.Parse(args[1]);
-                var z = float.Parse(args[2]);
-
-                var heldBlock = State.LocalPlayer.Entity.HeldItem;
-                if (heldBlock.ItemId is null) return;
-                await LookAtHelper(x, y, z, BlockFace.Top);
-                await PlaceHelper();
-                await LookAtHelper(x - 1, y, z, BlockFace.Top);
-                await PlaceHelper();
-                await LookAtHelper(x + 1, y, z, BlockFace.Top);
-                await PlaceHelper();
-                await Task.Delay(100);
-                await LookAtHelper(x, y + 1, z, BlockFace.Top);
-                await PlaceHelper();
-                State.LocalPlayer.Entity.StartJumping();
-                await Task.Delay(100);
-                State.LocalPlayer.Entity.StopJumping();
-                await LookAtHelper(x, y + 2, z, BlockFace.Top);
-                await PlaceHelper();
-                await Task.Delay(500);
-                await LookAtHelper(x, y + 1, z, BlockFace.Bottom);
-                var lookingAt = State.LocalPlayer.Entity.GetLookingAtBlock(State.Level);
-                if (lookingAt is null) return;
-                await SendPacketAsync(new PlayerActionPacket
-                {
-                    Status = PlayerActionPacket.StatusType.StartedDigging,
-                    Position = lookingAt.BlockPosition.ToVector3<int, double>(),
-                    Face = lookingAt.Face,
-                    Sequence = State.LocalPlayer.Entity.IncrementSequence()
-                });
-
-                for (var i = 0; i < 5; i++)
-                {
-                    await Task.Delay(50);
-                    await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
-                }
-
-                await SendPacketAsync(new PlayerActionPacket
-                {
-                    Status = PlayerActionPacket.StatusType.FinishedDigging,
-                    Position = lookingAt.BlockPosition.ToVector3<int, double>(),
-                    Face = lookingAt.Face,
-                    Sequence = State.LocalPlayer.Entity.IncrementSequence()
-                });
-            }
-        }
-
-        if (command == "!lookingat")
-        {
-            var hit = entity.GetLookingAtBlock(State.Level);
-            if (hit is null)
-            {
-                await SendPacketAsync(new ChatPacket("I'm not looking at a block."));
-                return;
-            }
-
-            var cursorPos = hit.GetInBlockPosition();
-            var placementPos = hit.GetAdjacentBlockPosition();
-
-            List<string> messages =
-            [
-                $"Name: {hit.Block?.Name} - Pos: {hit.BlockPosition}",
-                $"Distance: {hit.Distance:N2}",
-                $"Cursor: {cursorPos}",
-                $"Face: {hit.Face}",
-                $"Placement Pos: {placementPos}"
-            ];
-
-            foreach (var message in messages)
-            {
-                await SendPacketAsync(new ChatPacket(message));
-                await Task.Delay(100);
-            }
-        }
-
-        if (command == "!holding")
-        {
-            var heldItem = State.LocalPlayer.Entity.HeldItem;
-            if (heldItem.ItemId is null)
-            {
-                await SendPacketAsync(new ChatPacket("You are not holding anything."));
-                return;
-            }
-
-            var itemName = ClientState.ItemRegistry[heldItem.ItemId.Value];
-            var message = $"Holding: {heldItem.ItemCount}x of {itemName} ({heldItem.ItemId})";
-            await SendPacketAsync(new ChatPacket(message));
-        }
-
-        if (command == "!drop")
-        {
-            var heldItem = entity.HeldItem;
-            if (heldItem.ItemId is null)
-            {
-                await SendPacketAsync(new ChatPacket("You are not holding anything."));
-                return;
-            }
-
-            await SendPacketAsync(new PlayerActionPacket
-            {
-                Status = PlayerActionPacket.StatusType.DropItemStack,
-                Position = new Vector3<double>(0, 0, 0),
-                Face = BlockFace.Bottom,
-                Sequence = 0
-            });
-            entity.Inventory[(short)(entity.HeldSlot + 36)] = new Slot();
-        }
-
-        if (command == "!sneak")
-        {
-            if (entity.IsSneaking)
-            {
-                entity.StopSneaking();
-                await SendPacketAsync(new PlayerCommandPacket
-                {
-                    EntityId = entity.EntityId,
-                    Action = PlayerAction.StopSneaking
-                });
-                await SendPacketAsync(new ChatPacket("Stopped sneaking."));
-            }
-            else
-            {
-                if (entity.WantsToSprint)
-                {
-                    entity.StopSprinting();
-                    await SendPacketAsync(new PlayerCommandPacket
-                    {
-                        EntityId = entity.EntityId,
-                        Action = PlayerAction.StopSprint
-                    });
-                }
-
-                entity.StartSneaking();
-                await SendPacketAsync(new PlayerCommandPacket
-                {
-                    EntityId = entity.EntityId,
-                    Action = PlayerAction.StartSneaking
-                });
-                await SendPacketAsync(new ChatPacket("Sneaking!"));
-            }
-        }
-
-        if (command == "!sprint")
-        {
-            if (entity.WantsToSprint)
-            {
-                await SendPacketAsync(new PlayerCommandPacket
-                {
-                    EntityId = entity.EntityId,
-                    Action = PlayerAction.StopSprint,
-                });
-                entity.StopSprinting();
-                await SendPacketAsync(new ChatPacket("Stopped sprinting."));
-            }
-            else
-            {
-                if (entity.IsSneaking)
-                {
-                    entity.StopSneaking();
-                    await SendPacketAsync(new PlayerCommandPacket
-                    {
-                        EntityId = entity.EntityId,
-                        Action = PlayerAction.StopSneaking
-                    });
-                }
-
-                // We only want to signal intent, not start sprinting.
-                entity.StartSprinting();
-                await SendPacketAsync(new ChatPacket("Sprinting!"));
-            }
-        }
-
-        if (sender is null) return;
-
-        if (command == "!pos")
-        {
-            if (!sender.HasEntity)
-            {
-                //await SendPacketAsync(new ChatPacket("Your position is not available."));
-                return;
-            }
-
-            var playerPos =
-                $"{sender.Username} -> {sender.Entity.Position.X:N2}, {sender.Entity.Position.Y:N2}, {sender.Entity.Position.Z:N2}";
-            var message = $"Last position: {playerPos}";
-            //await SendPacketAsync(new ChatPacket(message));
-            Console.WriteLine(message);
-        }
-
-        if (command == "!here")
-        {
-            if (!sender.HasEntity)
-            {
-                //await SendPacketAsync(new ChatPacket("Your position is not available."));
-                return;
-            }
-
-            var targetPosition = sender.Entity.Position;
-            _pathFollowerService.Initialize(State.Level); // Changed
-            var result = _pathFollowerService.FollowPathTo(State.LocalPlayer.Entity, targetPosition); // Changed
-
-            if (!result)
-            {
-                //await SendPacketAsync(new ChatPacket("I can't reach your position."));
-                return;
-            }
-
-            //await SendPacketAsync(new ChatPacket("Moving to your position."));
-        }
+        var context = new CommandContext(this, State, AuthResult, senderGuid, args);
+        await _commandRegistry.ExecuteAsync(commandName, context);
     }
 
-    private async Task PlaceHelper()
-    {
-        if (!State.LocalPlayer.HasEntity) return;
-
-        var entity = State.LocalPlayer.Entity;
-        var hit = entity.GetLookingAtBlock(State.Level);
-        if (hit is null)
-        {
-            await SendPacketAsync(new ChatPacket("I'm not looking at a block."));
-            return;
-        }
-
-        if (hit.Distance > 6)
-        {
-            await SendPacketAsync(new ChatPacket("Block is too far away."));
-            return;
-        }
-
-        var cursor = hit.GetInBlockPosition();
-        await SendPacketAsync(new UseItemOnPacket
-        {
-            Hand = Hand.MainHand,
-            Position = new Vector3<double>(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z),
-            BlockFace = hit.Face,
-            Cursor = new Vector3<float>(cursor.X, cursor.Y, cursor.Z),
-            InsideBlock = false,
-            Sequence = entity.IncrementSequence()
-        });
-        await SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
-    }
-
-    private async Task LookAtHelper(float x, float y, float z, BlockFace? face)
-    {
-        if (!State.LocalPlayer.HasEntity) return;
-        var targetX = x + 0.5f;
-        var targetY = y + 0.5f;
-        var targetZ = z + 0.5f;
-
-        if (face.HasValue)
-        {
-            switch (face)
-            {
-                case BlockFace.Bottom:
-                    targetY = y;
-                    break;
-                case BlockFace.Top:
-                    targetY = y + 1.0f;
-                    break;
-                case BlockFace.North:
-                    targetZ = z;
-                    break;
-                case BlockFace.South:
-                    targetZ = z + 1.0f;
-                    break;
-                case BlockFace.West:
-                    targetX = x;
-                    break;
-                case BlockFace.East:
-                    targetX = x + 1.0f;
-                    break;
-            }
-        }
-
-        var playerEyeX = State.LocalPlayer.Entity.Position.X;
-        var playerEyeY = State.LocalPlayer.Entity.Position.Y + 1.62f;
-        var playerEyeZ = State.LocalPlayer.Entity.Position.Z;
-
-        var dx = targetX - playerEyeX;
-        var dy = targetY - playerEyeY;
-        var dz = targetZ - playerEyeZ;
-
-        var yaw = (float)(-Math.Atan2(dx, dz) * (180 / Math.PI));
-        var horizontalDistance = Math.Sqrt(dx * dx + dz * dz);
-        var pitch = (float)(-Math.Atan2(dy, horizontalDistance) * (180 / Math.PI));
-
-        await SendPacketAsync(new MovePlayerRotationPacket
-        {
-            Yaw = yaw,
-            Pitch = pitch,
-            Flags = MovementFlags.None
-        });
-
-        State.LocalPlayer.Entity.YawPitch = new Vector2<float>(yaw, pitch);
-    }
 
     // The old PhysicsTickAsync was in MinecraftClient.Physics.cs.
     // It is now replaced by this implementation.
