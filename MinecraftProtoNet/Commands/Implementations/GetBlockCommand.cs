@@ -24,6 +24,6 @@ public class GetBlockCommand : ICommand
             ? $"Block: ({block.Id}) {block.Name}"
             : $"Block not found at {x}, {y}, {z}";
 
-        Console.WriteLine(message);
+        await ctx.SendChatAsync(message);
     }
 }

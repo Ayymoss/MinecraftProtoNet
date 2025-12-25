@@ -141,12 +141,24 @@ public static class CollisionResolver
                  // The actualDelta needs to be the strict vector from Start to End
                  // Start: boundingBox.Min
                  // End: finalStepBox.Min
-                 actualDelta = finalStepBox.Min - boundingBox.Min;
-                 currentBox = finalStepBox;
-                 landedOnGround = true; 
-                 collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
-                 collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
-                 collidedY = false; // Stepping replaces the collision with a valid move
+                  // The actualDelta needs to be the strict vector from Start to End
+                  actualDelta = finalStepBox.Min - boundingBox.Min;
+                  currentBox = finalStepBox;
+                  landedOnGround = true; 
+                  collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
+                  collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
+                  collidedY = false; // Stepping replaces the collision with a valid move
+             }
+        }
+
+        if ((collidedX || collidedZ) && (landedOnGround || wasOnGround))
+        {
+            // Diagnostic logging for "jumping in place"
+            _logger.LogDebug("[Collision] Horizontal collision at ({X:F2}, {Y:F2}, {Z:F2}). Colliders: {Count}", 
+                currentBox.Min.X, currentBox.Min.Y, currentBox.Min.Z, colliders.Count);
+            foreach (var c in colliders)
+            {
+                _logger.LogTrace("  Collider: {Box}", c);
             }
         }
 

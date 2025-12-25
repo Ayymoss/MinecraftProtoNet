@@ -9,8 +9,8 @@ namespace MinecraftProtoNet.Services;
 /// </summary>
 public class RegistryDataLoader : IRegistryDataLoader
 {
-    private const string BlocksFileName = "blocks-26.1.json";
-    private const string RegistriesFileName = "registries-26.1.json";
+    private const string BlocksFileName = "blocks.json";
+    private const string RegistriesFileName = "registries.json";
 
     private readonly string _staticFilesPath = Path.Combine(AppContext.BaseDirectory, "StaticFiles");
 

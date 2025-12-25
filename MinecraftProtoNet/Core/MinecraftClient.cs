@@ -14,6 +14,7 @@ using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
 using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
@@ -24,37 +25,41 @@ public class MinecraftClient : IMinecraftClient
     private readonly Connection _connection;
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService;
+    private readonly IPathingService? _pathingService;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
-
 
     /// <summary>
     /// Raised when the client disconnects from the server.
     /// </summary>
     public event EventHandler<DisconnectReason>? OnDisconnected;
 
-
-    public ClientState State { get; } = new();
+    public ClientState State { get; }
     public AuthResult AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
 
     public MinecraftClient(
+        ClientState state,
         Connection connection, 
         IPacketService packetService,
         IPhysicsService physicsService,
         CommandRegistry commandRegistry,
-        ILogger<MinecraftClient> logger)
+        ILogger<MinecraftClient> logger,
+        IPathingService? pathingService = null)
     {
+        State = state;
         _connection = connection;
         _packetService = packetService;
         _physicsService = physicsService;
         _commandRegistry = commandRegistry;
         _logger = logger;
+        _pathingService = pathingService;
         
         _commandRegistry.AutoRegisterCommands();
     }
+
 
 
     /// <summary>
@@ -210,8 +215,25 @@ public class MinecraftClient : IMinecraftClient
     public async Task PhysicsTickAsync()
     {
         if (!State.LocalPlayer.HasEntity) return;
-        await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync);
+        
+        // Pass pathfinding callback as pre-physics hook
+        Action<State.Entity>? prePhysicsCallback = _pathingService != null 
+            ? entity => _pathingService.OnPhysicsTick(entity) 
+            : null;
+            
+        await _physicsService.PhysicsTickAsync(
+            State.LocalPlayer.Entity, 
+            State.Level, 
+            SendPacketAsync,
+            prePhysicsCallback);
     }
+
+    /// <summary>
+    /// Gets the pathfinding service (may be null if not injected).
+    /// </summary>
+    public Pathfinding.IPathingService PathingService => 
+        _pathingService ?? throw new InvalidOperationException(
+            "PathingService was not injected. Register IPathingService in DI container.");
 
 
     public async Task SendChatSessionUpdate()

@@ -6,11 +6,40 @@ namespace MinecraftProtoNet.Commands.Implementations;
 public class SneakCommand : ICommand
 {
     public string Name => "sneak";
-    public string Description => "Toggle sneaking";
-    public string[] Aliases => ["crouch"];
+    public string Description => "Toggle sneaking (on/off or specify 'start'/'stop')";
+    public string[] Aliases => ["crouch", "shift"];
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        await ctx.SendChatAsync("Movement is disabled.");
+        var entity = ctx.State.LocalPlayer.Entity;
+        
+        // Check for explicit start/stop
+        if (ctx.Arguments.Length > 0)
+        {
+            var arg = ctx.Arguments[0].ToLowerInvariant();
+            switch (arg)
+            {
+                case "start" or "on":
+                    entity.StartSneaking();
+                    await ctx.SendChatAsync("Sneaking.");
+                    return;
+                case "stop" or "off":
+                    entity.StopSneaking();
+                    await ctx.SendChatAsync("Stopped sneaking.");
+                    return;
+            }
+        }
+
+        // Toggle
+        if (entity.IsSneaking)
+        {
+            entity.StopSneaking();
+            await ctx.SendChatAsync("Stopped sneaking.");
+        }
+        else
+        {
+            entity.StartSneaking();
+            await ctx.SendChatAsync("Sneaking.");
+        }
     }
 }

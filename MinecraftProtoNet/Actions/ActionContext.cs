@@ -5,6 +5,7 @@ using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Utilities;
+using Serilog;
 
 namespace MinecraftProtoNet.Actions;
 
@@ -34,7 +35,7 @@ public class ActionContext(IMinecraftClient client, ClientState state, AuthResul
             var packet = ChatSigning.CreateSignedChatPacket(AuthResult, message);
             if (packet == null)
             {
-                Console.WriteLine("[WARN] Server requires signed chat but signing failed. Attempting unsigned.");
+                Log.Warning("[WARN] Server requires signed chat but signing failed. Attempting unsigned");
                 packet = new ChatPacket(message);
             }
             await SendPacketAsync(packet);

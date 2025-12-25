@@ -176,11 +176,15 @@ public static class MovementCalculator
     /// <param name="yawDegrees">Player's yaw for sprint direction</param>
     /// <param name="isSprinting">Whether player is sprinting</param>
     /// <param name="jumpPower">Jump power (default 0.42)</param>
+    /// <param name="jumpFactor">Block's jump factor (e.g., honey = 0.5)</param>
     /// <returns>New velocity with jump applied</returns>
-    public static Vector3<double> ApplyJump(Vector3<double> currentVelocity, float yawDegrees, bool isSprinting, float jumpPower = BaseJumpPower)
+    public static Vector3<double> ApplyJump(Vector3<double> currentVelocity, float yawDegrees, bool isSprinting, float jumpPower = BaseJumpPower, float jumpFactor = 1.0f)
     {
+        // Apply block jump factor (honey reduces jump)
+        var adjustedJumpPower = jumpPower * jumpFactor;
+        
         // Set vertical velocity to jump power (take max in case already moving up)
-        var newY = Math.Max(jumpPower, currentVelocity.Y);
+        var newY = Math.Max(adjustedJumpPower, currentVelocity.Y);
         var newX = currentVelocity.X;
         var newZ = currentVelocity.Z;
 
@@ -229,6 +233,7 @@ public static class MovementCalculator
 
     /// <summary>
     /// Gets the friction value for the block at the given position.
+    /// Uses BlockState.Friction property set from BlockPhysicsData registry.
     /// Source: Java's Block.getFriction()
     /// </summary>
     /// <param name="level">The level to query</param>
@@ -241,21 +246,37 @@ public static class MovementCalculator
         var blockZ = (int)Math.Floor(position.Z);
 
         var block = level.GetBlockAt(blockX, blockY, blockZ);
-        if (block == null)
-        {
-            return DefaultBlockFriction;
-        }
+        return block?.Friction ?? DefaultBlockFriction;
+    }
 
-        // Check for special friction blocks
-        var name = block.Name.ToLowerInvariant();
-        return name switch
-        {
-            var n when n.Contains("ice") && n.Contains("blue") => BlueIceFriction,
-            var n when n.Contains("ice") => IceFriction,
-            var n when n.Contains("slime") => SlimeFriction,
-            var n when n.Contains("honey") => HoneyFriction,
-            _ => DefaultBlockFriction
-        };
+    /// <summary>
+    /// Gets the speed factor for the block at the given position.
+    /// Soul sand = 0.4, Honey = 0.4, default = 1.0
+    /// Source: Java's getBlockSpeedFactor()
+    /// </summary>
+    public static float GetBlockSpeedFactor(Level level, Vector3<double> position)
+    {
+        var blockX = (int)Math.Floor(position.X);
+        var blockY = (int)Math.Floor(position.Y - 0.5);
+        var blockZ = (int)Math.Floor(position.Z);
+
+        var block = level.GetBlockAt(blockX, blockY, blockZ);
+        return block?.SpeedFactor ?? 1.0f;
+    }
+
+    /// <summary>
+    /// Gets the jump factor for the block at the given position.
+    /// Honey = 0.5, default = 1.0
+    /// Source: Java's getBlockJumpFactor()
+    /// </summary>
+    public static float GetBlockJumpFactor(Level level, Vector3<double> position)
+    {
+        var blockX = (int)Math.Floor(position.X);
+        var blockY = (int)Math.Floor(position.Y - 0.5);
+        var blockZ = (int)Math.Floor(position.Z);
+
+        var block = level.GetBlockAt(blockX, blockY, blockZ);
+        return block?.JumpFactor ?? 1.0f;
     }
 
     /// <summary>

@@ -29,5 +29,10 @@ public interface IMinecraftClient
 
     Task PhysicsTickAsync();
     Task SendChatSessionUpdate();
+
+    /// <summary>
+    /// Gets the pathfinding service for navigation.
+    /// </summary>
+    Pathfinding.IPathingService PathingService { get; }
 }
 

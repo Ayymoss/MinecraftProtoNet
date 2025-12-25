@@ -76,6 +76,12 @@ public class Entity
     public bool IsSprinting { get; set; }
 
     /// <summary>
+    /// Ticks remaining before the entity can jump again.
+    /// Matches Mojang's noJumpDelay (10 ticks between jumps).
+    /// </summary>
+    public int JumpCooldown { get; set; }
+
+    /// <summary>
     /// Whether the entity was sprinting in the previous tick.
     /// Used to detect sprint state changes for packet sending.
     /// </summary>

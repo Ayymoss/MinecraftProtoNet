@@ -225,6 +225,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         {
             array[i] = ReadVarInt();
         }
+
         return array;
     }
 
@@ -246,7 +247,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         // Simple extraction - just return the tag's value as string
         return nbt switch
         {
-            NbtCompound compound when compound.Value.FirstOrDefault(t => t.Name == "text") is { } textTag 
+            NbtCompound compound when compound.Value.FirstOrDefault(t => t.Name == "text") is { } textTag
                 => NbtToPlainText(textTag),
             { } tag => tag.ToString() ?? string.Empty,
             _ => string.Empty
@@ -297,17 +298,9 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
 
     public long ReadSignedLong()
     {
-        try
-        {
-            var value = BinaryPrimitives.ReadInt64BigEndian(_buffer[ReadPosition..]);
-            ReadPosition += sizeof(long);
-            return value;
-        }
-        catch (ArgumentOutOfRangeException e)
-        {
-            Console.WriteLine();
-            throw;
-        }
+        var value = BinaryPrimitives.ReadInt64BigEndian(_buffer[ReadPosition..]);
+        ReadPosition += sizeof(long);
+        return value;
     }
 
     public short ReadSignedShort()

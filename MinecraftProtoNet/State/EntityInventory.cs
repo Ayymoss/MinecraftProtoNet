@@ -12,6 +12,20 @@ public class EntityInventory
     /// <summary>
     /// The current block placement sequence number for anti-cheat.
     /// </summary>
+    private static Services.IItemRegistryService? _registryService;
+
+    /// <summary>
+    /// Sets the registry service for item lookups. 
+    /// Should be called during startup.
+    /// </summary>
+    public static void SetRegistryService(Services.IItemRegistryService service)
+    {
+        _registryService = service;
+    }
+
+    /// <summary>
+    /// The current block placement sequence number for anti-cheat.
+    /// </summary>
     public int BlockPlaceSequence => _blockPlaceSequence;
 
     /// <summary>
@@ -75,5 +89,32 @@ public class EntityInventory
     public void SetAllSlots(Dictionary<short, Slot> items)
     {
         Items = items;
+    }
+
+    /// <summary>
+    /// Checks if the inventory contains any throwaway blocks suitable for pillaring or bridging.
+    /// </summary>
+    public bool HasThrowawayBlocks()
+    {
+        if (_registryService == null)
+        {
+            // Fallback if registry not loaded yet (shouldn't happen in normal run)
+             foreach (var slot in Items.Values)
+             {
+                 if (slot.ItemId != null && slot.ItemId > 0 && slot.ItemCount > 0) return true;
+             }
+             return false;
+        }
+
+        foreach (var slot in Items.Values)
+        {
+            if (slot.ItemId == null || slot.ItemId <= 0 || slot.ItemCount <= 0) continue; 
+            
+            if (_registryService.IsThrowawayBlock(slot.ItemId.Value))
+            {
+                return true;
+            }
+        }
+        return false;   
     }
 }
