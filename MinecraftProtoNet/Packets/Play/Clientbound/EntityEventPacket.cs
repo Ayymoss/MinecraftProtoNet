@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
 // TODO: Partially implemented.
-[Packet(0x1E, ProtocolState.Play, true)]
+[Packet(0x22, ProtocolState.Play, true)]
 public class EntityEventPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

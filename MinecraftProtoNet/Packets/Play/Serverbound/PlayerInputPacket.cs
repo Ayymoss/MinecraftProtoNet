@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x29, ProtocolState.Play)]
+[Packet(0x2A, ProtocolState.Play)]
 public class PlayerInputPacket(PlayerInputPacket.MovementFlag flag) : IServerboundPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)

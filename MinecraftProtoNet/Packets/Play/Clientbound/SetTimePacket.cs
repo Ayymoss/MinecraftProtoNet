@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x6A, ProtocolState.Play, true)]
+[Packet(0x70, ProtocolState.Play, true)]
 public class SetTimePacket : IClientboundPacket
 {
     public long WorldAge { get; set; }

@@ -5,5 +5,5 @@ public enum MovementFlags
 {
     None,
     OnGround,
-    PushingAgainstWall
+    HorizontalCollision
 }

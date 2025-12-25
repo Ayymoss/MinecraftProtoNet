@@ -1,6 +1,9 @@
-﻿using MinecraftProtoNet.Attributes;
+﻿using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Handlers.Base;
+using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.NBT;
 using MinecraftProtoNet.NBT.Tags.Primitive;
 using MinecraftProtoNet.Packets.Base;
@@ -40,12 +43,33 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(ForgetLevelChunkPacket))]
 [HandlesPacket(typeof(PlayerInfoUpdatePacket))]
 [HandlesPacket(typeof(PlayerInfoRemovePacket))]
+[HandlesPacket(typeof(SetEntityDataPacket))]
+[HandlesPacket(typeof(UpdateAttributesPacket))]
+[HandlesPacket(typeof(LevelEventPacket))]
+[HandlesPacket(typeof(SoundPacket))]
+[HandlesPacket(typeof(SetEquipmentPacket))]
+[HandlesPacket(typeof(TickingStatePacket))]
+[HandlesPacket(typeof(TickingStepPacket))]
+[HandlesPacket(typeof(ServerDataPacket))]
+[HandlesPacket(typeof(SetChunkCacheCenterPacket))]
+[HandlesPacket(typeof(TrackedWaypointPacket))]
+[HandlesPacket(typeof(ChunkBatchFinishedPacket))]
+[HandlesPacket(typeof(TakeItemEntityPacket))]
 public class PlayHandler : IPacketHandler
 {
     private bool _playerLoaded;
+    private readonly ILogger<PlayHandler> _logger;
+    private readonly IGameLoop _gameLoop;
+
+    public PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop)
+    {
+        _logger = logger;
+        _gameLoop = gameLoop;
+    }
 
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
+
 
     public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
@@ -64,6 +88,12 @@ public class PlayHandler : IPacketHandler
             }
             case LoginPacket loginPacket:
             {
+                // Store server settings
+                client.State.ServerSettings.EnforcesSecureChat = loginPacket.EnforcesSecureChat;
+                client.State.ServerSettings.IsHardcore = loginPacket.IsHardcore;
+                client.State.ServerSettings.ViewDistance = loginPacket.ViewDistance;
+                client.State.ServerSettings.SimulationDistance = loginPacket.SimulationDistance;
+                
                 if (client.AuthResult.ChatSession is not null)
                 {
                     await client.SendPacketAsync(new ChatSessionUpdatePacket
@@ -79,13 +109,15 @@ public class PlayHandler : IPacketHandler
                 entity.EntityId = loginPacket.EntityId;
                 break;
             }
+
             case AddEntityPacket addEntityPacket:
             {
-                const int playerEntityType = 148;
-                if (addEntityPacket.Type is not playerEntityType) break;
+                if (addEntityPacket.Type is not EntityTypes.Player) break;
                 await client.State.Level.AddEntityAsync(addEntityPacket.EntityUuid, addEntityPacket.EntityId, addEntityPacket.Position);
                 break;
             }
+
+
             case RemoveEntitiesPacket removeEntitiesPacket:
             {
                 var entities = client.State.Level.GetAllEntityIds().Where(x => removeEntitiesPacket.Entities.Contains(x));
@@ -100,37 +132,39 @@ public class PlayHandler : IPacketHandler
             {
                 var translateLookup = disconnectPacket.DisconnectReason.FindTag<NbtString>("translate")?.Value;
                 var messages = disconnectPacket.DisconnectReason.FindTags<NbtString>(null).Reverse().Select(x => x.Value);
-                Console.WriteLine($"Disconnected from Server for: ({translateLookup}) {string.Join(" ", messages)}");
+                _logger.LogWarning("Disconnected from server: ({TranslateKey}) {Messages}",
+                    translateLookup, string.Join(" ", messages));
                 break;
             }
             case SystemChatPacket systemChatPacket:
             {
                 var translateLookup = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
                 var texts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value);
-                Console.WriteLine($"System Message: ({translateLookup ?? "<NULL>"}) {string.Join(" ", texts)}");
+                _logger.LogInformation("System message: ({TranslateKey}) {Messages}",
+                    translateLookup ?? "<NULL>", string.Join(" ", texts));
                 break;
             }
             case ContainerSetContentPacket containerSetContentPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.Inventory = containerSetContentPacket.SlotData
+                entity.Inventory.SetAllSlots(containerSetContentPacket.SlotData
                     .Select((x, i) => new { Index = (short)i, Slot = x })
-                    .ToDictionary(x => x.Index, x => x.Slot);
+                    .ToDictionary(x => x.Index, x => x.Slot));
                 break;
             }
             case HurtAnimationPacket hurtAnimationPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.IsHurtFromYaw = hurtAnimationPacket.Yaw;
+                entity.HurtFromYaw = hurtAnimationPacket.Yaw;
                 break;
             }
             case ContainerSetSlotPacket containerSetSlotPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.Inventory[containerSetSlotPacket.SlotToUpdate] = containerSetSlotPacket.Slot;
+                entity.Inventory.SetSlot(containerSetSlotPacket.SlotToUpdate, containerSetSlotPacket.Slot);
                 break;
             }
             case BlockChangedAcknowledgementPacket blockChangedAcknowledgementPacket:
@@ -138,7 +172,7 @@ public class PlayHandler : IPacketHandler
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
                 entity.HeldItem.ItemCount -= 1;
-                if (entity.HeldItem.ItemCount <= 0) entity.Inventory[entity.HeldSlotWithOffset] = new Slot();
+                if (entity.HeldItem.ItemCount <= 0) entity.Inventory.SetSlot(entity.HeldSlotWithOffset, new Slot());
                 break;
             }
             case PlayerChatPacket playerChatPacket:
@@ -147,13 +181,7 @@ public class PlayHandler : IPacketHandler
 
                 if (signatureBytes is not null)
                 {
-                    Console.WriteLine(
-                        $"[DEBUG OnReceive] Received Player Chat Signature ({signatureBytes.Length} bytes): {Convert.ToHexString(signatureBytes)}");
                     ChatSigning.ChatMessageReceived(client.AuthResult, signatureBytes);
-                }
-                else
-                {
-                    Console.WriteLine("[DEBUG OnReceive] Received Player Chat Packet *without* signature.");
                 }
 
                 _ = Task.Run(async () => await client.HandleChatMessageAsync(playerChatPacket.Header.Uuid, playerChatPacket.Body.Message));
@@ -166,57 +194,49 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerPositionPacket playerPositionPacket:
             {
+                if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
+                var entity = client.State.LocalPlayer.Entity;
+
+                // Stop pathing immediately on teleport to avoid race conditions and illegal movements
+                client.PathFollowerService.HandleTeleport(entity);
+                entity.HasPendingTeleport = true;
+                entity.TeleportYawPitch = playerPositionPacket.YawPitch;
+
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
                 if (!_playerLoaded)
                 {
                     await client.SendPacketAsync(new PlayerLoadedPacket());
 
-                    var physicsThread = new Thread(async () =>
-                    {
-                        var stopwatch = new System.Diagnostics.Stopwatch();
-
-                        while (true)
-                        {
-                            stopwatch.Restart();
-                            try
-                            {
-                                await client.PhysicsTickAsync();
-                                client.State.Level.IncrementClientTickCounter();
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Error in physics tick: {ex}");
-                            }
-
-                            stopwatch.Stop();
-
-                            var targetDelayMs = client.State.Level.TickInterval;
-                            var processingTimeMs = stopwatch.ElapsedMilliseconds;
-                            targetDelayMs = Math.Max(1, Math.Min(1000, targetDelayMs));
-
-                            if (processingTimeMs < targetDelayMs)
-                            {
-                                var remainingDelayMs = targetDelayMs - processingTimeMs;
-                                await Task.Delay(TimeSpan.FromMilliseconds(remainingDelayMs));
-                            }
-                            else
-                            {
-                                await Task.Yield();
-                            }
-
-                            await client.SendPacketAsync(new ClientTickEndPacket());
-                        }
-                    }) { Name = "Local Entity Physics", IsBackground = true };
-                    physicsThread.Start();
+                    // Start the game loop (physics tick loop)
+                    _gameLoop.Start(client);
 
                     _playerLoaded = true;
                 }
 
+
                 // --- Position update ---
-                if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
-                client.State.LocalPlayer.Entity.Position = playerPositionPacket.Position;
-                //client.State.LocalPlayer.Entity.Velocity = playerPositionPacket.Velocity;
-                client.State.LocalPlayer.Entity.YawPitch = playerPositionPacket.YawPitch;
+                var flags = playerPositionPacket.Flags;
+                
+                // Update position
+                var posX = flags.HasFlag(PlayerPositionPacket.PositionFlags.X) ? entity.Position.X + playerPositionPacket.Position.X : playerPositionPacket.Position.X;
+                var posY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y) ? entity.Position.Y + playerPositionPacket.Position.Y : playerPositionPacket.Position.Y;
+                var posZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Z) ? entity.Position.Z + playerPositionPacket.Position.Z : playerPositionPacket.Position.Z;
+                entity.Position = new Vector3<double>(posX, posY, posZ);
+
+                // Update velocity 
+                var velX = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_X) ? entity.Velocity.X + playerPositionPacket.Velocity.X : playerPositionPacket.Velocity.X;
+                var velY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Y) ? entity.Velocity.Y + playerPositionPacket.Velocity.Y : playerPositionPacket.Velocity.Y;
+                var velZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Z) ? entity.Velocity.Z + playerPositionPacket.Velocity.Z : playerPositionPacket.Velocity.Z;
+                entity.Velocity = new Vector3<double>(velX, velY, velZ);
+
+                // Update Rotation
+                var yaw = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y_ROT) ? entity.YawPitch.X + playerPositionPacket.YawPitch.X : playerPositionPacket.YawPitch.X;
+                var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
+                entity.YawPitch = new Vector2<float>(yaw, pitch);
+
+                _logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
+                    playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
+                entity.IsOnGround = false; // Reset on-ground state until next physics tick
                 break;
             }
             case KeepAlivePacket keepAlivePacket:
@@ -226,7 +246,8 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerCombatKillPacket playerCombatKillPacket:
             {
-                Console.WriteLine($"{playerCombatKillPacket.PlayerId} died for {playerCombatKillPacket.DeathMessage}");
+                _logger.LogInformation("Player {PlayerId} died: {DeathMessage}",
+                    playerCombatKillPacket.PlayerId, playerCombatKillPacket.DeathMessage);
                 break;
             }
             case SetHealthPacket setHealthPacket:
@@ -289,6 +310,12 @@ public class PlayHandler : IPacketHandler
                 var (chunkX, chunkZ) = (levelChunkWithLightPacket.ChunkX, levelChunkWithLightPacket.ChunkZ);
                 client.State.Level.Chunks.AddOrUpdate((chunkX, chunkZ), levelChunkWithLightPacket.Chunk,
                     (_, _) => levelChunkWithLightPacket.Chunk);
+                break;
+            }
+            case ChunkBatchFinishedPacket:
+            {
+                // Respond to chunk batch finished to acknowledge receipt and keep chunks flowing
+                await client.SendPacketAsync(new ChunkBatchReceivedPacket { DesiredChunksPerTick = 7.0f });
                 break;
             }
             case ForgetLevelChunkPacket forgetLevelChunkPacket:

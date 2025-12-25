@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x3A, ProtocolState.Play)]
+[Packet(0x3C, ProtocolState.Play)]
 public class SwingPacket : IServerboundPacket
 {
     public Hand Hand { get; set; } = Hand.MainHand;

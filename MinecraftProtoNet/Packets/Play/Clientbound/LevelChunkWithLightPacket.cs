@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x27, ProtocolState.Play, true)]
+[Packet(0x2C, ProtocolState.Play, true)]
 public class LevelChunkWithLightPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }
@@ -19,28 +19,44 @@ public class LevelChunkWithLightPacket : IClientboundPacket
         ChunkX = buffer.ReadSignedInt();
         ChunkZ = buffer.ReadSignedInt();
 
-        // Heightmaps - This should be collected when/if needed - for now, throwing it away
-        var heightMaps = buffer.ReadVarInt();
-        for (var i = 0; i < heightMaps; i++)
+        // Heightmaps: Map of Types (VarInt ID) to long[] (VarInt count)
+        var heightmapCount = buffer.ReadVarInt();
+        for (var i = 0; i < heightmapCount; i++)
         {
-            var type = buffer.ReadVarInt();
-            var heightMapData = buffer.ReadPrefixedArray<long>();
+            var typeId = buffer.ReadVarInt();
+            _ = buffer.ReadBitSet(); // Read long[] with VarInt length
         }
 
         // Chunk Data
         var chunkDataBuffer = buffer.ReadPrefixedArray<byte>();
-        var blockEntities = buffer.ReadPrefixedArray<ChunkBlockEntityInfo>();
+        
+        // Block Entities: List of info
+        var blockEntitiesCount = buffer.ReadVarInt();
+        for (var i = 0; i < blockEntitiesCount; i++)
+        {
+             _ = buffer.ReadChunkBlockEntity();
+        }
 
         Chunk = new Chunk(ChunkX, ChunkZ);
         var chunkReader = new PacketBufferReader(chunkDataBuffer);
         Chunk.DeserializeSections(ref chunkReader);
 
         // Light Data
-        var skyLightMask = buffer.ReadPrefixedArray<long>();
-        var blockLightMask = buffer.ReadPrefixedArray<long>();
-        var emptySkyLightMask = buffer.ReadPrefixedArray<long>();
-        var emptyBlockLightMask = buffer.ReadPrefixedArray<long>();
-        var skyLight = buffer.ReadPrefixedArray<byte[]>();
-        var blockLight = buffer.ReadPrefixedArray<byte[]>();
+        var skyLightMask = buffer.ReadBitSet();
+        var blockLightMask = buffer.ReadBitSet();
+        var emptySkyLightMask = buffer.ReadBitSet();
+        var emptyBlockLightMask = buffer.ReadBitSet();
+        
+        var skyUpdateCount = buffer.ReadVarInt();
+        for (var i = 0; i < skyUpdateCount; i++)
+        {
+            _ = buffer.ReadPrefixedArray<byte>();
+        }
+        
+        var blockUpdateCount = buffer.ReadVarInt();
+        for (var i = 0; i < blockUpdateCount; i++)
+        {
+            _ = buffer.ReadPrefixedArray<byte>();
+        }
     }
 }

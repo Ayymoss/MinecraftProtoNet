@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x79, ProtocolState.Play)]
+[Packet(0x7F, ProtocolState.Play)]
 public class TickingStepPacket : IClientboundPacket
 {
     public int TickSteps { get; set; }

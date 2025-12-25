@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x2B, ProtocolState.Play)]
+[Packet(0x30, ProtocolState.Play)]
 public class LoginPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
 
-[Packet(0x0B, ProtocolState.Play, true)]
+[Packet(0x0C, ProtocolState.Play, true)]
 public class ClientTickEndPacket : IServerboundPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)

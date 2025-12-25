@@ -2,24 +2,33 @@
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Physics;
+using InputModel = MinecraftProtoNet.Models.Input.Input;
 
 namespace MinecraftProtoNet.State;
 
+/// <summary>
+/// Represents an entity in the game world.
+/// Stores both physics state and input state for players.
+/// </summary>
 public class Entity
 {
-    public const double PlayerWidth = 0.6;
-    public const double PlayerHeight = 1.8;
-    public const double PlayerEyeHeight = 1.62;
+    // ===== Bounding Box Constants (from PhysicsConstants for reference) =====
+    public const double PlayerWidth = PhysicsConstants.PlayerWidth;
+    public const double PlayerHeight = PhysicsConstants.PlayerHeight;
+    public const double PlayerEyeHeight = PhysicsConstants.PlayerEyeHeight;
     private const double HalfWidth = PlayerWidth / 2.0;
 
+    // ===== Identity =====
     public int EntityId { get; set; }
-    public float Health { get; set; }
-    public int Hunger { get; set; }
-    public float HungerSaturation { get; set; }
+
+    // ===== Health & Hunger =====
+    public float Health { get; set; } = 20f;
+    public int Hunger { get; set; } = 20;
+    public float HungerSaturation { get; set; } = 5f;
+
+    // ===== Position & Movement =====
     private Vector3<double> _position = new();
-    public Vector3<double> Velocity { get; set; } = new();
-    public Vector2<float> YawPitch { get; set; } = new();
-    public bool IsOnGround { get; set; }
 
     public Vector3<double> Position
     {
@@ -27,34 +36,147 @@ public class Entity
         set => _position = value;
     }
 
-    private int _blockPlaceSequence;
-    public int BlockPlaceSequence => _blockPlaceSequence; // Not thread safe
+    public Vector3<double> Velocity { get; set; } = new();
+    public Vector2<float> YawPitch { get; set; } = new();
 
-    public int IncrementSequence()
+    // ===== Physics State =====
+    public bool IsOnGround { get; set; }
+    public bool HorizontalCollision { get; set; }
+
+    /// <summary>
+    /// Whether the entity is currently submerged in water.
+    /// </summary>
+    public bool IsInWater { get; set; }
+
+    /// <summary>
+    /// Whether the entity is currently submerged in lava.
+    /// </summary>
+    public bool IsInLava { get; set; }
+
+    /// <summary>
+    /// The height of the fluid the entity is currently in (0.0 to 1.0ish).
+    /// </summary>
+    public double FluidHeight { get; set; }
+
+    /// <summary>
+    /// Whether the entity has a pending teleport to acknowledge in the next physics tick.
+    /// </summary>
+    public bool HasPendingTeleport { get; set; }
+
+    /// <summary>
+    /// The exact Yaw/Pitch sent by the server in the last teleport packet.
+    /// Used to acknowledge teleports with 100% precision.
+    /// </summary>
+    public Vector2<float>? TeleportYawPitch { get; set; }
+
+    /// <summary>
+    /// Whether the entity is currently sprinting (server-confirmed state).
+    /// This differs from Input.Sprint which is the intent to sprint.
+    /// </summary>
+    public bool IsSprinting { get; set; }
+
+    /// <summary>
+    /// Whether the entity was sprinting in the previous tick.
+    /// Used to detect sprint state changes for packet sending.
+    /// </summary>
+    public bool WasSprinting { get; set; }
+
+    // ===== Input State =====
+    /// <summary>
+    /// Current input state for this tick.
+    /// </summary>
+    public InputModel Input { get; set; } = InputModel.Empty;
+
+    /// <summary>
+    /// Previous tick's input state.
+    /// Used to detect changes for packet sending.
+    /// </summary>
+    public InputModel LastSentInput { get; set; } = InputModel.Empty;
+
+    // ===== Legacy Input Properties (for backward compatibility during migration) =====
+    // These delegate to the Input record
+
+    /// <summary>Gets/sets forward movement. Delegates to Input.Forward.</summary>
+    public bool Forward
     {
-        var currentSequence = _blockPlaceSequence;
-        Interlocked.Increment(ref _blockPlaceSequence);
-        return currentSequence;
+        get => Input.Forward;
+        set => Input = Input with { Forward = value };
     }
 
-    public short HeldSlot { get; set; }
-    public short HeldSlotWithOffset => (short)(HeldSlot + 36);
-    public Slot HeldItem => Inventory.TryGetValue(HeldSlotWithOffset, out var slot) ? slot : Slot.Empty; // Safer access
-    public Dictionary<short, Slot> Inventory { get; set; } = new();
-    public bool IsJumping { get; private set; }
-    public bool IsSneaking { get; private set; }
-    public bool WantsToSprint { get; private set; }
-    public bool IsSprintingNew { get; set; }
+    /// <summary>Gets/sets backward movement. Delegates to Input.Backward.</summary>
+    public bool Backward
+    {
+        get => Input.Backward;
+        set => Input = Input with { Backward = value };
+    }
 
-    [MemberNotNullWhen(true, nameof(IsHurtFromYaw))]
-    public bool IsHurt => IsHurtFromYaw is not null;
+    /// <summary>Gets/sets left strafe. Delegates to Input.Left.</summary>
+    public bool Left
+    {
+        get => Input.Left;
+        set => Input = Input with { Left = value };
+    }
 
-    public float? IsHurtFromYaw { get; set; }
-    public bool Forward { get; set; }
-    public bool Backward { get; set; }
-    public bool Left { get; set; }
-    public bool Right { get; set; }
+    /// <summary>Gets/sets right strafe. Delegates to Input.Right.</summary>
+    public bool Right
+    {
+        get => Input.Right;
+        set => Input = Input with { Right = value };
+    }
 
+    /// <summary>Gets whether jumping. Delegates to Input.Jump.</summary>
+    public bool IsJumping => Input.Jump;
+
+    /// <summary>Gets whether sneaking. Delegates to Input.Shift.</summary>
+    public bool IsSneaking => Input.Shift;
+
+    /// <summary>Gets whether sprint is being requested. Delegates to Input.Sprint.</summary>
+    public bool WantsToSprint => Input.Sprint;
+
+    // ===== Input Methods (for backward compatibility) =====
+
+    public void StartJumping() => Input = Input with { Jump = true };
+    public void StopJumping() => Input = Input with { Jump = false };
+    public void StartSprinting() => Input = Input with { Sprint = true };
+    public void StopSprinting() => Input = Input with { Sprint = false };
+    public void StartSneaking() => Input = Input with { Shift = true };
+    public void StopSneaking() => Input = Input with { Shift = false };
+
+    /// <summary>
+    /// Clears all movement input.
+    /// </summary>
+    public void ClearMovementInput()
+    {
+        Input = InputModel.Empty;
+    }
+
+    // ===== Damage State =====
+    [MemberNotNullWhen(true, nameof(HurtFromYaw))]
+    public bool IsHurt => HurtFromYaw is not null;
+
+    /// <summary>
+    /// Yaw direction from which damage was received. Null if not hurt.
+    /// </summary>
+    public float? HurtFromYaw { get; set; }
+
+    // ===== Inventory =====
+    /// <summary>
+    /// The entity's inventory.
+    /// </summary>
+    public EntityInventory Inventory { get; } = new();
+
+    // Convenience accessors that delegate to Inventory
+    public int BlockPlaceSequence => Inventory.BlockPlaceSequence;
+    public int IncrementSequence() => Inventory.IncrementSequence();
+    public short HeldSlot
+    {
+        get => Inventory.HeldSlot;
+        set => Inventory.HeldSlot = value;
+    }
+    public short HeldSlotWithOffset => Inventory.HeldSlotWithOffset;
+    public Slot HeldItem => Inventory.HeldItem;
+
+    // ===== Bounding Box =====
 
     public AABB GetBoundingBox()
     {
@@ -77,6 +199,8 @@ public class Entity
         );
     }
 
+    // ===== Look Direction =====
+
     public Vector3<double> GetLookDirection()
     {
         var yawRad = Math.PI / 180 * YawPitch.X;
@@ -89,16 +213,18 @@ public class Entity
         return new Vector3<double>(x, y, z);
     }
 
+    public Vector3<double> EyePosition => Position + new Vector3<double>(0, PlayerEyeHeight, 0);
+
+    // ===== Raycasting =====
+
     public RaycastHit? GetLookingAtBlock(Level level, double maxDistance = 5.0)
     {
-        var start = Position + new Vector3<double>(0, PlayerEyeHeight, 0);
-        var direction = GetLookDirection();
-        return level.RayCast(start, direction, maxDistance);
+        return level.RayCast(EyePosition, GetLookDirection(), maxDistance);
     }
 
     public Entity? GetLookingAtEntity(Entity localPlayer, IEnumerable<Entity> entities, double maxDistance = 10.0)
     {
-        var start = localPlayer.Position + new Vector3<double>(0, PlayerEyeHeight, 0);
+        var start = localPlayer.EyePosition;
         var direction = localPlayer.GetLookDirection();
 
         Entity? closestEntity = null;
@@ -137,7 +263,7 @@ public class Entity
     public Vector2<float> GetYawPitchToTarget(Entity localPlayer, Entity targetEntity)
     {
         var targetCenter = (targetEntity.GetBoundingBox().Min + targetEntity.GetBoundingBox().Max) * 0.5;
-        var eyePos = localPlayer.Position + new Vector3<double>(0, PlayerEyeHeight, 0);
+        var eyePos = localPlayer.EyePosition;
         var toTarget = targetCenter - eyePos;
         var yaw = (float)(Math.Atan2(-toTarget.X, toTarget.Z) * (180.0 / Math.PI));
         var horizontalDistance = Math.Sqrt(toTarget.X * toTarget.X + toTarget.Z * toTarget.Z);
@@ -150,11 +276,4 @@ public class Entity
 
         return new Vector2<float>(yaw, pitch);
     }
-
-    public void StartJumping() => IsJumping = true;
-    public void StopJumping() => IsJumping = false;
-    public void StartSprinting() => WantsToSprint = true;
-    public void StopSprinting() => WantsToSprint = false;
-    public void StartSneaking() => IsSneaking = true;
-    public void StopSneaking() => IsSneaking = false;
 }

@@ -1,4 +1,5 @@
 ﻿using MinecraftProtoNet.Auth.Dtos;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.State.Base;
 
@@ -10,14 +11,27 @@ public interface IMinecraftClient
     ClientState State { get; }
     int ProtocolVersion { get; set; }
     AuthResult AuthResult { get; set; }
+    
+    /// <summary>
+    /// The shared path follower service for pathfinding operations.
+    /// </summary>
+    IPathFollowerService PathFollowerService { get; }
+    
+    /// <summary>
+    /// Raised when the client disconnects from the server.
+    /// </summary>
+    event EventHandler<DisconnectReason>? OnDisconnected;
+    
     Task<bool> AuthenticateAsync();
     void EnableEncryption(byte[] sharedSecret);
     void EnableCompression(int threshold);
-    Task ConnectAsync(string host, int port);
+    Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
     Task SendPacketAsync(IServerboundPacket packet);
 
-    // TODO: Move these
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
+
     Task PhysicsTickAsync();
+    Task SendChatSessionUpdate();
 }
+

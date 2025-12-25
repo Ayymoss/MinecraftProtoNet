@@ -7,7 +7,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x41, ProtocolState.Play)]
+[Packet(0x47, ProtocolState.Play)]
 public class PlayerPositionPacket : IClientboundPacket
 {
     public int TeleportId { get; set; }
@@ -37,17 +37,18 @@ public class PlayerPositionPacket : IClientboundPacket
         Flags = (PositionFlags)buffer.ReadUnsignedInt();
     }
 
-    public enum PositionFlags : sbyte
+    [Flags]
+    public enum PositionFlags : int
     {
-        None,
-        X,
-        Y,
-        Z,
-        RotationY,
-        RotationX,
-        DeltaX,
-        DeltaY,
-        DeltaZ,
-        RotateDelta
+        None = 0,
+        X = 1 << 0,
+        Y = 1 << 1,
+        Z = 1 << 2,
+        Y_ROT = 1 << 3,
+        X_ROT = 1 << 4,
+        Delta_X = 1 << 5,
+        Delta_Y = 1 << 6,
+        Delta_Z = 1 << 7,
+        Rotate_Delta = 1 << 8
     }
 }

@@ -5,7 +5,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x26, ProtocolState.Play, true)]
+[Packet(0x2B, ProtocolState.Play, true)]
 public class KeepAlivePacket : IClientboundPacket
 {
     public long Payload { get; set; }

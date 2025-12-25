@@ -6,7 +6,7 @@ using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Clientbound;
 
-[Packet(0x29, ProtocolState.Play)]
+[Packet(0x2E, ProtocolState.Play)]
 public class LevelParticlesPacket : IClientboundPacket
 {
     public bool LongDistance { get; set; }
@@ -15,8 +15,7 @@ public class LevelParticlesPacket : IClientboundPacket
     public Vector3<float> Offset { get; set; }
     public float MaxSpeed { get; set; }
     public int ParticleCount { get; set; }
-    public int ParticleId { get; set; }
-    public byte[] Data { get; set; }
+    // ParticleId and Data are read from particle codec - skipped for now
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
@@ -34,8 +33,11 @@ public class LevelParticlesPacket : IClientboundPacket
         Offset = new Vector3<float>(offsetX, offsetY, offsetZ);
 
         MaxSpeed = buffer.ReadFloat();
-        ParticleCount = buffer.ReadVarInt();
-        ParticleId = buffer.ReadVarInt();
-        // TODO: Data ?? - Need to implement. https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Particles
+        ParticleCount = buffer.ReadSignedInt(); // Fixed: was VarInt, should be Int
+
+        // Particle data comes last (complex particle codec)
+        // Skip remaining bytes for particle data
+        _ = buffer.ReadRestBuffer();
     }
 }
+

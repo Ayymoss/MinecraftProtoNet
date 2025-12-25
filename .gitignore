@@ -12,6 +12,8 @@
 /dataSources/
 /dataSources.local.xml
 
+# Decompiled Minecraft Source
+minecraft-26.1-snapshot-1-client-DECOMPILED/
 
 # Common IntelliJ Platform excludes
 *.suo
@@ -26,3 +28,6 @@ _UpgradeReport_Files/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+blocks-*.json
+registries-*.json

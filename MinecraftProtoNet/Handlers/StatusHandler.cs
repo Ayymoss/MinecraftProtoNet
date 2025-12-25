@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
@@ -13,6 +14,8 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(PongResponsePacket))]
 public class StatusHandler : IPacketHandler
 {
+    private readonly ILogger<StatusHandler> _logger = LoggingConfiguration.CreateLogger<StatusHandler>();
+
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(StatusHandler));
 
@@ -21,8 +24,8 @@ public class StatusHandler : IPacketHandler
         switch (packet)
         {
             case StatusResponsePacket statusResponse:
-                Console.WriteLine($"Client Protocol: {client.ProtocolVersion}");
-                Console.WriteLine($"Status Response: {statusResponse.Response}");
+                _logger.LogInformation("Client Protocol: {ProtocolVersion}", client.ProtocolVersion);
+                _logger.LogInformation("Status Response: {Response}", statusResponse.Response);
 
                 try
                 {
@@ -32,15 +35,15 @@ public class StatusHandler : IPacketHandler
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex);
+                    _logger.LogError(ex, "Failed to parse status response");
                 }
 
                 await client.SendPacketAsync(new PingRequestPacket
                     { Payload = TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() });
                 break;
             case PongResponsePacket pong:
-                Console.WriteLine($"Ping: {TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() - pong.Payload}ms");
-                Console.WriteLine($"Client Protocol: {client.ProtocolVersion}");
+                _logger.LogInformation("Ping: {PingMs}ms", TimeProvider.System.GetUtcNow().ToUnixTimeMilliseconds() - pong.Payload);
+                _logger.LogInformation("Client Protocol: {ProtocolVersion}", client.ProtocolVersion);
                 break;
         }
     }

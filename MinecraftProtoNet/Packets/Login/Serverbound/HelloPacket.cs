@@ -24,7 +24,9 @@ public class HelloPacket : IServerboundPacket
         }
         else
         {
-            buffer.WriteUnsignedByte(0);
+            // Protocol 775+ stricter requirement: always send UUID. 
+            // Ideally AuthResult provides this, but fallback to Empty if offline/missing.
+            buffer.WriteUUID(Guid.Empty);
         }
     }
 }

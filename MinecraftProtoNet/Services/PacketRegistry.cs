@@ -1,9 +1,9 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
-using Spectre.Console;
 
 namespace MinecraftProtoNet.Services;
 
@@ -12,6 +12,7 @@ public static class PacketRegistry
     private static readonly Dictionary<(ProtocolState State, int PacketId), Func<IClientboundPacket>> ClientboundPacketFactories;
     private static readonly Dictionary<Type, Attributes.PacketAttribute> PacketAttributes;
     private static readonly Dictionary<Type, List<(ProtocolState State, int PacketId)>> HandlerRegistrations;
+    private static readonly ILogger Logger = LoggingConfiguration.CreateLogger("PacketRegistry");
 
     static PacketRegistry()
     {
@@ -36,16 +37,16 @@ public static class PacketRegistry
 
             if (ClientboundPacketFactories.TryGetValue(key, out var packetFactory))
             {
-                AnsiConsole.WriteLine(
-                    $"Warning: Duplicate packet definition for State={key.ProtocolState}, ID=0x{key.PacketId:X2}. Existing: {packetFactory.Method.DeclaringType?.FullName}, New: {type.FullName}");
+                Logger.LogWarning("Duplicate packet definition for State={State}, ID=0x{PacketId:X2}. Existing: {ExistingType}, New: {NewType}",
+                    key.ProtocolState, key.PacketId, packetFactory.Method.DeclaringType?.FullName, type.FullName);
                 continue;
             }
 
             var ctor = type.GetConstructor(Type.EmptyTypes);
             if (ctor == null)
             {
-                AnsiConsole.WriteLine(
-                    $"Warning: Packet type {type.FullName} does not have a parameterless constructor. Cannot create factory.");
+                Logger.LogWarning("Packet type {PacketType} does not have a parameterless constructor. Cannot create factory",
+                    type.FullName);
                 continue;
             }
 
@@ -77,16 +78,16 @@ public static class PacketRegistry
                 }
                 else
                 {
-                    AnsiConsole.WriteLine(
-                        $"Warning: Handler {handlerType.FullName} attempts to handle packet {handledAttr.PacketType.FullName}, but it lacks a [Packet] attribute or wasn't found.");
+                    Logger.LogWarning("Handler {HandlerType} attempts to handle packet {PacketType}, but it lacks a [Packet] attribute or wasn't found",
+                        handlerType.FullName, handledAttr.PacketType.FullName);
                 }
             }
 
             HandlerRegistrations.Add(handlerType, registrations);
         }
 
-        AnsiConsole.WriteLine(
-            $"Packet Registry Initialized: Found {ClientboundPacketFactories.Count} clientbound packets and {HandlerRegistrations.Count} handlers.");
+        Logger.LogInformation("Packet Registry initialized: Found {ClientboundCount} clientbound packets and {HandlerCount} handlers",
+            ClientboundPacketFactories.Count, HandlerRegistrations.Count);
     }
 
     public static IClientboundPacket CreateIncomingPacket(ProtocolState state, int packetId)
@@ -106,7 +107,7 @@ public static class PacketRegistry
             return registrations;
         }
 
-        AnsiConsole.WriteLine($"Warning: Handler type {handlerType.FullName} not found in registry.");
+        Logger.LogWarning("Handler type {HandlerType} not found in registry", handlerType.FullName);
         return [];
     }
 
