@@ -11,8 +11,6 @@ public class SprintCommand : ICommand
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        var isSprinting = await MovementActions.ToggleSprintingAsync(ctx);
-        var message = isSprinting ? "Sprinting!" : "Stopped sprinting.";
-        await ctx.SendChatAsync(message);
+        await ctx.SendChatAsync("Movement is disabled.");
     }
 }

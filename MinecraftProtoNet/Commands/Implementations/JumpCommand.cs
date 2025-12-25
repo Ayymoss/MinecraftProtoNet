@@ -11,8 +11,6 @@ public class JumpCommand : ICommand
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        var isJumping = MovementActions.ToggleJumping(ctx);
-        var message = isJumping ? "Jumping!" : "Stopped jumping!";
-        await ctx.SendChatAsync(message);
+        await ctx.SendChatAsync("Movement is disabled.");
     }
 }

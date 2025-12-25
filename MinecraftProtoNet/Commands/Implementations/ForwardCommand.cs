@@ -11,8 +11,6 @@ public class ForwardCommand : ICommand
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        var isMoving = MovementActions.ToggleForward(ctx);
-        var message = isMoving ? "Moving forward!" : "Stopped moving forward!";
-        await ctx.SendChatAsync(message);
+        await ctx.SendChatAsync("Movement is disabled.");
     }
 }

@@ -12,20 +12,6 @@ public class LookAtCommand : ICommand
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        if (!ctx.TryGetArg(0, out float x) ||
-            !ctx.TryGetArg(1, out float y) ||
-            !ctx.TryGetArg(2, out float z))
-        {
-            await ctx.SendChatAsync("Usage: !lookat <x> <y> <z> [face]");
-            return;
-        }
-
-        BlockFace? face = BlockFace.Top;
-        if (ctx.TryGetArg(3, out string faceStr) && Enum.TryParse<BlockFace>(faceStr, true, out var parsedFace))
-        {
-            face = parsedFace;
-        }
-
-        await MovementActions.LookAtAsync(ctx, x, y, z, face);
+        await ctx.SendChatAsync("Movement is disabled.");
     }
 }

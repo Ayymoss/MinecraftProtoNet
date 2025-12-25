@@ -28,7 +28,6 @@ public class MinecraftClient : IMinecraftClient
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
 
-    public IPathFollowerService PathFollowerService { get; }
 
     /// <summary>
     /// Raised when the client disconnects from the server.
@@ -45,14 +44,12 @@ public class MinecraftClient : IMinecraftClient
         Connection connection, 
         IPacketService packetService,
         IPhysicsService physicsService,
-        IPathFollowerService pathFollowerService,
         CommandRegistry commandRegistry,
         ILogger<MinecraftClient> logger)
     {
         _connection = connection;
         _packetService = packetService;
         _physicsService = physicsService;
-        PathFollowerService = pathFollowerService;
         _commandRegistry = commandRegistry;
         _logger = logger;
         
@@ -213,11 +210,7 @@ public class MinecraftClient : IMinecraftClient
     public async Task PhysicsTickAsync()
     {
         if (!State.LocalPlayer.HasEntity) return;
-        // The PathFollowerService's UpdatePathFollowingInput will be called by the PhysicsService via a delegate.
-        // This ensures that input decisions (like wanting to jump or sprint based on path) are made *before* physics calculations for the tick.
-        await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync,
-            (entity) => PathFollowerService.UpdatePathFollowingInput(entity)
-        );
+        await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync);
     }
 
 

@@ -12,10 +12,6 @@ public interface IMinecraftClient
     int ProtocolVersion { get; set; }
     AuthResult AuthResult { get; set; }
     
-    /// <summary>
-    /// The shared path follower service for pathfinding operations.
-    /// </summary>
-    IPathFollowerService PathFollowerService { get; }
     
     /// <summary>
     /// Raised when the client disconnects from the server.

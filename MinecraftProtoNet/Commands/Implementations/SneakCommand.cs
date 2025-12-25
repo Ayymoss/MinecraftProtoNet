@@ -11,8 +11,6 @@ public class SneakCommand : ICommand
 
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        var isSneaking = await MovementActions.ToggleSneakingAsync(ctx);
-        var message = isSneaking ? "Sneaking!" : "Stopped sneaking.";
-        await ctx.SendChatAsync(message);
+        await ctx.SendChatAsync("Movement is disabled.");
     }
 }

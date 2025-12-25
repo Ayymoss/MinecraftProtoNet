@@ -197,8 +197,6 @@ public class PlayHandler : IPacketHandler
                 if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
                 var entity = client.State.LocalPlayer.Entity;
 
-                // Stop pathing immediately on teleport to avoid race conditions and illegal movements
-                client.PathFollowerService.HandleTeleport(entity);
                 entity.HasPendingTeleport = true;
                 entity.TeleportYawPitch = playerPositionPacket.YawPitch;
 

@@ -26,7 +26,6 @@ public static class ServiceCollectionExtensions
         
         // Game services
         services.AddSingleton<IPhysicsService, PhysicsService>();
-        services.AddSingleton<IPathFollowerService, PathFollowerService>();
         services.AddSingleton<IGameLoop, GameLoop>();
         
         // Data loading
