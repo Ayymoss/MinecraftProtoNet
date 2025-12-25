@@ -1,6 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
@@ -8,7 +9,6 @@ using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
-using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
@@ -21,6 +21,7 @@ public sealed class Connection : IDisposable
 
     // --- Network ---
     private readonly TcpClient _client = new();
+    private readonly ILogger<Connection> _logger = LoggingConfiguration.CreateLogger<Connection>();
     private NetworkStream? _rawStream;
     private bool _useEncryption;
     private int _compressionThreshold = -1;
@@ -40,7 +41,7 @@ public sealed class Connection : IDisposable
     {
         if (_client.Connected)
         {
-            AnsiConsole.WriteLine("[Connection WARN] Already connected.");
+            _logger.LogWarning("Already connected");
             return;
         }
 
@@ -50,11 +51,11 @@ public sealed class Connection : IDisposable
         {
             await _client.ConnectAsync(host, port, cancellationToken);
             _rawStream = _client.GetStream();
-            AnsiConsole.WriteLine($"[Connection INFO] Connected to {host}:{port}");
+            _logger.LogInformation("Connected to {Host}:{Port}", host, port);
         }
         catch (Exception ex)
         {
-            AnsiConsole.WriteLine($"[Connection ERROR] Failed to connect to {host}:{port} - {ex.Message}");
+            _logger.LogError(ex, "Failed to connect to {Host}:{Port}", host, port);
             throw;
         }
     }
@@ -67,7 +68,7 @@ public sealed class Connection : IDisposable
             throw new ArgumentException("Shared secret must be 16 bytes for AES-128.", nameof(sharedSecret));
         if (_useEncryption)
         {
-            AnsiConsole.WriteLine("[Connection WARN] Encryption is already enabled.");
+            _logger.LogWarning("Encryption is already enabled");
             return;
         }
 
@@ -89,12 +90,11 @@ public sealed class Connection : IDisposable
             _decryptStream = new CryptoStream(_rawStream, _decryptTransform, CryptoStreamMode.Read, leaveOpen: true);
             _encryptStream = new CryptoStream(_rawStream, _encryptTransform, CryptoStreamMode.Write, leaveOpen: true);
             _useEncryption = true;
-            AnsiConsole.WriteLine("[Connection INFO] AES/CFB8 encryption enabled (using BouncyCastle).");
+            _logger.LogInformation("AES/CFB8 encryption enabled (using BouncyCastle)");
         }
         catch (Exception ex)
         {
-            AnsiConsole.WriteLine($"[Connection ERROR] Failed to initialize AES streams: {ex.Message}");
-            AnsiConsole.WriteException(ex);
+            _logger.LogError(ex, "Failed to initialize AES streams");
             throw;
         }
     }
@@ -106,19 +106,19 @@ public sealed class Connection : IDisposable
 
         if (_compressionThreshold == threshold)
         {
-            AnsiConsole.WriteLine($"[Connection WARN] Compression threshold already set to: {threshold}");
+            _logger.LogWarning("Compression threshold already set to: {Threshold}", threshold);
             return;
         }
 
         if (threshold < 0)
         {
-            AnsiConsole.WriteLine($"[Connection INFO] Compression disabled (threshold {threshold}).");
+            _logger.LogInformation("Compression disabled (threshold {Threshold})", threshold);
             _compressionThreshold = -1;
             return;
         }
 
         _compressionThreshold = threshold;
-        AnsiConsole.WriteLine($"[Connection INFO] Compression enabled with threshold: {threshold}");
+        _logger.LogInformation("Compression enabled with threshold: {Threshold}", threshold);
     }
 
     #endregion
@@ -164,8 +164,8 @@ public sealed class Connection : IDisposable
 
         if (dataLength < _compressionThreshold)
         {
-            AnsiConsole.WriteLine(
-                $"[ReadPacketBytesAsync WARN] Received compressed packet with Data Length ({dataLength}) below threshold ({_compressionThreshold}).");
+            _logger.LogWarning("Received compressed packet with Data Length ({DataLength}) below threshold ({Threshold})",
+                dataLength, _compressionThreshold);
         }
 
         if (dataLength > MaxUncompressedPacketSize)
@@ -265,8 +265,7 @@ public sealed class Connection : IDisposable
         if (silent) return;
 
         var packetNamePretty = packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId));
-        AnsiConsole.Markup($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [green][[->SERVER]][/] {packetNamePretty} ");
-        AnsiConsole.WriteLine(packet.GetPropertiesAsString());
+        _logger.LogDebug("[->SERVER] {PacketName} {Properties}", packetNamePretty, packet.GetPropertiesAsString());
     }
 
     #endregion
@@ -379,7 +378,7 @@ public sealed class Connection : IDisposable
 
         if (disposing)
         {
-            AnsiConsole.WriteLine("[Connection INFO] Disposing connection.");
+            _logger.LogInformation("Disposing connection");
             _decryptStream?.Dispose();
             _encryptStream?.Dispose();
             _decryptTransform?.Dispose();

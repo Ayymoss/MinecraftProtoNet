@@ -42,12 +42,17 @@ public class PalettedContainer
         var newPalette = CreatePalette(bitsPerEntry);
         newPalette.Read(ref reader);
 
+        // For blocks, bitsPerEntry 1-4 are treated as 4 bits for packing/storage
+        var effectiveBits = _paletteType == PaletteType.BlockState 
+            ? (bitsPerEntry == 0 ? 0 : Math.Max(4, (int)bitsPerEntry))
+            : bitsPerEntry;
+
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
         BitStorage? newStorage = null;
 
-        if (bitsPerEntry > 0)
+        if (effectiveBits > 0)
         {
-            var entriesPerLong = 64 / bitsPerEntry;
+            var entriesPerLong = 64 / effectiveBits;
             var numberOfLongs = (size + entriesPerLong - 1) / entriesPerLong;
             var bitData = new long[numberOfLongs];
 
@@ -56,7 +61,7 @@ public class PalettedContainer
                 bitData[i] = reader.ReadSignedLong();
             }
 
-            newStorage = new BitStorage(bitsPerEntry, size, bitData);
+            newStorage = new BitStorage(effectiveBits, size, bitData);
         }
 
         lock (_lock)
@@ -124,12 +129,14 @@ public class PalettedContainer
         {
             SingleValuePalette => 0,
             IndirectPalette indirect => indirect.Bits,
-            DirectPalette => 15,
             GlobalPalette => 31,
             _ => throw new InvalidOperationException("Unknown palette type")
         };
 
-        var newBits = Math.Min(currentBits + 1, 31);
+        var newBits = currentBits + 1;
+        if (_paletteType == PaletteType.BlockState && newBits > 8) newBits = 15;
+        if (_paletteType == PaletteType.Biome && newBits > 3) newBits = 6; // Biome global is usually 6 bits
+
         var newPalette = CreatePalette(newBits);
         var size = _paletteType == PaletteType.BlockState ? 4096 : 64;
         var newStorage = new BitStorage(newBits, size, null);
@@ -157,7 +164,6 @@ public class PalettedContainer
             {
                 0 => new SingleValuePalette(),
                 <= 3 => new IndirectPalette(bitsPerEntry),
-                <= 6 => new DirectPalette(),
                 _ => new GlobalPalette()
             };
         }
@@ -165,8 +171,7 @@ public class PalettedContainer
         return bitsPerEntry switch
         {
             0 => new SingleValuePalette(),
-            <= 8 => new IndirectPalette(bitsPerEntry),
-            <= 15 => new DirectPalette(),
+            <= 8 => new IndirectPalette(Math.Max(4, bitsPerEntry)),
             _ => new GlobalPalette()
         };
     }

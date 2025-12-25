@@ -1,4 +1,6 @@
 using System.Reflection;
+using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core;
 
 namespace MinecraftProtoNet.Commands;
 
@@ -8,6 +10,7 @@ namespace MinecraftProtoNet.Commands;
 public class CommandRegistry
 {
     private readonly Dictionary<string, ICommand> _commands = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<CommandRegistry> _logger = LoggingConfiguration.CreateLogger<CommandRegistry>();
 
     /// <summary>
     /// Registers a command instance.
@@ -47,7 +50,7 @@ public class CommandRegistry
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WARN] Failed to register command {type.Name}: {ex.Message}");
+                _logger.LogWarning(ex, "Failed to register command {CommandType}", type.Name);
             }
         }
     }
@@ -87,7 +90,7 @@ public class CommandRegistry
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Command '{commandName}' failed: {ex.Message}");
+            _logger.LogError(ex, "Command '{CommandName}' failed", commandName);
             return false;
         }
     }

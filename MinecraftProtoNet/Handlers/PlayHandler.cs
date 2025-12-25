@@ -1,5 +1,7 @@
-﻿using MinecraftProtoNet.Attributes;
+﻿using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.NBT;
@@ -56,9 +58,18 @@ namespace MinecraftProtoNet.Handlers;
 public class PlayHandler : IPacketHandler
 {
     private bool _playerLoaded;
+    private readonly ILogger<PlayHandler> _logger;
+    private readonly IGameLoop _gameLoop;
+
+    public PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop)
+    {
+        _logger = logger;
+        _gameLoop = gameLoop;
+    }
 
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
+
 
     public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
@@ -101,12 +112,11 @@ public class PlayHandler : IPacketHandler
 
             case AddEntityPacket addEntityPacket:
             {
-                // Player entity type ID in Minecraft 26.1 - verify with entity registry if this changes
-                const int playerEntityType = 155;
-                if (addEntityPacket.Type is not playerEntityType) break;
+                if (addEntityPacket.Type is not EntityTypes.Player) break;
                 await client.State.Level.AddEntityAsync(addEntityPacket.EntityUuid, addEntityPacket.EntityId, addEntityPacket.Position);
                 break;
             }
+
 
             case RemoveEntitiesPacket removeEntitiesPacket:
             {
@@ -122,23 +132,25 @@ public class PlayHandler : IPacketHandler
             {
                 var translateLookup = disconnectPacket.DisconnectReason.FindTag<NbtString>("translate")?.Value;
                 var messages = disconnectPacket.DisconnectReason.FindTags<NbtString>(null).Reverse().Select(x => x.Value);
-                Console.WriteLine($"Disconnected from Server for: ({translateLookup}) {string.Join(" ", messages)}");
+                _logger.LogWarning("Disconnected from server: ({TranslateKey}) {Messages}",
+                    translateLookup, string.Join(" ", messages));
                 break;
             }
             case SystemChatPacket systemChatPacket:
             {
                 var translateLookup = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
                 var texts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value);
-                Console.WriteLine($"System Message: ({translateLookup ?? "<NULL>"}) {string.Join(" ", texts)}");
+                _logger.LogInformation("System message: ({TranslateKey}) {Messages}",
+                    translateLookup ?? "<NULL>", string.Join(" ", texts));
                 break;
             }
             case ContainerSetContentPacket containerSetContentPacket:
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.Inventory = containerSetContentPacket.SlotData
+                entity.Inventory.SetAllSlots(containerSetContentPacket.SlotData
                     .Select((x, i) => new { Index = (short)i, Slot = x })
-                    .ToDictionary(x => x.Index, x => x.Slot);
+                    .ToDictionary(x => x.Index, x => x.Slot));
                 break;
             }
             case HurtAnimationPacket hurtAnimationPacket:
@@ -152,7 +164,7 @@ public class PlayHandler : IPacketHandler
             {
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
-                entity.Inventory[containerSetSlotPacket.SlotToUpdate] = containerSetSlotPacket.Slot;
+                entity.Inventory.SetSlot(containerSetSlotPacket.SlotToUpdate, containerSetSlotPacket.Slot);
                 break;
             }
             case BlockChangedAcknowledgementPacket blockChangedAcknowledgementPacket:
@@ -160,7 +172,7 @@ public class PlayHandler : IPacketHandler
                 if (!client.State.LocalPlayer.HasEntity) break;
                 var entity = client.State.LocalPlayer.Entity;
                 entity.HeldItem.ItemCount -= 1;
-                if (entity.HeldItem.ItemCount <= 0) entity.Inventory[entity.HeldSlotWithOffset] = new Slot();
+                if (entity.HeldItem.ItemCount <= 0) entity.Inventory.SetSlot(entity.HeldSlotWithOffset, new Slot());
                 break;
             }
             case PlayerChatPacket playerChatPacket:
@@ -186,54 +198,21 @@ public class PlayHandler : IPacketHandler
                 var entity = client.State.LocalPlayer.Entity;
 
                 // Stop pathing immediately on teleport to avoid race conditions and illegal movements
-                client.PathFollowerService.StopFollowingPath(entity);
+                client.PathFollowerService.HandleTeleport(entity);
                 entity.HasPendingTeleport = true;
+                entity.TeleportYawPitch = playerPositionPacket.YawPitch;
 
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
                 if (!_playerLoaded)
                 {
                     await client.SendPacketAsync(new PlayerLoadedPacket());
 
-                    var physicsThread = new Thread(async () =>
-                    {
-                        var stopwatch = new System.Diagnostics.Stopwatch();
-
-                        while (true)
-                        {
-                            stopwatch.Restart();
-                            try
-                            {
-                                await client.PhysicsTickAsync();
-                                client.State.Level.IncrementClientTickCounter();
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Error in physics tick: {ex}");
-                            }
-
-                            stopwatch.Stop();
-
-                            var targetDelayMs = client.State.Level.TickInterval;
-                            var processingTimeMs = stopwatch.ElapsedMilliseconds;
-                            targetDelayMs = Math.Max(1, Math.Min(1000, targetDelayMs));
-
-                            if (processingTimeMs < targetDelayMs)
-                            {
-                                var remainingDelayMs = targetDelayMs - processingTimeMs;
-                                await Task.Delay(TimeSpan.FromMilliseconds(remainingDelayMs));
-                            }
-                            else
-                            {
-                                await Task.Yield();
-                            }
-
-                            await client.SendPacketAsync(new ClientTickEndPacket());
-                        }
-                    }) { Name = "Local Entity Physics", IsBackground = true };
-                    physicsThread.Start();
+                    // Start the game loop (physics tick loop)
+                    _gameLoop.Start(client);
 
                     _playerLoaded = true;
                 }
+
 
                 // --- Position update ---
                 var flags = playerPositionPacket.Flags;
@@ -255,7 +234,8 @@ public class PlayHandler : IPacketHandler
                 var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
                 entity.YawPitch = new Vector2<float>(yaw, pitch);
 
-                Console.WriteLine($"[TELEPORT_DEBUG] Applied TeleportId={playerPositionPacket.TeleportId}, NewPos={entity.Position}, NewVel={entity.Velocity}, Flags={flags}");
+                _logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
+                    playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
                 entity.IsOnGround = false; // Reset on-ground state until next physics tick
                 break;
             }
@@ -266,7 +246,8 @@ public class PlayHandler : IPacketHandler
             }
             case PlayerCombatKillPacket playerCombatKillPacket:
             {
-                Console.WriteLine($"{playerCombatKillPacket.PlayerId} died for {playerCombatKillPacket.DeathMessage}");
+                _logger.LogInformation("Player {PlayerId} died: {DeathMessage}",
+                    playerCombatKillPacket.PlayerId, playerCombatKillPacket.DeathMessage);
                 break;
             }
             case SetHealthPacket setHealthPacket:

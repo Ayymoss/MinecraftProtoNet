@@ -1,4 +1,5 @@
 ﻿using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Auth.Authenticators;
 using MinecraftProtoNet.Core;
@@ -8,7 +9,6 @@ using MinecraftProtoNet.Packets.Configuration.Clientbound;
 using MinecraftProtoNet.Packets.Login.Clientbound;
 using MinecraftProtoNet.Packets.Login.Serverbound;
 using MinecraftProtoNet.Services;
-using Spectre.Console;
 using HelloPacket = MinecraftProtoNet.Packets.Login.Clientbound.HelloPacket;
 
 namespace MinecraftProtoNet.Handlers;
@@ -19,6 +19,8 @@ namespace MinecraftProtoNet.Handlers;
 [HandlesPacket(typeof(LoginCompressionPacket))]
 public class LoginHandler : IPacketHandler
 {
+    private readonly ILogger<LoginHandler> _logger = LoggingConfiguration.CreateLogger<LoginHandler>();
+
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(LoginHandler));
 
@@ -27,7 +29,7 @@ public class LoginHandler : IPacketHandler
         switch (packet)
         {
             case DisconnectPacket disconnectPacket:
-                AnsiConsole.MarkupLine($"[red]Disconnected: {disconnectPacket.Reason}[/]");
+                _logger.LogWarning("Disconnected: {Reason}", disconnectPacket.Reason);
                 await client.DisconnectAsync();
                 break;
             case HelloPacket helloPacket:
@@ -38,8 +40,7 @@ public class LoginHandler : IPacketHandler
             case LoginSuccessPacket loginSuccess:
                 await client.SendPacketAsync(new LoginAcknowledgedPacket());
                 client.ProtocolState = ProtocolState.Configuration;
-                AnsiConsole.MarkupLine(
-                    $"[grey][[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.ProtocolState.ToString()}[/]");
+                _logger.LogDebug("Switching protocol state: {ProtocolState}", client.ProtocolState);
                 break;
             case LoginCompressionPacket compressionPacket:
             {
@@ -53,44 +54,44 @@ public class LoginHandler : IPacketHandler
     {
         if (compressionPacket.Threshold < 0)
         {
-            AnsiConsole.MarkupLine("[yellow]Not using compression due to negative threshold.[/]");
+            _logger.LogInformation("Not using compression due to negative threshold");
             return;
         }
         
-        AnsiConsole.MarkupLine($"[yellow]Enabling compression with threshold: {compressionPacket.Threshold}[/]");
+        _logger.LogInformation("Enabling compression with threshold: {Threshold}", compressionPacket.Threshold);
         
         client.EnableCompression(compressionPacket.Threshold);
     }
 
     private async Task HandleEncryptionRequestAsync(HelloPacket helloPacket, IMinecraftClient client)
     {
-        AnsiConsole.MarkupLine("[yellow]Received HelloPacket. Initiating encryption...[/]");
+        _logger.LogInformation("Received HelloPacket. Initiating encryption...");
 
         // 1. Generate Shared Secret
         var sharedSecret = RandomNumberGenerator.GetBytes(16);
 
         if (helloPacket.ShouldAuthenticate)
         {
-            AnsiConsole.MarkupLine("[yellow]Server requires authentication. Contacting Mojang session server...[/]");
+            _logger.LogInformation("Server requires authentication. Contacting Mojang session server...");
             // 2. Authenticate with Mojang Session Server
             var authenticated = await MinecraftAuthenticator.AuthenticateWithMojangAsync(helloPacket.ServerId, sharedSecret,
                 helloPacket.PublicKey, client.AuthResult);
 
             if (!authenticated)
             {
-                AnsiConsole.MarkupLine("[red]Mojang authentication failed. Disconnecting.[/]");
+                _logger.LogError("Mojang authentication failed. Disconnecting");
                 await client.DisconnectAsync();
                 return;
             }
 
-            AnsiConsole.MarkupLine("[green]Mojang authentication successful.[/]");
+            _logger.LogInformation("Mojang authentication successful");
             
             // Small delay to ensure Mojang's session has propagated before server queries it
             await Task.Delay(100);
         }
         else
         {
-            AnsiConsole.MarkupLine("[grey]Server is in Offline Mode (authentication not required by server).[/]");
+            _logger.LogInformation("Server is in Offline Mode (authentication not required by server)");
         }
 
         // 3. Encrypt Shared Secret and Verify Token using Server's Public Key
@@ -105,15 +106,14 @@ public class LoginHandler : IPacketHandler
             encryptedSharedSecret = rsa.Encrypt(sharedSecret, RSAEncryptionPadding.Pkcs1);
             encryptedVerifyToken = rsa.Encrypt(helloPacket.VerifyToken, RSAEncryptionPadding.Pkcs1);
 
-            AnsiConsole.MarkupLine(
-                $"[grey]Shared Secret ({sharedSecret.Length} bytes): {Convert.ToHexString(sharedSecret)}[/]");
-            AnsiConsole.MarkupLine($"[grey]Encrypted Shared Secret ({encryptedSharedSecret.Length} bytes).[/]");
-            AnsiConsole.MarkupLine($"[grey]Encrypted Verify Token ({encryptedVerifyToken.Length} bytes).[/]");
+            _logger.LogDebug("Shared Secret ({Length} bytes): {SharedSecret}",
+                sharedSecret.Length, Convert.ToHexString(sharedSecret));
+            _logger.LogDebug("Encrypted Shared Secret ({Length} bytes)", encryptedSharedSecret.Length);
+            _logger.LogDebug("Encrypted Verify Token ({Length} bytes)", encryptedVerifyToken.Length);
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine("[red]Failed to perform RSA encryption.[/]");
-            AnsiConsole.WriteException(ex);
+            _logger.LogError(ex, "Failed to perform RSA encryption");
             await client.DisconnectAsync();
             return;
         }
@@ -125,11 +125,11 @@ public class LoginHandler : IPacketHandler
             VerifyToken = encryptedVerifyToken
         };
         await client.SendPacketAsync(keyPacket);
-        AnsiConsole.MarkupLine("[yellow]Sent KeyPacket. Enabling AES encryption...[/]");
+        _logger.LogInformation("Sent KeyPacket. Enabling AES encryption...");
 
         // 5. Enable Encryption Layer
         client.EnableEncryption(sharedSecret);
 
-        AnsiConsole.MarkupLine("[green]Encryption enabled for subsequent packets.[/]");
+        _logger.LogInformation("Encryption enabled for subsequent packets");
     }
 }

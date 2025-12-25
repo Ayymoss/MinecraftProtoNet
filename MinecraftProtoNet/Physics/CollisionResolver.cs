@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.State;
 using static MinecraftProtoNet.Physics.PhysicsConstants;
@@ -51,6 +53,8 @@ public readonly struct CollisionResult
 /// </summary>
 public static class CollisionResolver
 {
+    private static readonly ILogger _logger = LoggingConfiguration.CreateLogger("CollisionResolver");
+
     /// <summary>
     /// Moves an entity with collision detection and resolution.
     /// Source: Java's Entity.move() and Entity.collide()
@@ -72,6 +76,7 @@ public static class CollisionResolver
         var currentBox = boundingBox;
         var originalDelta = desiredDelta;
         var landedOnGround = false;
+        var actualDelta = Vector3<double>.Zero;
 
         // Early exit if no movement
         if (Math.Abs(desiredDelta.X) < Epsilon && 
@@ -85,80 +90,63 @@ public static class CollisionResolver
             };
         }
 
-        // Get potential colliders for the entire movement path
-        var expandedBox = currentBox.Expand(
-            desiredDelta.X > 0 ? desiredDelta.X : 0,
-            desiredDelta.Y > 0 ? desiredDelta.Y : 0,
-            desiredDelta.Z > 0 ? desiredDelta.Z : 0
-        ).Expand(
-            desiredDelta.X < 0 ? -desiredDelta.X : 0,
-            desiredDelta.Y < 0 ? -desiredDelta.Y : 0,
-            desiredDelta.Z < 0 ? -desiredDelta.Z : 0
-        ).Expand(Epsilon);
+        // Get potential colliders for the entire movement path (directional expansion)
+        var expandedBox = currentBox.ExpandTowards(desiredDelta.X, desiredDelta.Y, desiredDelta.Z).Expand(Epsilon);
 
         var colliders = level.GetCollidingBlockAABBs(expandedBox);
 
-        // Resolve Y axis first (most important for ground detection)
-        var adjustedY = desiredDelta.Y;
-        foreach (var collider in colliders)
+        if (colliders.Count > 0)
         {
-            adjustedY = currentBox.CalculateYOffset(collider, adjustedY);
+            _logger.LogTrace("Found {Count} colliders for move path. ExpandedBox={Box}", colliders.Count, expandedBox);
         }
 
-        var collidedY = Math.Abs(adjustedY - desiredDelta.Y) > Epsilon;
-        if (collidedY && desiredDelta.Y < 0)
-        {
-            landedOnGround = true;
-        }
+        actualDelta = ResolveMovement(originalDelta, boundingBox, colliders);
+        currentBox = boundingBox.Offset(actualDelta);
 
-        currentBox = currentBox.Offset(0, adjustedY, 0);
+        var collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
+        var collidedY = Math.Abs(actualDelta.Y - originalDelta.Y) > Epsilon;
+        var collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
+        landedOnGround = collidedY && originalDelta.Y < 0;
 
-        // Resolve X axis
-        var adjustedX = desiredDelta.X;
-        foreach (var collider in colliders)
-        {
-            adjustedX = currentBox.CalculateXOffset(collider, adjustedX);
-        }
-
-        var collidedX = Math.Abs(adjustedX - desiredDelta.X) > Epsilon;
-        currentBox = currentBox.Offset(adjustedX, 0, 0);
-
-        // Resolve Z axis
-        var adjustedZ = desiredDelta.Z;
-        foreach (var collider in colliders)
-        {
-            adjustedZ = currentBox.CalculateZOffset(collider, adjustedZ);
-        }
-
-        var collidedZ = Math.Abs(adjustedZ - desiredDelta.Z) > Epsilon;
-        currentBox = currentBox.Offset(0, 0, adjustedZ);
-
-        var actualDelta = new Vector3<double>(adjustedX, adjustedY, adjustedZ);
-
-        // Try step-up if we collided horizontally while on ground
         // Try step-up if we collided horizontally while on ground OR in fluid
         var horizontalCollision = collidedX || collidedZ;
-        if (horizontalCollision && !isSneaking && (wasOnGround || isInFluid))
+        if (DefaultStepHeight > 0 && (landedOnGround || wasOnGround || isInFluid) && horizontalCollision && !isSneaking)
         {
-            var stepResult = TryStepUp(
-                boundingBox,
-                level,
-                originalDelta.X,
-                originalDelta.Z,
-                colliders);
+            // If we landed on ground this tick, step-up should start from the landed position
+            var groundedBox = landedOnGround ? boundingBox.Offset(0, actualDelta.Y, 0) : boundingBox;
+            
+            var stepDistance = -1.0;
+            var stepVector = Vector3<double>.Zero;
 
-            // Use step result if it moved us further
-            var stepDistSq = stepResult.X * stepResult.X + stepResult.Z * stepResult.Z;
+            // 1. Rise StepHeight
+            var upBox = boundingBox.Offset(0, DefaultStepHeight, 0);
+            // 2. Move Horizontal (using the original delta)
+            // We only care about X/Z here.
+            var stepDelta = ResolveMovement(new Vector3<double>(originalDelta.X, 0, originalDelta.Z), upBox, colliders);
+            var horizBox = upBox.Offset(stepDelta.X, 0, stepDelta.Z);
+            
+            // 3. Drop StepHeight (search down)
+            var dropY = ResolveMovement(new Vector3<double>(0, -DefaultStepHeight, 0), horizBox, colliders).Y;
+            var finalStepBox = horizBox.Offset(0, dropY, 0);
+
+            // Calculate progress
+            // Minecraft uses the square distance of the horizontal movement
+            // + a bias if we end up higher? No, primarily horizontal.
+            var stepDistSq = stepDelta.X * stepDelta.X + stepDelta.Z * stepDelta.Z;
             var normalDistSq = actualDelta.X * actualDelta.X + actualDelta.Z * actualDelta.Z;
-
-            if (stepDistSq > normalDistSq + Epsilon)
+            
+            if (stepDistSq > normalDistSq)
             {
-                actualDelta = stepResult;
-                currentBox = boundingBox.Offset(actualDelta);
-                landedOnGround = true;
-                collidedX = Math.Abs(stepResult.X - originalDelta.X) > Epsilon;
-                collidedZ = Math.Abs(stepResult.Z - originalDelta.Z) > Epsilon;
-                collidedY = false; // We stepped up, didn't collide
+                 // We moved further horizontally by stepping!
+                 // The actualDelta needs to be the strict vector from Start to End
+                 // Start: boundingBox.Min
+                 // End: finalStepBox.Min
+                 actualDelta = finalStepBox.Min - boundingBox.Min;
+                 currentBox = finalStepBox;
+                 landedOnGround = true; 
+                 collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
+                 collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
+                 collidedY = false; // Stepping replaces the collision with a valid move
             }
         }
 
@@ -174,78 +162,42 @@ public static class CollisionResolver
     }
 
     /// <summary>
-    /// Attempts to step up over obstacles.
-    /// Source: Java's Entity.collide() step-up logic
+    /// Resolves movement components sequentially: Y, then X, then Z.
+    /// Helper to reduce code duplication between normal move and step-up.
     /// </summary>
-    private static Vector3<double> TryStepUp(
-        AABB originalBox,
-        Level level,
-        double desiredDeltaX,
-        double desiredDeltaZ,
-        List<AABB> existingColliders)
+    private static Vector3<double> ResolveMovement(
+        Vector3<double> delta,
+        AABB startBox,
+        List<AABB> colliders)
     {
-        // 1. Check if we can move up by step height
-        var stepUpBox = originalBox.Offset(0, DefaultStepHeight + Epsilon, 0);
-        var stepUpColliders = level.GetCollidingBlockAABBs(stepUpBox);
+        var currentBox = startBox;
 
-        // If there's something blocking us from stepping up, abort
-        if (stepUpColliders.Any(c => c.Intersects(stepUpBox)))
+        // Resolve Y
+        var yScale = delta.Y;
+        foreach (var collider in colliders)
         {
-            return Vector3<double>.Zero;
+            yScale = currentBox.CalculateYOffset(collider, yScale);
+        }
+        currentBox = currentBox.Offset(0, yScale, 0);
+
+        // Resolve X
+        var xScale = delta.X;
+        foreach (var collider in colliders)
+        {
+            xScale = currentBox.CalculateXOffset(collider, xScale);
+        }
+        currentBox = currentBox.Offset(xScale, 0, 0);
+
+        // Resolve Z
+        var zScale = delta.Z;
+        foreach (var collider in colliders)
+        {
+            zScale = currentBox.CalculateZOffset(collider, zScale);
         }
 
-        // 2. Move up
-        var currentY = DefaultStepHeight;
-        var allColliders = level.GetCollidingBlockAABBs(
-            originalBox.Offset(0, DefaultStepHeight, 0).Expand(Math.Abs(desiredDeltaX), 0, Math.Abs(desiredDeltaZ)));
-
-        foreach (var collider in allColliders)
-        {
-            currentY = originalBox.CalculateYOffset(collider, currentY);
-        }
-
-        var steppedBox = originalBox.Offset(0, currentY, 0);
-
-        // 3. Move horizontally
-        var currentX = desiredDeltaX;
-        foreach (var collider in allColliders)
-        {
-            currentX = steppedBox.CalculateXOffset(collider, currentX);
-        }
-
-        steppedBox = steppedBox.Offset(currentX, 0, 0);
-
-        var currentZ = desiredDeltaZ;
-        foreach (var collider in allColliders)
-        {
-            currentZ = steppedBox.CalculateZOffset(collider, currentZ);
-        }
-
-        steppedBox = steppedBox.Offset(0, 0, currentZ);
-
-        // 4. Move back down to find ground
-        var downColliders = level.GetCollidingBlockAABBs(
-            steppedBox.Offset(0, -(currentY + 1.0), 0));
-
-        var downY = -(currentY + 1.0);
-        foreach (var collider in downColliders)
-        {
-            downY = steppedBox.CalculateYOffset(collider, downY);
-        }
-
-        // Only use step if we found solid ground
-        if (Math.Abs(downY + currentY + 1.0) < DefaultStepHeight + 0.1)
-        {
-            // We found ground within step height
-            var finalY = currentY + downY;
-            if (finalY > Epsilon) // Only if we actually stepped up
-            {
-                return new Vector3<double>(currentX, finalY, currentZ);
-            }
-        }
-
-        return Vector3<double>.Zero;
+        return new Vector3<double>(xScale, yScale, zScale);
     }
+
 
     /// <summary>
     /// Resolves entity-to-entity collisions (pushing).

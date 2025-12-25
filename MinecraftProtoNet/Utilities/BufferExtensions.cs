@@ -35,16 +35,19 @@ public static class BufferExtensions
     }
 
     /// <summary>
-    /// Used for internal packet namespaces. Will not work for other namespaces.
+    /// Formats a packet's full type name into a professional human-readable string.
+    /// Example: "MinecraftProtoNet.Packets.Play.Clientbound.LoginPacket" -> "Play -> Login"
     /// </summary>
-    /// <param name="fullname"></param>
-    /// <param name="packetId"></param>
-    /// <returns></returns>
-    public static string NamespaceToPrettyString(this string fullname, int packetId)
+    public static string NamespaceToPrettyString(this string fullname, int? packetId = null)
     {
         var parts = fullname.Split('.');
         if (parts.Length < 5) return fullname;
-        return $"[white][[[/][yellow]{parts[2]}[/][white] -> [/](0x{packetId:X2}) " +
-               $"[cyan]{parts[4].Replace("Packet", string.Empty).Titleize()}[/][white]]][/]";
+
+        var state = parts[2];
+        var name = parts[4].Replace("Packet", string.Empty).Titleize();
+        
+        return packetId.HasValue 
+            ? $"[{state} : {name} (0x{packetId.Value:X2})] ->" 
+            : $"[{state} : {name}] ->";
     }
 }

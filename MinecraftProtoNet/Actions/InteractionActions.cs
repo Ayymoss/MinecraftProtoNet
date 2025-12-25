@@ -93,7 +93,7 @@ public static class InteractionActions
             Face = BlockFace.Bottom,
             Sequence = 0
         });
-        entity.Inventory[(short)(entity.HeldSlot + 36)] = new Slot();
+        entity.Inventory.SetSlot((short)(entity.HeldSlot + 36), new Slot());
         return true;
     }
 

@@ -229,10 +229,15 @@ public class AStarPathFinder(Level level)
                 var nz = position.Z + dz;
 
                 // Diagonal movement check (can't move diagonally if both sides are blocked)
+                // Diagonal movement check (can't move diagonally if both sides are blocked)
                 if (dx != 0 && dz != 0 && !isInLiquid)
                 {
+                    // Check horizontal gap for ALL moves at current level and target level
+                    // If either is blocked, we can't squeeze through.
                     if (GetPathType(position.X + dx, position.Y, position.Z) == PathType.Blocked || 
-                        GetPathType(position.X, position.Y, position.Z + dz) == PathType.Blocked)
+                        GetPathType(position.X, position.Y, position.Z + dz) == PathType.Blocked ||
+                        GetPathType(position.X + dx, position.Y + 1, position.Z) == PathType.Blocked || 
+                        GetPathType(position.X, position.Y + 1, position.Z + dz) == PathType.Blocked)
                     {
                         continue;
                     }

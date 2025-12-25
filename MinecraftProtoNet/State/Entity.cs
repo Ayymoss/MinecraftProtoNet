@@ -64,6 +64,12 @@ public class Entity
     public bool HasPendingTeleport { get; set; }
 
     /// <summary>
+    /// The exact Yaw/Pitch sent by the server in the last teleport packet.
+    /// Used to acknowledge teleports with 100% precision.
+    /// </summary>
+    public Vector2<float>? TeleportYawPitch { get; set; }
+
+    /// <summary>
     /// Whether the entity is currently sprinting (server-confirmed state).
     /// This differs from Input.Sprint which is the intent to sprint.
     /// </summary>
@@ -154,20 +160,21 @@ public class Entity
     public float? HurtFromYaw { get; set; }
 
     // ===== Inventory =====
-    private int _blockPlaceSequence;
-    public int BlockPlaceSequence => _blockPlaceSequence;
+    /// <summary>
+    /// The entity's inventory.
+    /// </summary>
+    public EntityInventory Inventory { get; } = new();
 
-    public int IncrementSequence()
+    // Convenience accessors that delegate to Inventory
+    public int BlockPlaceSequence => Inventory.BlockPlaceSequence;
+    public int IncrementSequence() => Inventory.IncrementSequence();
+    public short HeldSlot
     {
-        var currentSequence = _blockPlaceSequence;
-        Interlocked.Increment(ref _blockPlaceSequence);
-        return currentSequence;
+        get => Inventory.HeldSlot;
+        set => Inventory.HeldSlot = value;
     }
-
-    public short HeldSlot { get; set; }
-    public short HeldSlotWithOffset => (short)(HeldSlot + 36);
-    public Slot HeldItem => Inventory.TryGetValue(HeldSlotWithOffset, out var slot) ? slot : Slot.Empty;
-    public Dictionary<short, Slot> Inventory { get; set; } = new();
+    public short HeldSlotWithOffset => Inventory.HeldSlotWithOffset;
+    public Slot HeldItem => Inventory.HeldItem;
 
     // ===== Bounding Box =====
 

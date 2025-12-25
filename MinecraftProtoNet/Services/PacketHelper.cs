@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
 
 namespace MinecraftProtoNet.Services;
@@ -44,9 +45,14 @@ public static class PacketHelper
         throw new ArgumentException("Invalid property selector expression. Must be a MemberExpression.", nameof(propertySelector));
     }
 
+    /// <summary>
+    /// Returns a human-readable string of the packet's properties, optimized for readability.
+    /// </summary>
     public static string GetPropertiesAsString(this IPacket packet)
     {
-        var properties = packet.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var properties = packet.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.Name is not "RegisteredPackets"); // Skip metadata
+            
         var sb = new StringBuilder();
         var first = true;
 
@@ -69,9 +75,13 @@ public static class PacketHelper
         switch (value)
         {
             case null:
-                return "<NULL>";
+                return "null";
             case string stringValue:
                 return $"\"{stringValue}\"";
+            case NbtTag nbtTag:
+                return $"[NBT:{nbtTag.Type}]"; // Compact NBT
+            case byte[] bytes:
+                return $"[Binary:{bytes.Length} bytes]";
         }
 
         if (value is not IEnumerable enumerableValue) return value.ToString();
@@ -84,7 +94,7 @@ public static class PacketHelper
             if (!firstItem) sb.Append(", ");
             firstItem = false;
 
-            if (count >= 10)
+            if (count >= 5) // Limit array output even more
             {
                 sb.Append("...");
                 break;

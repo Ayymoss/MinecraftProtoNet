@@ -10,5 +10,6 @@ namespace MinecraftProtoNet.Core.Abstractions
         bool FollowPathTo(Entity entity, Vector3<double> target);
         void StopFollowingPath(Entity entity);
         void UpdatePathFollowingInput(Entity entity);
+        void HandleTeleport(Entity entity);
     }
 }

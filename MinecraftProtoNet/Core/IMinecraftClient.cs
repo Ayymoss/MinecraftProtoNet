@@ -17,6 +17,11 @@ public interface IMinecraftClient
     /// </summary>
     IPathFollowerService PathFollowerService { get; }
     
+    /// <summary>
+    /// Raised when the client disconnects from the server.
+    /// </summary>
+    event EventHandler<DisconnectReason>? OnDisconnected;
+    
     Task<bool> AuthenticateAsync();
     void EnableEncryption(byte[] sharedSecret);
     void EnableCompression(int threshold);
@@ -29,3 +34,4 @@ public interface IMinecraftClient
     Task PhysicsTickAsync();
     Task SendChatSessionUpdate();
 }
+

@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Actions;
 using MinecraftProtoNet.Auth;
 using MinecraftProtoNet.Auth.Dtos;
@@ -15,7 +16,6 @@ using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
-using Spectre.Console;
 
 namespace MinecraftProtoNet.Core;
 
@@ -23,11 +23,17 @@ public class MinecraftClient : IMinecraftClient
 {
     private readonly Connection _connection;
     private readonly IPacketService _packetService;
-    private readonly IPhysicsService _physicsService = new PhysicsService();
+    private readonly IPhysicsService _physicsService;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
-    private readonly CommandRegistry _commandRegistry = new();
+    private readonly CommandRegistry _commandRegistry;
+    private readonly ILogger<MinecraftClient> _logger;
 
-    public IPathFollowerService PathFollowerService { get; } = new PathFollowerService();
+    public IPathFollowerService PathFollowerService { get; }
+
+    /// <summary>
+    /// Raised when the client disconnects from the server.
+    /// </summary>
+    public event EventHandler<DisconnectReason>? OnDisconnected;
 
 
     public ClientState State { get; } = new();
@@ -35,12 +41,24 @@ public class MinecraftClient : IMinecraftClient
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
 
-    public MinecraftClient(Connection connection, IPacketService packetService)
+    public MinecraftClient(
+        Connection connection, 
+        IPacketService packetService,
+        IPhysicsService physicsService,
+        IPathFollowerService pathFollowerService,
+        CommandRegistry commandRegistry,
+        ILogger<MinecraftClient> logger)
     {
         _connection = connection;
         _packetService = packetService;
+        _physicsService = physicsService;
+        PathFollowerService = pathFollowerService;
+        _commandRegistry = commandRegistry;
+        _logger = logger;
+        
         _commandRegistry.AutoRegisterCommands();
     }
+
 
     /// <summary>
     /// Creates an action context for invoking actions from external code (API, console, etc.)
@@ -67,18 +85,17 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task ConnectAsync(string host, int port, bool isSnapshot = false)
     {
-        AnsiConsole.MarkupLine(
-            $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{ProtocolState.ToString()}[/]");
+        _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
         await _connection.ConnectAsync(host, port);
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
-        const int intention = 2; // 1 Status - 2 Login - 3 Transfer
+        const int intention = ProtocolConstants.Intention.Login;
 
-        // 775 is the protocol version for 1.21.x
-        // Snapshot uses bit 30 set | 287 (for 26.1 Snapshot 1)
-        var protocolVersion = isSnapshot ? (1 << 30) | 287 : 775;
+        var protocolVersion = isSnapshot 
+            ? ProtocolConstants.GetSnapshotProtocolVersion() 
+            : ProtocolConstants.ProtocolVersion;
 
         var handshakePacket = new HandshakePacket
         {
@@ -90,13 +107,13 @@ public class MinecraftClient : IMinecraftClient
         await SendPacketAsync(handshakePacket);
         ProtocolState = intention switch
         {
-            1 => ProtocolState.Status,
-            2 => ProtocolState.Login,
+            ProtocolConstants.Intention.Status => ProtocolState.Status,
+            ProtocolConstants.Intention.Login => ProtocolState.Login,
             _ => ProtocolState.Transfer
         };
 
-        AnsiConsole.MarkupLine(
-            $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{ProtocolState.ToString()}[/]");
+
+        _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
         switch (ProtocolState)
         {
@@ -136,48 +153,42 @@ public class MinecraftClient : IMinecraftClient
 
                 if (packet is UnknownPacket)
                 {
-                    AnsiConsole.MarkupLine($"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
-                                           $"[red]Unknown packet for state {ProtocolState} and ID {packetId} (0x{packetId:X2})[/]");
+                    _logger.LogWarning("[->CLIENT] Unknown packet for state {ProtocolState} and ID {PacketId} (0x{PacketIdHex:X2})",
+                        ProtocolState, packetId, packetId);
                 }
                 else if (!packet.GetPacketAttributeValue(p => p.Silent))
                 {
-                    AnsiConsole.Markup(
-                        $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [blue][[->CLIENT]][/] " +
-                        $"{packet.GetType().FullName?.NamespaceToPrettyString(packetId)} ");
-                    AnsiConsole.WriteLine(packet.GetPropertiesAsString()); // Some strings include brackets.
+                    _logger.LogDebug("[->CLIENT] {PacketType} {Properties}",
+                        packet.GetType().FullName?.NamespaceToPrettyString(packetId),
+                        packet.GetPropertiesAsString());
                 }
 
                 await _packetService.HandlePacketAsync(packet, this);
             }
             catch (EndOfStreamException ex)
             {
-                AnsiConsole.MarkupLine(
-                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection closed by server.[/]");
-                AnsiConsole.WriteException(ex);
-                Environment.Exit(1);
+                _logger.LogError(ex, "Connection closed by server");
+                OnDisconnected?.Invoke(this, DisconnectReason.EndOfStream);
+                break;
             }
             catch (IOException ex) when (ex.InnerException is SocketException
                                          {
                                              SocketErrorCode: SocketError.ConnectionReset or SocketError.ConnectionAborted
                                          } socket)
             {
-                AnsiConsole.MarkupLine(
-                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [deepskyblue1]Connection forcibly closed by the remote host. EC: {socket.ErrorCode} - SEC: {socket.SocketErrorCode} - MSG: {socket.Message}[/]");
-                AnsiConsole.WriteException(ex);
-                Environment.Exit(1);
+                _logger.LogError(ex, "Connection forcibly closed by the remote host. ErrorCode: {ErrorCode}, SocketErrorCode: {SocketErrorCode}",
+                    socket.ErrorCode, socket.SocketErrorCode);
+                OnDisconnected?.Invoke(this, DisconnectReason.ConnectionReset);
+                break;
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException)
             {
-                AnsiConsole.MarkupLine(
-                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Listening for packets cancelled.[/]");
-                AnsiConsole.WriteException(ex);
-                Environment.Exit(1);
+                _logger.LogInformation("Listening for packets cancelled");
+                break;
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine(
-                    $"\n[grey]{TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[/] [red]Error while listening for packets:[/]");
-                AnsiConsole.WriteException(ex);
+                _logger.LogError(ex, "Error while listening for packets");
             }
         }
     }
@@ -214,12 +225,12 @@ public class MinecraftClient : IMinecraftClient
     {
         if (AuthResult.ChatSession is null)
         {
-            Console.WriteLine("[WARN] Skipping ChatSessionUpdate: AuthResult.ChatSession is null.");
-            // Log.Warning("Skipping ChatSessionUpdate: AuthResult.ChatSession is null.");
+            _logger.LogWarning("Skipping ChatSessionUpdate: AuthResult.ChatSession is null");
             return;
         }
 
-        Console.WriteLine($"[DEBUG] Sending ChatSessionUpdatePacket. SessionId: {AuthResult.ChatSession.ChatContext.ChatSessionGuid}");
+        _logger.LogDebug("Sending ChatSessionUpdatePacket. SessionId: {SessionId}",
+            AuthResult.ChatSession.ChatContext.ChatSessionGuid);
 
         await SendPacketAsync(new ChatSessionUpdatePacket
         {
@@ -229,6 +240,6 @@ public class MinecraftClient : IMinecraftClient
             KeySignature = AuthResult.ChatSession.MojangSignature
         });
 
-        Console.WriteLine("[green]Sent ChatSessionUpdatePacket.[/]");
+        _logger.LogDebug("Sent ChatSessionUpdatePacket");
     }
 }

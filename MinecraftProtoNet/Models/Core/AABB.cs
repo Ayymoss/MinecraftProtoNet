@@ -22,10 +22,7 @@ public struct AABB
     public double SizeY => Max.Y - Min.Y;
     public double SizeZ => Max.Z - Min.Z;
 
-    public AABB Expand(double value)
-    {
-        return Expand(value, value, value);
-    }
+    public AABB Expand(double value) => Expand(value, value, value);
 
     public AABB Expand(double dx, double dy, double dz)
     {
@@ -33,6 +30,25 @@ public struct AABB
             Min.X - dx, Min.Y - dy, Min.Z - dz,
             Max.X + dx, Max.Y + dy, Max.Z + dz
         );
+    }
+
+    public AABB ExpandTowards(double x, double y, double z)
+    {
+        var minX = Min.X;
+        var minY = Min.Y;
+        var minZ = Min.Z;
+        var maxX = Max.X;
+        var maxY = Max.Y;
+        var maxZ = Max.Z;
+
+        if (x < 0) minX += x;
+        else maxX += x;
+        if (y < 0) minY += y;
+        else maxY += y;
+        if (z < 0) minZ += z;
+        else maxZ += z;
+
+        return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     public AABB Offset(double dx, double dy, double dz)

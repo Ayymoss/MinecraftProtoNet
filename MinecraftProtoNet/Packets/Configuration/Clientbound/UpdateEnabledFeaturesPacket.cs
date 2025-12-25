@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 [Packet(0x0C, ProtocolState.Configuration)]
 public class UpdateEnabledFeaturesPacket : IClientboundPacket
 {
-    public string[] FeatureFlags { get; set; }
+    public string[] FeatureFlags { get; set; } = [];
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

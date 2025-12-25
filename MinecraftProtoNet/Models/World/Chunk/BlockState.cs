@@ -1,10 +1,29 @@
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public class BlockState(int id, string name)
+public class BlockState(int id, string name, Dictionary<string, string>? properties = null)
 {
     public int Id { get; } = id;
     public string Name { get; } = name;
+    public Dictionary<string, string> Properties { get; } = properties ?? [];
+
     public bool IsAir => Id is 0 || Name.EndsWith("air", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsTop
+    {
+        get
+        {
+            if (Properties.TryGetValue("type", out var type)) return type == "top" || type == "double";
+            if (Properties.TryGetValue("half", out var half)) return half == "top";
+            return false;
+        }
+    }
+
+    public bool IsSlab => Name.Contains("slab", StringComparison.OrdinalIgnoreCase);
+    public bool IsStairs => Name.Contains("stairs", StringComparison.OrdinalIgnoreCase);
+    public bool IsSnow => Name.Equals("minecraft:snow", StringComparison.OrdinalIgnoreCase);
+
+    public int SnowLayers => Properties.TryGetValue("layers", out var layers) && int.TryParse(layers, out var count) ? count : 0;
+
 
     public bool IsLiquid => Name.Contains("water", StringComparison.CurrentCultureIgnoreCase) ||
                             Name.Contains("lava", StringComparison.CurrentCultureIgnoreCase);

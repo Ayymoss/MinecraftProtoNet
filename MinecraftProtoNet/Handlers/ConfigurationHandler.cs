@@ -1,88 +1,127 @@
-﻿using System.Text.Json;
+﻿using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Models.Json;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Configuration.Clientbound;
+using MinecraftProtoNet.Packets.Configuration.Serverbound;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.State.Base;
-using Spectre.Console;
-using BlockState = MinecraftProtoNet.Models.World.Chunk.BlockState;
+using SelectKnownPacksPacket = MinecraftProtoNet.Packets.Configuration.Clientbound.SelectKnownPacksPacket;
 
 namespace MinecraftProtoNet.Handlers;
 
+/// <summary>
+/// Handles configuration phase packets including registry data, keep-alive, and state transitions.
+/// </summary>
 [HandlesPacket(typeof(SelectKnownPacksPacket))]
-[HandlesPacket(typeof(KeepAlivePacket))]
-[HandlesPacket(typeof(FinishConfigurationPacket))]
+[HandlesPacket(typeof(Packets.Configuration.Clientbound.KeepAlivePacket))]
+[HandlesPacket(typeof(Packets.Configuration.Clientbound.FinishConfigurationPacket))]
 [HandlesPacket(typeof(RegistryDataPacket))]
-public class ConfigurationHandler : IPacketHandler
+public class ConfigurationHandler(
+    ILogger<ConfigurationHandler> logger,
+    IRegistryDataLoader registryDataLoader) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(ConfigurationHandler));
 
     public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
-        Console.WriteLine($"[DEBUG] ConfigurationHandler handling packet: {packet.GetType().Name}");
         switch (packet)
         {
-            case SelectKnownPacksPacket selectKnownPacksPacket:
-                await client.SendPacketAsync(new Packets.Configuration.Serverbound.SelectKnownPacksPacket { KnownPacks = [] });
+            case SelectKnownPacksPacket:
+                await HandleSelectKnownPacksAsync(client);
                 break;
-            case KeepAlivePacket keepAlivePacket:
-                await client.SendPacketAsync(
-                    new Packets.Configuration.Serverbound.KeepAlivePacket { Payload = keepAlivePacket.Payload });
+
+            case Packets.Configuration.Clientbound.KeepAlivePacket keepAlivePacket:
+                await HandleKeepAliveAsync(client, keepAlivePacket);
                 break;
-            case FinishConfigurationPacket finishConfigurationPacket:
-            {
-                Console.WriteLine("[DEBUG] Handling FinishConfigurationPacket...");
-                // Setup the client environment
-                var blockJsonFilePath = Path.Combine(AppContext.BaseDirectory, "StaticFiles", "blocks-26.1.json"); // TODO: Rehome
-                var blockJsonString = await File.ReadAllTextAsync(blockJsonFilePath);
-                var blockData = JsonSerializer.Deserialize<Dictionary<string, BlockRoot>>(blockJsonString) ?? [];
-                var blockStateData = blockData
-                    .SelectMany(kvp => kvp.Value.States.Select(state => new { BlockName = kvp.Key, StateId = state.Id }))
-                    .ToDictionary(x => x.StateId, x => new BlockState(x.StateId, x.BlockName));
-                ClientState.InitializeBlockStateRegistry(blockStateData);
 
-                var biomes = client.State.Registry["minecraft:worldgen/biome"]
-                    .Select((x, index) => new { i = index, x.Key })
-                    .ToDictionary(k => k.i, v => new Biome(v.i, v.Key));
-                ClientState.InitializeBiomeRegistry(biomes);
-
-                var registryJsonFilePath =
-                    Path.Combine(AppContext.BaseDirectory, "StaticFiles", "registries-26.1.json"); // TODO: Rehome
-                var registryJsonString = await File.ReadAllTextAsync(registryJsonFilePath);
-                var registry = JsonSerializer.Deserialize<Dictionary<string, RegistryRoot>>(registryJsonString) ?? [];
-                var itemData = registry["minecraft:item"].Entries
-                    .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
-                ClientState.InitialiseItemRegistry(itemData);
-
-                // Correct Order:
-                // 1. Send ClientInformation (Mandatory in Config)
-                await client.SendPacketAsync(new Packets.Configuration.Serverbound.ClientInformationPacket());
-                
-                // 2. Send FinishConfiguration (Signals end of Config)
-                await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
-                
-                // 3. Switch to Play State
-                client.ProtocolState = ProtocolState.Play;
-                AnsiConsole.MarkupLine(
-                    $"[grey][[DEBUG]] {TimeProvider.System.GetUtcNow():HH:mm:ss.fff}[[DEBUG]][/] [fuchsia]SWITCHING PROTOCOL STATE:[/] [cyan]{client.ProtocolState.ToString()}[/]");
-                
-                // 4. Send ChatSessionUpdate (This is a PLAY packet, must be sent after state switch)
-                await client.SendChatSessionUpdate();
+            case Packets.Configuration.Clientbound.FinishConfigurationPacket:
+                await HandleFinishConfigurationAsync(client);
                 break;
-            }
+
             case RegistryDataPacket registryDataPacket:
-                client.State.Registry.AddOrUpdate(registryDataPacket.RegistryId, registryDataPacket.Tags,
-                    (registryId, existingTags) =>
-                    {
-                        foreach (var tagPair in registryDataPacket.Tags) existingTags[tagPair.Key] = tagPair.Value;
-                        return existingTags;
-                    });
+                HandleRegistryData(client, registryDataPacket);
                 break;
         }
+    }
+
+    private static async Task HandleSelectKnownPacksAsync(IMinecraftClient client)
+    {
+        await client.SendPacketAsync(new Packets.Configuration.Serverbound.SelectKnownPacksPacket
+        {
+            KnownPacks = []
+        });
+    }
+
+    private static async Task HandleKeepAliveAsync(
+        IMinecraftClient client,
+        Packets.Configuration.Clientbound.KeepAlivePacket keepAlivePacket)
+    {
+        await client.SendPacketAsync(new Packets.Configuration.Serverbound.KeepAlivePacket
+        {
+            Payload = keepAlivePacket.Payload
+        });
+    }
+
+    private async Task HandleFinishConfigurationAsync(IMinecraftClient client)
+    {
+        logger.LogDebug("Finishing configuration phase...");
+
+        // Initialize static registries from files
+        await InitializeBlockStatesAsync();
+        InitializeBiomesFromServerRegistry(client);
+        await InitializeItemsAsync();
+
+        // 1. Send client information (required during configuration)
+        await client.SendPacketAsync(new ClientInformationPacket());
+
+        // 2. Signal configuration complete
+        await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
+
+        // 3. Transition to Play state
+        client.ProtocolState = ProtocolState.Play;
+        logger.LogDebug("Protocol state changed to {State}", client.ProtocolState);
+
+        // 4. Send chat session update (Play state packet)
+        await client.SendChatSessionUpdate();
+    }
+
+    private async Task InitializeBlockStatesAsync()
+    {
+        var blockStates = await registryDataLoader.LoadBlockStatesAsync();
+        ClientState.InitializeBlockStateRegistry(blockStates);
+    }
+
+    private static void InitializeBiomesFromServerRegistry(IMinecraftClient client)
+    {
+        var biomes = client.State.Registry["minecraft:worldgen/biome"]
+            .Select((x, index) => new { Index = index, x.Key })
+            .ToDictionary(k => k.Index, v => new Biome(v.Index, v.Key));
+        ClientState.InitializeBiomeRegistry(biomes);
+    }
+
+    private async Task InitializeItemsAsync()
+    {
+        var items = await registryDataLoader.LoadItemsAsync();
+        ClientState.InitialiseItemRegistry(items);
+    }
+
+    private static void HandleRegistryData(IMinecraftClient client, RegistryDataPacket registryDataPacket)
+    {
+        client.State.Registry.AddOrUpdate(
+            registryDataPacket.RegistryId,
+            registryDataPacket.Tags,
+            (_, existingTags) =>
+            {
+                foreach (var tag in registryDataPacket.Tags)
+                {
+                    existingTags[tag.Key] = tag.Value;
+                }
+
+                return existingTags;
+            });
     }
 }
