@@ -1,26 +1,22 @@
-
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Pathfinding.Goals;
 using Serilog;
 
 namespace MinecraftProtoNet.Commands.Implementations;
 
 [Command("here", Description = "Pathfind to sender's position")]
-public class HereCommand : ICommand
+public class HereCommand(IPathingService pathingService) : ICommand
 {
-    public string Name => "here";
-    public string Description => "Pathfind to the sender's position";
-    public string[] Aliases => ["come"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var entity = ctx.State.LocalPlayer.Entity;
-        
+
         // Check for "cancel" or "stop" as first arg
         if (ctx.Arguments.Length > 0 &&
             (ctx.Arguments[0].Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
              ctx.Arguments[0].Equals("stop", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Client.PathingService.ForceCancel(entity);
+            pathingService.ForceCancel(entity);
             await ctx.SendChatAsync("Pathfinding cancelled.");
             return;
         }
@@ -29,15 +25,15 @@ public class HereCommand : ICommand
         if (ctx.Arguments.Length > 0 &&
             ctx.Arguments[0].Equals("status", StringComparison.OrdinalIgnoreCase))
         {
-            var pathing = ctx.Client.PathingService;
-            if (pathing.IsPathing)
+            if (pathingService.IsPathing)
             {
-                await ctx.SendChatAsync($"Pathing to {pathing.Goal}. Calculating: {pathing.IsCalculating}");
+                await ctx.SendChatAsync($"Pathing to {pathingService.Goal}. Calculating: {pathingService.IsCalculating}");
             }
             else
             {
                 await ctx.SendChatAsync("Not currently pathing.");
             }
+
             return;
         }
 
@@ -48,8 +44,6 @@ public class HereCommand : ICommand
             await ctx.SendChatAsync("Could not find sender.");
             return;
         }
-
-        var pathingService = ctx.Client.PathingService;
 
         // Cancel any existing path
         if (pathingService.IsPathing || pathingService.IsCalculating)
@@ -82,7 +76,8 @@ public class HereCommand : ICommand
         // Wire up events
         pathingService.OnPathCalculated += path =>
         {
-            Log.Information("[Here] Path calculated: {PathLength} positions, reaches goal: {PathReachesGoal}", path.Length, path.ReachesGoal);
+            Log.Information("[Here] Path calculated: {PathLength} positions, reaches goal: {PathReachesGoal}", path.Length,
+                path.ReachesGoal);
         };
 
         pathingService.OnPathComplete += success =>

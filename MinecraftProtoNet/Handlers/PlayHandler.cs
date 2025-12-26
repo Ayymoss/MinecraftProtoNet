@@ -235,6 +235,9 @@ public class PlayHandler : IPacketHandler
                 _logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
                     playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
                 entity.IsOnGround = false; // Reset on-ground state until next physics tick
+                
+                // Notify listeners (pathfinding) that server sent a teleport packet
+                entity.NotifyServerTeleport(entity.Position);
                 break;
             }
             case KeepAlivePacket keepAlivePacket:

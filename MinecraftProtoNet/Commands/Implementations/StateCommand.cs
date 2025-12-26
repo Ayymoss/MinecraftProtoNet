@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("state", Description = "Display player state")]
 public class StateCommand : ICommand
 {
-    public string Name => "state";
-    public string Description => "Display current player state";
-    public string[] Aliases => ["status"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var state = QueryActions.GetPlayerState(ctx);

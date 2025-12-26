@@ -62,6 +62,20 @@ public class Entity
     /// Whether the entity has a pending teleport to acknowledge in the next physics tick.
     /// </summary>
     public bool HasPendingTeleport { get; set; }
+    
+    /// <summary>
+    /// Event fired when the server sends a teleport packet.
+    /// Used by pathfinding to detect teleport loops vs collision-based stuck states.
+    /// </summary>
+    public event Action<Vector3<double>>? OnServerTeleport;
+    
+    /// <summary>
+    /// Notifies listeners that the server has sent a teleport packet.
+    /// </summary>
+    public void NotifyServerTeleport(Vector3<double> position)
+    {
+        OnServerTeleport?.Invoke(position);
+    }
 
     /// <summary>
     /// The exact Yaw/Pitch sent by the server in the last teleport packet.
@@ -86,6 +100,12 @@ public class Entity
     /// Used to detect sprint state changes for packet sending.
     /// </summary>
     public bool WasSprinting { get; set; }
+    
+    /// <summary>
+    /// Whether the entity was sneaking in the previous tick.
+    /// Used to detect sneak state changes for packet sending.
+    /// </summary>
+    public bool WasSneaking { get; set; }
 
     // ===== Input State =====
     /// <summary>

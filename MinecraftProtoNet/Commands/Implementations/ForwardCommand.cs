@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("forward", Description = "Toggle forward movement")]
 public class ForwardCommand : ICommand
 {
-    public string Name => "forward";
-    public string Description => "Toggle forward movement (on/off or specify 'start'/'stop')";
-    public string[] Aliases => ["walk"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var entity = ctx.State.LocalPlayer.Entity;

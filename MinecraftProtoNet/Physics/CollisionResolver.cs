@@ -260,4 +260,17 @@ public static class CollisionResolver
 
         return pushVelocity;
     }
+    
+    /// <summary>
+    /// Checks if a bounding box collides with any blocks.
+    /// Used by edge detection to check for ground support.
+    /// </summary>
+    /// <param name="box">Bounding box to check</param>
+    /// <param name="level">Level to check against</param>
+    /// <returns>True if there is ANY collision with blocks</returns>
+    public static bool HasAnyCollision(AABB box, Level level)
+    {
+        var colliders = level.GetCollidingBlockAABBs(box);
+        return colliders.Count > 0;
+    }
 }

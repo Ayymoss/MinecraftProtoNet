@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 
@@ -13,14 +14,17 @@ public class CommandRegistry
     private readonly ILogger<CommandRegistry> _logger = LoggingConfiguration.CreateLogger<CommandRegistry>();
 
     /// <summary>
-    /// Registers a command instance.
+    /// Registers a command instance using metadata from its CommandAttribute.
     /// </summary>
     public void RegisterCommand(ICommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        _commands[command.Name] = command;
-        foreach (var alias in command.Aliases)
+        var attribute = command.GetType().GetCustomAttribute<CommandAttribute>()
+                       ?? throw new InvalidOperationException($"Command type {command.GetType().Name} is missing CommandAttribute.");
+
+        _commands[attribute.Name] = command;
+        foreach (var alias in attribute.Aliases)
         {
             _commands[alias] = command;
         }
@@ -28,29 +32,30 @@ public class CommandRegistry
 
     /// <summary>
     /// Auto-discovers and registers all commands in the specified assembly.
-    /// If no assembly is provided, uses the calling assembly.
     /// </summary>
-    public void AutoRegisterCommands(Assembly? assembly = null)
+    public void AutoRegisterCommands(IServiceProvider serviceProvider, Assembly? assembly = null)
     {
         assembly ??= Assembly.GetExecutingAssembly();
-
+        var logger = serviceProvider.GetRequiredService<ILogger<CommandRegistry>>();
+ 
         var commandTypes = assembly.GetTypes()
             .Where(t => typeof(ICommand).IsAssignableFrom(t)
                         && t is { IsClass: true, IsAbstract: false }
                         && t.GetCustomAttribute<CommandAttribute>() != null);
-
+ 
         foreach (var type in commandTypes)
         {
             try
             {
-                if (Activator.CreateInstance(type) is ICommand command)
+                if (ActivatorUtilities.CreateInstance(serviceProvider, type) is ICommand command)
                 {
                     RegisterCommand(command);
+                    logger.LogDebug("Registered command: {CommandType}", type.Name);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to register command {CommandType}", type.Name);
+                logger.LogWarning(ex, "Failed to register command {CommandType}", type.Name);
             }
         }
     }

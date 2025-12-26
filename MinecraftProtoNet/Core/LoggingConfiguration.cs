@@ -16,7 +16,7 @@ public static class LoggingConfiguration
     /// Creates or returns the shared logger factory configured with Serilog.
     /// </summary>
     /// <param name="minLevel">Minimum log level (default: Debug). Use Verbose for detailed tick-by-tick logs.</param>
-    public static ILoggerFactory CreateLoggerFactory(Serilog.Events.LogEventLevel minLevel = Serilog.Events.LogEventLevel.Verbose)
+    public static ILoggerFactory CreateLoggerFactory(Serilog.Events.LogEventLevel minLevel = Serilog.Events.LogEventLevel.Debug)
     {
         if (_loggerFactory is not null)
             return _loggerFactory;

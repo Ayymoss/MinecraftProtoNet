@@ -26,7 +26,7 @@ public class PhysicsService : IPhysicsService
     public async Task PhysicsTickAsync(
         Entity entity,
         Level level,
-        Func<IServerboundPacket, Task> sendPacketAsync,
+        IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null)
     {
         // 1. Pre-physics callback (e.g., pathfinding input)
@@ -115,7 +115,7 @@ public class PhysicsService : IPhysicsService
             var syncPitch = entity.TeleportYawPitch?.Y ?? entity.YawPitch.Y;
             entity.TeleportYawPitch = null; // Clear it
 
-            await sendPacketAsync(new MovePlayerPositionRotationPacket
+            await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
             {
                 X = entity.Position.X,
                 Y = entity.Position.Y,
@@ -138,7 +138,7 @@ public class PhysicsService : IPhysicsService
             // If the world isn't loaded yet, stay at the current position.
             // This prevents falling through the virtual world and getting into teleport loops.
             // Use the same OnGround state as before to avoid triggering server-side move checks.
-            await sendPacketAsync(new MovePlayerPositionRotationPacket
+            await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
             {
                 X = entity.Position.X,
                 Y = entity.Position.Y,
@@ -229,7 +229,16 @@ public class PhysicsService : IPhysicsService
         // 8. Apply Knockback
         ApplyKnockback(entity);
 
-        // 9. MOVE with collision resolution
+        // 9. Apply Edge Detection (prevents falling off blocks while sneaking)
+        // Source: Java's Player.maybeBackOffFromEdge()
+        entity.Velocity = MovementCalculator.MaybeBackOffFromEdge(
+            entity.Velocity,
+            entity.GetBoundingBox(),
+            level,
+            entity.IsOnGround,
+            entity.IsSneaking);
+
+        // 10. MOVE with collision resolution
         var collisionResult = MoveWithCollisions(entity, level);
 
         // 10. Update state from collision result
@@ -263,7 +272,7 @@ public class PhysicsService : IPhysicsService
 
         // 12. Sprint state and packets
         UpdateSprintState(entity, collisionResult);
-        await SendMovementPacketsAsync(entity, collisionResult, sendPacketAsync);
+        await SendMovementPacketsAsync(entity, collisionResult, packetSender);
     }
 
     private void UpdateFluidState(Entity entity, Level level)
@@ -453,7 +462,7 @@ public class PhysicsService : IPhysicsService
     private async Task SendMovementPacketsAsync(
         Entity entity,
         CollisionResult collision,
-        Func<IServerboundPacket, Task> sendPacketAsync)
+        IPacketSender packetSender)
     {
         // Send sprint state change if needed
         if (entity.IsSprinting != entity.WasSprinting)
@@ -462,13 +471,29 @@ public class PhysicsService : IPhysicsService
                 ? PlayerAction.StartSprint
                 : PlayerAction.StopSprint;
 
-            await sendPacketAsync(new PlayerCommandPacket
+            await packetSender.SendPacketAsync(new PlayerCommandPacket
             {
                 EntityId = entity.EntityId,
                 Action = action
             });
 
             entity.WasSprinting = entity.IsSprinting;
+        }
+        
+        // Send sneak state change if needed
+        if (entity.IsSneaking != entity.WasSneaking)
+        {
+            var action = entity.IsSneaking
+                ? PlayerAction.StartSneaking
+                : PlayerAction.StopSneaking;
+
+            await packetSender.SendPacketAsync(new PlayerCommandPacket
+            {
+                EntityId = entity.EntityId,
+                Action = action
+            });
+
+            entity.WasSneaking = entity.IsSneaking;
         }
 
         // Send position packet if we moved
@@ -485,7 +510,7 @@ public class PhysicsService : IPhysicsService
         var flags = (entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None) |
                     (entity.HorizontalCollision ? MovementFlags.HorizontalCollision : MovementFlags.None);
 
-        await sendPacketAsync(new MovePlayerPositionRotationPacket
+        await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
         {
             X = entity.Position.X,
             Y = entity.Position.Y,

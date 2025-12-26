@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("say", Description = "Send a signed chat message")]
 public class SayCommand : ICommand
 {
-    public string Name => "say";
-    public string Description => "Send a signed chat message";
-    public string[] Aliases => [];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         if (!ctx.HasMinArgs(1))

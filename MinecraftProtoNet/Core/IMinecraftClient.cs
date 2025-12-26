@@ -5,7 +5,7 @@ using MinecraftProtoNet.State.Base;
 
 namespace MinecraftProtoNet.Core;
 
-public interface IMinecraftClient
+public interface IMinecraftClient : IPacketSender
 {
     ProtocolState ProtocolState { get; set; }
     ClientState State { get; }
@@ -23,16 +23,15 @@ public interface IMinecraftClient
     void EnableCompression(int threshold);
     Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
-    Task SendPacketAsync(IServerboundPacket packet);
 
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
 
-    Task PhysicsTickAsync();
-    Task SendChatSessionUpdate();
-
     /// <summary>
-    /// Gets the pathfinding service for navigation.
+    /// Performs a physics tick for the local player.
     /// </summary>
-    Pathfinding.IPathingService PathingService { get; }
+    /// <param name="prePhysicsCallback">Optional callback for pathfinding or AI logic</param>
+    Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null);
+
+    Task SendChatSessionUpdate();
 }
 

@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("jump", Description = "Toggle jumping")]
 public class JumpCommand : ICommand
 {
-    public string Name => "jump";
-    public string Description => "Toggle jumping (on/off or specify 'start'/'stop')";
-    public string[] Aliases => [];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var entity = ctx.State.LocalPlayer.Entity;

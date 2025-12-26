@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("slot", Description = "Change or display held slot")]
 public class SlotCommand : ICommand
 {
-    public string Name => "slot";
-    public string Description => "Change held slot (0-8) or display current slot";
-    public string[] Aliases => ["hotbar"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         if (!ctx.State.LocalPlayer.HasEntity) return;

@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Pathfinding.Goals;
 using MinecraftProtoNet.Services;
 using Serilog;
@@ -6,12 +7,8 @@ using Serilog;
 namespace MinecraftProtoNet.Commands.Implementations;
 
 [Command("gotopath", Description = "Pathfind to coordinates")]
-public class GotoPathCommand : ICommand
+public class GotoPathCommand(IPathingService pathingService) : ICommand
 {
-    public string Name => "gotopath";
-    public string Description => "Pathfind to coordinates (x y z)";
-    public string[] Aliases => ["path", "goto"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         // Check for "cancel" or "stop" as first arg
@@ -19,7 +16,7 @@ public class GotoPathCommand : ICommand
             (ctx.Arguments[0].Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
              ctx.Arguments[0].Equals("stop", StringComparison.OrdinalIgnoreCase)))
         {
-            ctx.Client.PathingService.ForceCancel(ctx.State.LocalPlayer.Entity);
+            pathingService.ForceCancel(ctx.State.LocalPlayer.Entity);
             await ctx.SendChatAsync("Pathfinding cancelled.");
             return;
         }
@@ -28,10 +25,9 @@ public class GotoPathCommand : ICommand
         if (ctx.Arguments.Length > 0 && 
             ctx.Arguments[0].Equals("status", StringComparison.OrdinalIgnoreCase))
         {
-            var pathing = ctx.Client.PathingService;
-            if (pathing.IsPathing)
+            if (pathingService.IsPathing)
             {
-                await ctx.SendChatAsync($"Pathing to {pathing.Goal}. Calculating: {pathing.IsCalculating}");
+                await ctx.SendChatAsync($"Pathing to {pathingService.Goal}. Calculating: {pathingService.IsCalculating}");
             }
             else
             {
@@ -39,6 +35,7 @@ public class GotoPathCommand : ICommand
             }
             return;
         }
+
 
         // Parse coordinates
         if (!ctx.HasMinArgs(3))
@@ -55,7 +52,6 @@ public class GotoPathCommand : ICommand
             return;
         }
 
-        var pathingService = ctx.Client.PathingService;
         var entity = ctx.State.LocalPlayer.Entity;
 
         // Cancel any existing path

@@ -25,7 +25,6 @@ public class MinecraftClient : IMinecraftClient
     private readonly Connection _connection;
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService;
-    private readonly IPathingService? _pathingService;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
@@ -41,13 +40,13 @@ public class MinecraftClient : IMinecraftClient
     public int ProtocolVersion { get; set; } = -1; // Unknown
 
     public MinecraftClient(
+        IServiceProvider serviceProvider,
         ClientState state,
         Connection connection, 
         IPacketService packetService,
         IPhysicsService physicsService,
         CommandRegistry commandRegistry,
-        ILogger<MinecraftClient> logger,
-        IPathingService? pathingService = null)
+        ILogger<MinecraftClient> logger)
     {
         State = state;
         _connection = connection;
@@ -55,9 +54,8 @@ public class MinecraftClient : IMinecraftClient
         _physicsService = physicsService;
         _commandRegistry = commandRegistry;
         _logger = logger;
-        _pathingService = pathingService;
         
-        _commandRegistry.AutoRegisterCommands();
+        _commandRegistry.AutoRegisterCommands(serviceProvider);
     }
 
 
@@ -136,9 +134,9 @@ public class MinecraftClient : IMinecraftClient
         _connection.Dispose();
     }
 
-    public async Task SendPacketAsync(IServerboundPacket packet)
+    public async Task SendPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken = default)
     {
-        await _connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
+        await _connection.SendPacketAsync(packet, cancellationToken == default ? _cancellationTokenSource.Token : cancellationToken);
     }
 
     private async Task ListenForPacketsAsync(CancellationToken cancellationToken)
@@ -212,28 +210,16 @@ public class MinecraftClient : IMinecraftClient
 
     // The old PhysicsTickAsync was in MinecraftClient.Physics.cs.
     // It is now replaced by this implementation.
-    public async Task PhysicsTickAsync()
+    public async Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null)
     {
         if (!State.LocalPlayer.HasEntity) return;
         
-        // Pass pathfinding callback as pre-physics hook
-        Action<State.Entity>? prePhysicsCallback = _pathingService != null 
-            ? entity => _pathingService.OnPhysicsTick(entity) 
-            : null;
-            
         await _physicsService.PhysicsTickAsync(
             State.LocalPlayer.Entity, 
             State.Level, 
-            SendPacketAsync,
+            this,
             prePhysicsCallback);
     }
-
-    /// <summary>
-    /// Gets the pathfinding service (may be null if not injected).
-    /// </summary>
-    public Pathfinding.IPathingService PathingService => 
-        _pathingService ?? throw new InvalidOperationException(
-            "PathingService was not injected. Register IPathingService in DI container.");
 
 
     public async Task SendChatSessionUpdate()

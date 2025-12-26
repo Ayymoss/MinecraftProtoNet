@@ -18,6 +18,6 @@ public interface IPhysicsService
     Task PhysicsTickAsync(
         Entity entity,
         Level level,
-        Func<IServerboundPacket, Task> sendPacketAsync,
+        IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null);
 }

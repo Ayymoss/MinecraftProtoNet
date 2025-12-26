@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
 
         // Core services
         services.AddSingleton<Connection>();
+        services.AddSingleton<IPacketSender>(sp => sp.GetRequiredService<Connection>());
         services.AddSingleton<IPacketService, PacketService>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
 

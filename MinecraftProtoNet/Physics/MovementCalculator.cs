@@ -322,4 +322,120 @@ public static class MovementCalculator
             IsBelowMovementThreshold(velocity.Z) ? 0 : velocity.Z
         );
     }
+    
+    /// <summary>
+    /// Reduces movement delta to prevent falling off edges while sneaking.
+    /// Source: Java's Player.maybeBackOffFromEdge()
+    /// </summary>
+    /// <param name="delta">Intended movement delta</param>
+    /// <param name="boundingBox">Entity's bounding box</param>
+    /// <param name="level">Level for collision checking</param>
+    /// <param name="isOnGround">Whether entity is on ground</param>
+    /// <param name="isSneaking">Whether entity is sneaking</param>
+    /// <param name="maxDownStep">Max step height to check (default 0.6)</param>
+    /// <returns>Adjusted delta that won't cause falling off edge</returns>
+    public static Vector3<double> MaybeBackOffFromEdge(
+        Vector3<double> delta,
+        AABB boundingBox,
+        Level level,
+        bool isOnGround,
+        bool isSneaking,
+        double maxDownStep = 0.6)
+    {
+        // Only apply when sneaking, on ground, not jumping upward
+        if (!isSneaking || delta.Y > 0.0 || !isOnGround)
+        {
+            return delta;
+        }
+        
+        // Check if currently above ground (within step distance of support)
+        if (!IsAboveGround(boundingBox, level, maxDownStep))
+        {
+            return delta;
+        }
+        
+        const double step = 0.05;
+        var deltaX = delta.X;
+        var deltaZ = delta.Z;
+        var stepX = Math.Sign(deltaX) * step;
+        var stepZ = Math.Sign(deltaZ) * step;
+        
+        // Reduce X movement until supported
+        while (deltaX != 0.0 && CanFallAtLeast(boundingBox, level, deltaX, 0.0, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+                break;
+            }
+            deltaX -= stepX;
+        }
+        
+        // Reduce Z movement until supported
+        while (deltaZ != 0.0 && CanFallAtLeast(boundingBox, level, 0.0, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+                break;
+            }
+            deltaZ -= stepZ;
+        }
+        
+        // Reduce combined X+Z movement until supported
+        while (deltaX != 0.0 && deltaZ != 0.0 && CanFallAtLeast(boundingBox, level, deltaX, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+            }
+            else
+            {
+                deltaX -= stepX;
+            }
+            
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+            }
+            else
+            {
+                deltaZ -= stepZ;
+            }
+        }
+        
+        return new Vector3<double>(deltaX, delta.Y, deltaZ);
+    }
+    
+    /// <summary>
+    /// Checks if entity is currently above ground (on ground or within step distance).
+    /// Source: Java's Player.isAboveGround()
+    /// </summary>
+    private static bool IsAboveGround(AABB boundingBox, Level level, double maxDownStep)
+    {
+        // Check if there's solid ground below within maxDownStep
+        return !CanFallAtLeast(boundingBox, level, 0.0, 0.0, maxDownStep);
+    }
+    
+    /// <summary>
+    /// Checks if entity can fall at least minHeight at the offset position.
+    /// Returns true if there's NO collision below (can fall).
+    /// Source: Java's Player.canFallAtLeast()
+    /// </summary>
+    private static bool CanFallAtLeast(AABB boundingBox, Level level, double deltaX, double deltaZ, double minHeight)
+    {
+        // Create a box extending from current bottom down to minHeight, offset by delta
+        const double shrink = 1.0E-7;
+        var checkBox = new AABB(
+            boundingBox.Min.X + shrink + deltaX,
+            boundingBox.Min.Y - minHeight - shrink,
+            boundingBox.Min.Z + shrink + deltaZ,
+            boundingBox.Max.X - shrink + deltaX,
+            boundingBox.Min.Y,
+            boundingBox.Max.Z - shrink + deltaZ
+        );
+        
+        // Check for ANY collision in this area - if none, can fall
+        return !CollisionResolver.HasAnyCollision(checkBox, level);
+    }
 }

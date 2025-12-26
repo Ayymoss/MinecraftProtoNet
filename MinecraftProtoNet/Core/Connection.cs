@@ -10,9 +10,11 @@ using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
 
+using MinecraftProtoNet.Core.Abstractions;
+
 namespace MinecraftProtoNet.Core;
 
-public sealed class Connection : IDisposable
+public sealed class Connection : IPacketSender, IDisposable
 {
     // --- Constants ---
     private const bool EnableDebugLogging = true;

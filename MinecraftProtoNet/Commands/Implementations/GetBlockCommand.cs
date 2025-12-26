@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("getblock", Description = "Get block at coordinates")]
 public class GetBlockCommand : ICommand
 {
-    public string Name => "getblock";
-    public string Description => "Get block at coordinates (x y z)";
-    public string[] Aliases => [];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         if (!ctx.TryGetArg(0, out int x) ||
