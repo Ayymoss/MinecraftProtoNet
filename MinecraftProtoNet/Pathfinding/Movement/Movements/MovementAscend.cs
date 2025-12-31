@@ -138,6 +138,39 @@ public class MovementAscend : MovementBase
             State.Sneak = true;
         }
 
+        // Check for obstructions to break
+        // 1. Check jump clearance (above head at source)
+        var jumpSpace = level.GetBlockAt(Source.X, Source.Y + 2, Source.Z);
+        if (jumpSpace != null && !MovementHelper.CanWalkThrough(jumpSpace))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Source.X, Source.Y + 2, Source.Z);
+            return State;
+        }
+
+        // 2. Check destination clearance
+        var destBody = level.GetBlockAt(Destination.X, Destination.Y, Destination.Z); // Y=srcY+1
+        if (destBody != null && !MovementHelper.CanWalkThrough(destBody))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Destination.X, Destination.Y, Destination.Z);
+            return State;
+        }
+
+        var destHead = level.GetBlockAt(Destination.X, Destination.Y + 1, Destination.Z); // Y=srcY+2
+        if (destHead != null && !MovementHelper.CanWalkThrough(destHead))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Destination.X, Destination.Y + 1, Destination.Z);
+            return State;
+        }
+
+        // Clear any previous break target
+        State.BreakBlockTarget = null;
+        
         // Jump timing logic based on Baritone
         var xAxis = Math.Abs(Source.X - Destination.X); // 1 or 0
         var zAxis = Math.Abs(Source.Z - Destination.Z); // 1 or 0

@@ -12,6 +12,10 @@ public interface IMinecraftClient : IPacketSender
     int ProtocolVersion { get; set; }
     AuthResult AuthResult { get; set; }
     
+    /// <summary>
+    /// Whether the client is currently connected to a server.
+    /// </summary>
+    bool IsConnected { get; }
     
     /// <summary>
     /// Raised when the client disconnects from the server.

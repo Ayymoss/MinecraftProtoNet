@@ -151,6 +151,43 @@ public class MovementDescend : MovementBase
             State.Sprint = true;
         }
 
+        // Check for obstructions to break
+        // We need to clear 3 blocks at destination: destBody (Y-1), destHead (Y), destAbove (Y+1)
+        // Note: Destination.Y is source.Y - 1
+        
+        // 1. Check destBody (feet level at destination)
+        var destBody = level.GetBlockAt(Destination.X, Destination.Y, Destination.Z); 
+        if (destBody != null && !MovementHelper.CanWalkThrough(destBody))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Destination.X, Destination.Y, Destination.Z);
+            return State;
+        }
+
+        // 2. Check destHead (head level at destination)
+        var destHead = level.GetBlockAt(Destination.X, Destination.Y + 1, Destination.Z);
+        if (destHead != null && !MovementHelper.CanWalkThrough(destHead))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Destination.X, Destination.Y + 1, Destination.Z);
+            return State;
+        }
+
+        // 3. Check destAbove (above head at destination) - for clearance
+        var destAbove = level.GetBlockAt(Destination.X, Destination.Y + 2, Destination.Z);
+        if (destAbove != null && !MovementHelper.CanWalkThrough(destAbove))
+        {
+            State.Status = MovementStatus.Running;
+            State.ClearInputs();
+            State.BreakBlockTarget = (Destination.X, Destination.Y + 2, Destination.Z);
+            return State;
+        }
+
+        // Clear any previous break target
+        State.BreakBlockTarget = null;
+
         // Baritone line 260: Sneak on magma blocks to avoid damage
         var blockBelow = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);
         if (blockBelow?.Name == "minecraft:magma_block")

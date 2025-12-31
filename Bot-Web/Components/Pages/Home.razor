@@ -1,0 +1,152 @@
+﻿@page "/"
+@using Bot_Web.Services
+@inject BotService Bot
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>MinecraftProtoNet Bot</PageTitle>
+
+<!-- Header with connection controls -->
+<div class="mb-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-100 flex items-center gap-3">
+                <i class="ph-duotone ph-cube text-emerald-400"></i>
+                MinecraftProtoNet Bot
+            </h1>
+            <p class="text-gray-500 mt-1">Minecraft protocol client dashboard</p>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-4">
+            <!-- Server input -->
+            <div class="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
+                <i class="ph ph-globe text-gray-500"></i>
+                <input type="text" @bind="Bot.ServerAddress" 
+                       class="bg-transparent border-none outline-none text-gray-100 w-32" 
+                       placeholder="Server" />
+                <span class="text-gray-600">:</span>
+                <input type="number" @bind="Bot.ServerPort" 
+                       class="bg-transparent border-none outline-none text-gray-100 w-16" 
+                       placeholder="Port" />
+            </div>
+            
+            <!-- Connection buttons -->
+            @if (Bot.IsConnected)
+            {
+                <button @onclick="Disconnect" 
+                        class="flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all border border-red-500/50">
+                    <i class="ph-bold ph-plug text-lg"></i>
+                    Disconnect
+                </button>
+            }
+            else
+            {
+                <button @onclick="Connect" disabled="@_connecting"
+                        class="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white rounded-lg transition-all border border-emerald-500/50 disabled:opacity-50">
+                    @if (_connecting)
+                    {
+                        <i class="ph-duotone ph-spinner animate-spin text-lg"></i>
+                        <span>Connecting...</span>
+                    }
+                    else
+                    {
+                        <i class="ph-bold ph-plug text-lg"></i>
+                        <span>Connect</span>
+                    }
+                </button>
+            }
+        </div>
+    </div>
+    
+    <!-- Status bar -->
+    <div class="flex items-center gap-4 mt-4 text-sm">
+        <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full @(Bot.IsConnected ? "bg-emerald-400 animate-pulse" : "bg-gray-600")"></span>
+            <span class="text-gray-400">@(Bot.IsConnected ? "Connected" : "Disconnected")</span>
+        </div>
+        @if (Bot.IsConnected)
+        {
+            <span class="text-gray-600">|</span>
+            <span class="text-gray-400">
+                <i class="ph ph-map-pin mr-1"></i>
+                @FormatPosition()
+            </span>
+        }
+        @if (Bot.IsAuthenticated)
+        {
+            <span class="text-gray-600">|</span>
+            <span class="text-gray-400">
+                <i class="ph ph-shield-check mr-1 text-emerald-400"></i>
+                Authenticated
+            </span>
+        }
+    </div>
+</div>
+
+<!-- Bot Stats Section -->
+<div class="mb-6">
+    <PlayerStats />
+</div>
+
+<!-- Main content: Two-column layout -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left column: Inventory + Commands -->
+    <div class="lg:col-span-2 space-y-6">
+        <InventoryView />
+        <CommandPanel />
+    </div>
+    
+    <!-- Right column: Player list -->
+    <div>
+        <PlayerList />
+    </div>
+</div>
+
+
+@code {
+    private bool _connecting;
+
+    protected override void OnInitialized()
+    {
+        Bot.OnStateChanged += OnBotStateChanged;
+    }
+    
+    private void OnBotStateChanged()
+    {
+        // Marshal to UI thread since events may fire from background threads
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Connect()
+    {
+        _connecting = true;
+        StateHasChanged();
+        
+        try
+        {
+            await Bot.ConnectAsync();
+        }
+        finally
+        {
+            _connecting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Disconnect()
+    {
+        await Bot.DisconnectAsync();
+    }
+
+    private string FormatPosition()
+    {
+        var pos = Bot.State.LocalPlayer?.Entity?.Position;
+        if (pos == null) return "Unknown";
+        return $"{pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}";
+    }
+
+    public void Dispose()
+    {
+        Bot.OnStateChanged -= OnBotStateChanged;
+    }
+}

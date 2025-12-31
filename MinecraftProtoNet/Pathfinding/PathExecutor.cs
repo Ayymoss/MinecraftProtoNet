@@ -168,6 +168,8 @@ public class PathExecutor(ILogger<PathExecutor> logger, Path path, CalculationCo
 
         if (_currentMovementIndex >= _movements.Count)
         {
+            // Path complete - clear all movement inputs to prevent walking into walls
+            ClearEntityMovementInputs(entity);
             Finished = true;
             return true;
         }
@@ -284,13 +286,26 @@ public class PathExecutor(ILogger<PathExecutor> logger, Path path, CalculationCo
         
         var state = currentMovement.UpdateState(entity, level);
 
+        // === Baritone's sprintableAscend check ===
+        // If next movement is an ascend, disable sprint to allow deceleration before jump.
+        // Sprint velocity causes collision with block edge during ascend.
+        if (state.Sprint && _currentMovementIndex < _movements.Count - 1)
+        {
+            var nextMovement = _movements[_currentMovementIndex + 1];
+            if (nextMovement is MovementAscend)
+            {
+                logger.LogDebug("[Executor] Disabling sprint before ascend at movement {Index}", _currentMovementIndex);
+                state.Sprint = false;
+            }
+        }
+
         // Apply movement inputs to entity
         ApplyMovementState(entity, state);
         IsSprinting = state.Sprint;
 
-        logger.LogDebug("[Executor] Tick {Index}/{Count} | {MovementType} | Status: {Status} | Pos: {Position} | Input: Fwd={Forward} Jmp={Jump} Spr={Sprint} Yaw={Yaw:F1}",
+        logger.LogDebug("[Executor] Tick {Index}/{Count} | {MovementType} | Status: {Status} | Pos: {Position} | Input: Fwd={Forward} Jmp={Jump} Spr={Sprint} Yaw={Yaw:F1} Pitch={Pitch:F1}",
             _currentMovementIndex, _movements.Count, currentMovement.GetType().Name, state.Status, 
-            entity.Position, entity.Input.Forward, entity.Input.Jump, entity.Input.Sprint, entity.YawPitch.X);
+            entity.Position, entity.Input.Forward, entity.Input.Jump, entity.Input.Sprint, entity.YawPitch.X, entity.YawPitch.Y);
 
         // Check movement status
         switch (state.Status)
@@ -699,5 +714,86 @@ public class PathExecutor(ILogger<PathExecutor> logger, Path path, CalculationCo
         var dy = playerPos.Y - blockY; // Player Y is at feet level, same as block Y
         var dz = playerPos.Z - (blockZ + 0.5);
         return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// <summary>
+    /// Checks if sprinting into an ascend is safe.
+    /// Matches Baritone's sprintableAscend() logic from PathExecutor.java lines 531-565.
+    /// </summary>
+    /// <param name="current">Current movement (typically MovementTraverse)</param>
+    /// <param name="next">Next movement (must be MovementAscend)</param>
+    /// <param name="level">World level for block checks</param>
+    /// <returns>True if safe to sprint into the ascend, false otherwise</returns>
+    private bool IsSprintableAscend(MovementBase current, MovementBase next, Level level)
+    {
+        if (next is not MovementAscend ascend) return false;
+        
+        // Traverse/Diagonal into Ascend - check direction alignment
+        var currentDirX = current.Destination.X - current.Source.X;
+        var currentDirZ = current.Destination.Z - current.Source.Z;
+        var nextDirX = ascend.Destination.X - ascend.Source.X;
+        var nextDirZ = ascend.Destination.Z - ascend.Source.Z;
+        
+        // Baritone line 535: current.getDirection().equals(next.getDirection().below())
+        // The "below" means ascend direction projected to horizontal plane
+        if (currentDirX != nextDirX || currentDirZ != nextDirZ)
+        {
+            logger.LogTrace("[SprintCheck] Direction mismatch: current=({Cx},{Cz}), next=({Nx},{Nz})", 
+                currentDirX, currentDirZ, nextDirX, nextDirZ);
+            return false;
+        }
+        
+        // Baritone lines 541-546: Check floor walkability
+        var currentFloor = level.GetBlockAt(current.Destination.X, current.Destination.Y - 1, current.Destination.Z);
+        if (!MovementHelper.CanWalkOn(currentFloor))
+        {
+            logger.LogTrace("[SprintCheck] Can't walk on current dest floor");
+            return false;
+        }
+        
+        var nextFloor = level.GetBlockAt(ascend.Destination.X, ascend.Destination.Y - 1, ascend.Destination.Z);
+        if (!MovementHelper.CanWalkOn(nextFloor))
+        {
+            logger.LogTrace("[SprintCheck] Can't walk on next dest floor");
+            return false;
+        }
+        
+        // Baritone lines 550-559: Check 2x3 body clearance
+        // The player needs clear passage from source through the entire ascend trajectory
+        for (int x = 0; x < 2; x++)
+        {
+            for (int y = 0; y < 3; y++)
+            {
+                var checkX = current.Source.X + (x == 1 ? currentDirX : 0);
+                var checkY = current.Source.Y + y;
+                var checkZ = current.Source.Z + (x == 1 ? currentDirZ : 0);
+                var block = level.GetBlockAt(checkX, checkY, checkZ);
+                
+                if (!MovementHelper.CanWalkThrough(block))
+                {
+                    logger.LogTrace("[SprintCheck] Body clearance blocked at ({X},{Y},{Z}): {Block}", 
+                        checkX, checkY, checkZ, block?.Name ?? "null");
+                    return false;
+                }
+            }
+        }
+        
+        // Baritone lines 561-564: Check for hazards above
+        var aboveHead = level.GetBlockAt(current.Source.X, current.Source.Y + 3, current.Source.Z);
+        if (aboveHead != null && MovementHelper.AvoidWalkingInto(aboveHead))
+        {
+            logger.LogTrace("[SprintCheck] Hazard above head: {Block}", aboveHead.Name);
+            return false;
+        }
+        
+        var aboveDestHead = level.GetBlockAt(ascend.Destination.X, ascend.Destination.Y + 2, ascend.Destination.Z);
+        if (aboveDestHead != null && MovementHelper.AvoidWalkingInto(aboveDestHead))
+        {
+            logger.LogTrace("[SprintCheck] Hazard above dest head: {Block}", aboveDestHead.Name);
+            return false;
+        }
+        
+        logger.LogTrace("[SprintCheck] Sprint ascend is SAFE");
+        return true;
     }
 }

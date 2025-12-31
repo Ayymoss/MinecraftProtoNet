@@ -58,4 +58,9 @@ public interface IPathingService
     /// Event fired when a path is calculated.
     /// </summary>
     event Action<Path>? OnPathCalculated;
+
+    /// <summary>
+    /// Event fired when any pathing state changes (IsPathing, IsCalculating, Goal).
+    /// </summary>
+    event Action? OnStateChanged;
 }

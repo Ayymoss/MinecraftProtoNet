@@ -97,9 +97,23 @@ public class MovementDownward : MovementBase
         }
         else
         {
-            // Look down and break the block below
-            State.SetTarget(entity.YawPitch.X, 90); // Look straight down
-            State.LeftClick = true; // Break block
+            // If the block below us is solid, we need to break it FIRST
+            if (!MovementHelper.CanWalkThrough(blockBelow))
+            {
+                // Always look straight down when breaking block below us
+                State.SetTarget(entity.YawPitch.X, 90, force: true); // Look straight down
+                State.LeftClick = true;
+                State.BreakBlockTarget = (Source.X, Source.Y - 1, Source.Z);
+                
+                // Return immediately to allow the executor to process the break
+                // Do NOT return State with Status.Running if we are just waiting for break
+                // The executor will handle the breaking tick.
+                return State;
+            }
+
+            // Once broken, we fall
+            State.LeftClick = false; // Stop clicking once broken
+            State.BreakBlockTarget = null;
         }
 
         return State;

@@ -99,4 +99,57 @@ public class CommandRegistry
             return false;
         }
     }
+
+    /// <summary>
+    /// Gets all commands that can be executed from external sources (web UI, API, etc.).
+    /// Excludes commands that require in-game player context.
+    /// </summary>
+    public IEnumerable<(string Name, string Description, ICommand Command)> GetExternalCommands()
+    {
+        return _commands.Values
+            .Distinct()
+            .Select(cmd =>
+            {
+                var attr = cmd.GetType().GetCustomAttribute<CommandAttribute>()!;
+                return (attr.Name, attr.Description, cmd, attr.PlayerContextRequired);
+            })
+            .Where(x => !x.PlayerContextRequired)
+            .Select(x => (x.Name, x.Description, x.cmd));
+    }
+
+    /// <summary>
+    /// Executes a command from an external source (no in-game player context).
+    /// Returns error message if command requires player context or fails.
+    /// </summary>
+    public async Task<(bool Success, string Message)> ExecuteExternalAsync(
+        string commandName, 
+        string[] args,
+        IMinecraftClient client)
+    {
+        var command = GetCommand(commandName);
+        if (command == null)
+        {
+            return (false, $"Unknown command: {commandName}");
+        }
+
+        var attr = command.GetType().GetCustomAttribute<CommandAttribute>();
+        if (attr?.PlayerContextRequired == true)
+        {
+            return (false, $"Command '{commandName}' requires in-game player context");
+        }
+
+        try
+        {
+            // Create a context with no sender (external execution)
+            var context = new CommandContext(client, client.State, client.AuthResult, Guid.Empty, args);
+            await command.ExecuteAsync(context);
+            return (true, $"Command '{commandName}' executed successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "External command '{CommandName}' failed", commandName);
+            return (false, $"Command failed: {ex.Message}");
+        }
+    }
 }
+

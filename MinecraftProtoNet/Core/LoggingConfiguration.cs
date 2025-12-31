@@ -28,6 +28,8 @@ public static class LoggingConfiguration
 
             var serilogLogger = new LoggerConfiguration()
                 .MinimumLevel.Is(minLevel)
+                .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Information)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Components", Serilog.Events.LogEventLevel.Warning)
                 .WriteTo.Console(
                     outputTemplate: "[{Timestamp:HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
                 .WriteTo.File(
@@ -42,6 +44,7 @@ public static class LoggingConfiguration
 
             _loggerFactory = new LoggerFactory().AddSerilog(serilogLogger);
             return _loggerFactory;
+
         }
     }
 

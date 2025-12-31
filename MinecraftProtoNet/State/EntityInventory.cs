@@ -8,7 +8,23 @@ namespace MinecraftProtoNet.State;
 public class EntityInventory
 {
     private int _blockPlaceSequence;
+    private int _stateId;
+    
+    /// <summary>
+    /// The current state ID of the inventory, used for synchronization in ClickContainer transactions.
+    /// </summary>
+    public int StateId { get => _stateId; set => _stateId = value; }
 
+    /// <summary>
+    /// The item currently held by the mouse cursor (floating item).
+    /// </summary>
+    public Slot CursorItem { get; set; } = Slot.Empty;
+
+    /// <summary>
+    /// Event fired when inventory contents change.
+    /// </summary>
+    public event Action? OnInventoryChanged;
+    
     /// <summary>
     /// The current block placement sequence number for anti-cheat.
     /// </summary>
@@ -41,7 +57,19 @@ public class EntityInventory
     /// <summary>
     /// The currently selected hotbar slot (0-8).
     /// </summary>
-    public short HeldSlot { get; set; }
+    private short _heldSlot;
+    public short HeldSlot
+    {
+        get => _heldSlot;
+        set
+        {
+            if (_heldSlot != value)
+            {
+                _heldSlot = value;
+                OnInventoryChanged?.Invoke();
+            }
+        }
+    }
 
     /// <summary>
     /// The held slot index with container offset applied (36-44).
@@ -72,6 +100,7 @@ public class EntityInventory
     public void SetSlot(short slotIndex, Slot slot)
     {
         Items[slotIndex] = slot;
+        OnInventoryChanged?.Invoke();
     }
 
     /// <summary>
@@ -81,6 +110,7 @@ public class EntityInventory
     {
         Items.Clear();
         _blockPlaceSequence = 0;
+        OnInventoryChanged?.Invoke();
     }
 
     /// <summary>
@@ -89,6 +119,7 @@ public class EntityInventory
     public void SetAllSlots(Dictionary<short, Slot> items)
     {
         Items = items;
+        OnInventoryChanged?.Invoke();
     }
 
     /// <summary>
@@ -118,3 +149,4 @@ public class EntityInventory
         return false;   
     }
 }
+

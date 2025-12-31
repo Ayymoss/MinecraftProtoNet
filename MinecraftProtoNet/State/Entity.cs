@@ -22,10 +22,44 @@ public class Entity
     // ===== Identity =====
     public int EntityId { get; set; }
 
-    // ===== Health & Hunger =====
-    public float Health { get; set; } = 20f;
-    public int Hunger { get; set; } = 20;
-    public float HungerSaturation { get; set; } = 5f;
+    /// <summary>
+    /// Event fired when health, hunger, or saturation changes.
+    /// </summary>
+    public event Action? OnStatsChanged;
+
+    // ===== Health & Hunger ======
+    public float Health
+    {
+        get;
+        set
+        {
+            if (!(Math.Abs(field - value) > 0.01f)) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 20f;
+
+    public int Hunger
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 20;
+
+    public float HungerSaturation
+    {
+        get;
+        set
+        {
+            if (!(Math.Abs(field - value) > 0.01f)) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 5f;
 
     // ===== Position & Movement =====
     private Vector3<double> _position = new();
@@ -62,13 +96,13 @@ public class Entity
     /// Whether the entity has a pending teleport to acknowledge in the next physics tick.
     /// </summary>
     public bool HasPendingTeleport { get; set; }
-    
+
     /// <summary>
     /// Event fired when the server sends a teleport packet.
     /// Used by pathfinding to detect teleport loops vs collision-based stuck states.
     /// </summary>
     public event Action<Vector3<double>>? OnServerTeleport;
-    
+
     /// <summary>
     /// Notifies listeners that the server has sent a teleport packet.
     /// </summary>
@@ -100,7 +134,7 @@ public class Entity
     /// Used to detect sprint state changes for packet sending.
     /// </summary>
     public bool WasSprinting { get; set; }
-    
+
     /// <summary>
     /// Whether the entity was sneaking in the previous tick.
     /// Used to detect sneak state changes for packet sending.
@@ -194,11 +228,13 @@ public class Entity
     // Convenience accessors that delegate to Inventory
     public int BlockPlaceSequence => Inventory.BlockPlaceSequence;
     public int IncrementSequence() => Inventory.IncrementSequence();
+
     public short HeldSlot
     {
         get => Inventory.HeldSlot;
         set => Inventory.HeldSlot = value;
     }
+
     public short HeldSlotWithOffset => Inventory.HeldSlotWithOffset;
     public Slot HeldItem => Inventory.HeldItem;
 

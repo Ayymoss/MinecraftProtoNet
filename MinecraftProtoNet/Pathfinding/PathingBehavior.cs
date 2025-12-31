@@ -127,6 +127,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 _startPosition = startPos;
                 _ticksElapsedSoFar = 0;
                 StartPathCalculation(startPos);
+                OnStateChanged?.Invoke();
                 return true;
             }
         }
@@ -176,6 +177,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                         _next = null;
                         entity.ClearMovementInput();
                         OnPathComplete?.Invoke(true);
+                        OnStateChanged?.Invoke();
                         return;
                     }
                 }
@@ -192,6 +194,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                         _next = null;
                         _goal = null;
                         entity.ClearMovementInput();
+                        OnStateChanged?.Invoke();
                         return;
                     }
                 }
@@ -202,6 +205,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                     _current = _next;
                     _next = null;
                     _current.OnTick(entity, level);
+                    OnStateChanged?.Invoke();
                     return;
                 }
 
@@ -221,6 +225,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 }
 
                 _current = null;
+                OnStateChanged?.Invoke();
                 return;
             }
 
@@ -283,6 +288,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
             }
         }
 
+        OnStateChanged?.Invoke();
         return true;
     }
 
@@ -311,6 +317,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 _subscribedEntity = null;
             }
         }
+        OnStateChanged?.Invoke();
     }
 
     /// <summary>
@@ -323,12 +330,18 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     /// </summary>
     public event Action<Path>? OnPathCalculated;
 
+    /// <summary>
+    /// Event fired when any pathing state changes (IsPathing, IsCalculating, Goal).
+    /// </summary>
+    public event Action? OnStateChanged;
+
     private void StartPathCalculation((int X, int Y, int Z) start)
     {
         if (_goal == null || _context == null) return;
 
         var pathfinder = new AStarPathFinder(_context, _goal, start.X, start.Y, start.Z);
         _inProgress = pathfinder;
+        OnStateChanged?.Invoke();
 
         // Run async
         Task.Run(() =>
@@ -340,6 +353,20 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 if (path != null)
                 {
                     OnPathCalculated?.Invoke(path);
+
+                    // Detect stuck state: if path has only 1 position, there are no valid moves
+                    if (path.Positions.Count <= 1)
+                    {
+                        logger.LogWarning("[PathingBehavior] Path has no movements (1 position only). Bot is stuck - no valid moves from current location.");
+                        // Don't create executor - this would just immediately finish and retry
+                        // Let the goal remain so user can diagnose, but don't loop
+                        lock (_pathCalcLock)
+                        {
+                            _inProgress = null;
+                        }
+                        OnStateChanged?.Invoke();
+                        return;
+                    }
 
                     var executor = new PathExecutor(loggerFactory.CreateLogger<PathExecutor>(), path, _context);
                     executor.OnPlaceBlockRequest = OnPlaceBlockRequest;
@@ -353,12 +380,14 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                     {
                         _next = executor;
                     }
+                    OnStateChanged?.Invoke();
                 }
 
                 lock (_pathCalcLock)
                 {
                     _inProgress = null;
                 }
+                OnStateChanged?.Invoke();
             }
         });
     }

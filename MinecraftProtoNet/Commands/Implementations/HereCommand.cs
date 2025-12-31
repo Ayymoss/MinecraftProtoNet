@@ -4,7 +4,7 @@ using Serilog;
 
 namespace MinecraftProtoNet.Commands.Implementations;
 
-[Command("here", Description = "Pathfind to sender's position")]
+[Command("here", Description = "Pathfind to sender's position", PlayerContextRequired = true)]
 public class HereCommand(IPathingService pathingService) : ICommand
 {
     public async Task ExecuteAsync(CommandContext ctx)

@@ -16,6 +16,7 @@ namespace MinecraftProtoNet.Handlers.Play;
 [HandlesPacket(typeof(ContainerSetSlotPacket))]
 [HandlesPacket(typeof(SetHeldSlotPacket))]
 [HandlesPacket(typeof(BlockChangedAcknowledgementPacket))]
+[HandlesPacket(typeof(SetCursorItemPacket))]
 public class InventoryHandler(ILogger<InventoryHandler> logger) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
@@ -29,12 +30,14 @@ public class InventoryHandler(ILogger<InventoryHandler> logger) : IPacketHandler
         switch (packet)
         {
             case ContainerSetContentPacket containerSetContentPacket:
+                entity.Inventory.StateId = containerSetContentPacket.StateId;
                 entity.Inventory.SetAllSlots(containerSetContentPacket.SlotData
                     .Select((x, i) => new { Index = (short)i, Slot = x })
                     .ToDictionary(x => x.Index, x => x.Slot));
                 break;
 
             case ContainerSetSlotPacket containerSetSlotPacket:
+                entity.Inventory.StateId = containerSetSlotPacket.StateId;
                 entity.Inventory.SetSlot(containerSetSlotPacket.SlotToUpdate, containerSetSlotPacket.Slot);
                 break;
 
@@ -49,6 +52,10 @@ public class InventoryHandler(ILogger<InventoryHandler> logger) : IPacketHandler
                     entity.Inventory.SetSlot(entity.HeldSlotWithOffset, new Slot());
                 }
 
+                break;
+
+            case SetCursorItemPacket setCursorItemPacket:
+                entity.Inventory.CursorItem = setCursorItemPacket.Contents;
                 break;
         }
 

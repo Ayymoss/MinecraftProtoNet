@@ -52,6 +52,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketHandler, LoginHandler>();
         services.AddSingleton<IPacketHandler, ConfigurationHandler>();
         services.AddSingleton<IPacketHandler, PlayHandler>();
+        
+        // Specialized Play Handlers
+        services.AddSingleton<IPacketHandler, Handlers.Play.ChatHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.ChunkHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.ConnectionHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.EntityHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.InventoryHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.PlayerInfoHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.TimeAndWorldHandler>();
 
         // Logging - use the existing LoggingConfiguration
         services.AddSingleton<ILoggerFactory>(_ => LoggingConfiguration.CreateLoggerFactory());

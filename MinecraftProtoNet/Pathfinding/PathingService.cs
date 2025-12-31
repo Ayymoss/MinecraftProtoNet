@@ -66,6 +66,7 @@ public class PathingService : IPathingService
             // Forward events
             _behavior.OnPathCalculated += path => OnPathCalculated?.Invoke(path);
             _behavior.OnPathComplete += success => OnPathComplete?.Invoke(success);
+            _behavior.OnStateChanged += () => OnStateChanged?.Invoke();
         }
     }
 
@@ -103,6 +104,9 @@ public class PathingService : IPathingService
 
     /// <inheritdoc/>
     public event Action<Path>? OnPathCalculated;
+
+    /// <inheritdoc/>
+    public event Action? OnStateChanged;
 
     /// <summary>
     /// Gets the PathingBehavior for advanced usage. May be null if not initialized.

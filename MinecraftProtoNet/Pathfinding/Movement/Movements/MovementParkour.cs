@@ -1,5 +1,6 @@
 using MinecraftProtoNet.Pathfinding.Calc;
 using MinecraftProtoNet.State;
+using Serilog;
 
 namespace MinecraftProtoNet.Pathfinding.Movement.Movements;
 
@@ -7,20 +8,15 @@ namespace MinecraftProtoNet.Pathfinding.Movement.Movements;
 /// Movement for parkour jumps (jumping over gaps).
 /// Based on Baritone's MovementParkour.java.
 /// </summary>
-public class MovementParkour : MovementBase
+public class MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY, int destZ, MoveDirection direction, int jumpDistance)
+    : MovementBase(srcX, srcY, srcZ, destX, destY, destZ, direction)
 {
     /// <summary>
     /// The horizontal distance of the jump (1-4 blocks).
     /// </summary>
-    public int JumpDistance { get; }
+    public int JumpDistance { get; } = jumpDistance;
 
     private int _ticksWithoutProgress;
-
-    public MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY, int destZ, MoveDirection direction, int jumpDistance)
-        : base(srcX, srcY, srcZ, destX, destY, destZ, direction)
-    {
-        JumpDistance = jumpDistance;
-    }
 
     public override double CalculateCost(CalculationContext context)
     {
@@ -59,12 +55,27 @@ public class MovementParkour : MovementBase
         }
 
         // Check that there's a gap (we need to actually jump over something)
+        // And check for obstructions in the jump path (Baritone MovementParkour.java parity)
         var dx = Math.Sign(destX - srcX);
         var dz = Math.Sign(destZ - srcZ);
         for (var i = 1; i < JumpDistance; i++)
         {
             var gapX = srcX + dx * i;
             var gapZ = srcZ + dz * i;
+            
+            // Check for obstructions in the air (hitting a wall mid-jump)
+            var gapBody = context.GetBlockState(gapX, srcY, gapZ);
+            var gapHead = context.GetBlockState(gapX, srcY + 1, gapZ);
+            
+            // Temporary Debug Logging
+            Log.Debug("[ParkourCheck] Dist: {JumpDistance} i:{I} GapPos: ({GapX}, {SrcY}, {GapZ}) Body: {GapBodyName} Head: {GapHeadName}", JumpDistance, i, gapX, srcY, gapZ, gapBody?.Name, gapHead?.Name);
+
+            if (!MovementHelper.CanWalkThrough(gapBody) || !MovementHelper.CanWalkThrough(gapHead))
+            {
+                 Log.Debug("[ParkourCheck] BLOCKED at {GapX}, {SrcY}, {GapZ}", gapX, srcY, gapZ);
+                 return ActionCosts.CostInf;
+            }
+
             var gapFloor = context.GetBlockState(gapX, srcY - 1, gapZ);
             
             // For a valid parkour, intermediate blocks should be gaps (no floor)

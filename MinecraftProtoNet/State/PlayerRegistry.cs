@@ -11,12 +11,16 @@ public class PlayerRegistry : IPlayerRegistry
 {
     private readonly ConcurrentDictionary<Guid, Player> _players = new();
     private readonly ConcurrentDictionary<int, Player> _playersByEntityId = new();
+    
+    /// <inheritdoc />
+    public event Action? OnPlayersChanged;
 
     /// <inheritdoc />
     public Task<Player> AddPlayerAsync(Guid uuid, string username)
     {
         var player = _players.GetOrAdd(uuid, _ => new Player { Uuid = uuid });
         player.Username = username;
+        OnPlayersChanged?.Invoke();
         return Task.FromResult(player);
     }
 
@@ -50,6 +54,7 @@ public class PlayerRegistry : IPlayerRegistry
             player.Entity.YawPitch = yawPitch;
         }
 
+        OnPlayersChanged?.Invoke();
         return Task.FromResult(player);
     }
 
@@ -63,6 +68,7 @@ public class PlayerRegistry : IPlayerRegistry
             _playersByEntityId.TryRemove(player.Entity.EntityId, out _);
         }
 
+        OnPlayersChanged?.Invoke();
         return Task.FromResult(true);
     }
 
@@ -72,6 +78,7 @@ public class PlayerRegistry : IPlayerRegistry
         if (!_playersByEntityId.TryRemove(entityId, out var player)) return Task.FromResult(false);
 
         player.Entity = null;
+        OnPlayersChanged?.Invoke();
         return Task.FromResult(true);
     }
 

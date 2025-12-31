@@ -38,6 +38,8 @@ public class MinecraftClient : IMinecraftClient
     public AuthResult AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
+    public bool IsConnected { get; private set; }
+
 
     public MinecraftClient(
         IServiceProvider serviceProvider,
@@ -70,6 +72,11 @@ public class MinecraftClient : IMinecraftClient
         var authResult = await AuthenticationFlow.AuthenticateAsync();
         if (authResult is null) return false;
         AuthResult = authResult;
+        
+        // Sync local player info
+        State.LocalPlayer.Uuid = authResult.Uuid;
+        State.LocalPlayer.Username = authResult.Username;
+        
         return true;
     }
 
@@ -88,6 +95,7 @@ public class MinecraftClient : IMinecraftClient
         _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
         await _connection.ConnectAsync(host, port);
+        IsConnected = true;
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
@@ -130,6 +138,7 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task DisconnectAsync()
     {
+        IsConnected = false;
         await _cancellationTokenSource.CancelAsync();
         _connection.Dispose();
     }
@@ -168,6 +177,7 @@ public class MinecraftClient : IMinecraftClient
             catch (EndOfStreamException ex)
             {
                 _logger.LogError(ex, "Connection closed by server");
+                IsConnected = false;
                 OnDisconnected?.Invoke(this, DisconnectReason.EndOfStream);
                 break;
             }
@@ -178,6 +188,7 @@ public class MinecraftClient : IMinecraftClient
             {
                 _logger.LogError(ex, "Connection forcibly closed by the remote host. ErrorCode: {ErrorCode}, SocketErrorCode: {SocketErrorCode}",
                     socket.ErrorCode, socket.SocketErrorCode);
+                IsConnected = false;
                 OnDisconnected?.Invoke(this, DisconnectReason.ConnectionReset);
                 break;
             }

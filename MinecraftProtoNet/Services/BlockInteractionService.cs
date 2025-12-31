@@ -12,6 +12,7 @@ namespace MinecraftProtoNet.Services;
 
 /// <summary>
 /// Service for handling block interactions like placing and breaking blocks.
+/// Now uses tick-based breaking for natural timing (like holding left-click).
 /// </summary>
 public class BlockInteractionService(
     IPacketSender packetSender,
@@ -20,6 +21,9 @@ public class BlockInteractionService(
 {
     private bool _isBreaking;
     private (int X, int Y, int Z)? _currentBreakPos;
+    private int _breakTicksRemaining;
+    private int _breakSequence;
+    private bool _breakStartSent;
 
     /// <summary>
     /// Attempts to place a block at the specified position.
@@ -112,41 +116,45 @@ public class BlockInteractionService(
     }
 
     /// <summary>
-    /// Attempts to break a block at the specified position.
-    /// Handles tool selection, mining duration, and packet sequence.
-    /// </summary>
-    /// <summary>
-    /// Attempts to break a block at the specified position.
-    /// Handles tool selection, mining duration, and packet sequence.
+    /// Starts or continues breaking a block at the specified position.
+    /// Call this every tick while breaking. Uses tick-based timing like vanilla.
+    /// Returns true if block is broken or breaking in progress.
     /// </summary>
     public async Task<bool> BreakBlockAt(int x, int y, int z)
     {
-        if (_isBreaking)
+        var newPos = (x, y, z);
+        
+        // If already breaking a different block, cancel it first
+        if (_isBreaking && _currentBreakPos.HasValue && _currentBreakPos.Value != newPos)
         {
-            if (_currentBreakPos.HasValue && _currentBreakPos.Value.X == x && _currentBreakPos.Value.Y == y && _currentBreakPos.Value.Z == z)
-            {
-                // Already breaking this block
-                return true;
-            }
-            // Busy breaking another block
-            Log.Debug("[BlockInteraction] Busy breaking another block at {Current}, ignoring request for {New}", _currentBreakPos, (x, y, z));
-            return false;
+            await CancelBreaking();
         }
 
-        try
+        // Check if target block is already air
+        var targetBlock = state.Level.GetBlockAt(x, y, z);
+        if (targetBlock.IsAir)
+        {
+            // Block already broken - reset state for next block
+            if (_isBreaking && _currentBreakPos == newPos)
+            {
+                _isBreaking = false;
+                _currentBreakPos = null;
+                _breakStartSent = false;
+            }
+            return true;
+        }
+
+        // Start new break if not already breaking this block
+        if (!_isBreaking || _currentBreakPos != newPos)
         {
             _isBreaking = true;
-            _currentBreakPos = (x, y, z);
-
-            var targetBlock = state.Level.GetBlockAt(x, y, z);
-            if (targetBlock.IsAir) return true; // Already air
-
-            Log.Information("[BlockInteraction] Breaking block {Block} at ({X}, {Y}, {Z})", targetBlock.Name, x, y, z);
-
-            // 1. Equip Best Tool
+            _currentBreakPos = newPos;
+            _breakStartSent = false;
+            
+            // Equip best tool
             await inventoryManager.EquipBestTool(targetBlock);
-
-            // 2. Calculate Break Time
+            
+            // Calculate break time
             float speed = inventoryManager.GetDigSpeed(targetBlock);
             float hardness = targetBlock.DestroySpeed;
             bool canHarvest = true; // Simplified
@@ -156,29 +164,40 @@ public class BlockInteractionService(
             if (durationTicks >= ActionCosts.CostInf)
             {
                 Log.Warning("Block {Block} is unbreakable", targetBlock.Name);
+                _isBreaking = false;
+                _currentBreakPos = null;
                 return false;
             }
-
-            // 3. Start Digging
-            var pos = new Vector3<double>(x, y, z); 
             
+            _breakTicksRemaining = (int)Math.Ceiling(durationTicks);
+            
+            Log.Information("[BlockInteraction] Breaking block {Block} at ({X}, {Y}, {Z}), ticks: {Ticks}", 
+                targetBlock.Name, x, y, z, _breakTicksRemaining);
+        }
+
+        // Send start packet if not yet sent
+        if (!_breakStartSent)
+        {
+            var pos = new Vector3<double>(x, y, z);
             await packetSender.SendPacketAsync(new PlayerActionPacket
             {
                 Status = PlayerActionPacket.StatusType.StartedDigging,
                 Position = pos,
                 Face = BlockFace.Top,
-                Sequence = 0 // Usually 0 unless predicting sequences
+                Sequence = 0
             });
             await packetSender.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+            _breakStartSent = true;
+        }
 
-            // 4. Wait
-            if (durationTicks > 0)
-            {
-                int ms = (int)Math.Ceiling(durationTicks * 50); // 50ms per tick
-                await Task.Delay(ms);
-            }
+        // Decrement tick counter
+        _breakTicksRemaining--;
 
-            // 5. Finish Digging
+        // Check if break complete
+        if (_breakTicksRemaining <= 0)
+        {
+            // Send finish packet
+            var pos = new Vector3<double>(x, y, z);
             int sequence = 0;
             if (state.LocalPlayer?.Entity?.Inventory != null)
             {
@@ -192,18 +211,47 @@ public class BlockInteractionService(
                 Face = BlockFace.Top,
                 Sequence = sequence
             });
-            
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[BlockInteraction] Break block error");
-            return false;
-        }
-        finally
-        {
+
+            // Reset ALL breaking state after sending FinishedDigging
+            // This prevents double-send on next tick when block is still the target
             _isBreaking = false;
             _currentBreakPos = null;
+            _breakStartSent = false;
         }
+
+        return true;
     }
+
+    /// <summary>
+    /// Cancels any ongoing block breaking.
+    /// </summary>
+    public async Task CancelBreaking()
+    {
+        if (_isBreaking && _currentBreakPos.HasValue && _breakStartSent)
+        {
+            var pos = new Vector3<double>(_currentBreakPos.Value.X, _currentBreakPos.Value.Y, _currentBreakPos.Value.Z);
+            await packetSender.SendPacketAsync(new PlayerActionPacket
+            {
+                Status = PlayerActionPacket.StatusType.CancelledDigging,
+                Position = pos,
+                Face = BlockFace.Top,
+                Sequence = 0
+            });
+        }
+        
+        _isBreaking = false;
+        _currentBreakPos = null;
+        _breakTicksRemaining = 0;
+        _breakStartSent = false;
+    }
+
+    /// <summary>
+    /// Returns true if currently breaking a block.
+    /// </summary>
+    public bool IsBreaking => _isBreaking;
+
+    /// <summary>
+    /// Returns the current block being broken, if any.
+    /// </summary>
+    public (int X, int Y, int Z)? CurrentBreakTarget => _currentBreakPos;
 }

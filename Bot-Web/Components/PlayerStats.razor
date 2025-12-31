@@ -1,0 +1,94 @@
+@using Bot_Web.Services
+@inject BotService Bot
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl space-y-6">
+    <div class="flex items-center gap-3">
+        <i class="ph-duotone ph-heart-beat text-2xl text-red-400"></i>
+        <h2 class="text-xl font-semibold text-gray-100">Bot Status</h2>
+    </div>
+
+    @if (!Bot.IsConnected)
+    {
+        <div class="text-center py-4 text-gray-500">
+            <p>Connect to view stats</p>
+        </div>
+    }
+    else
+    {
+        var entity = Bot.State.LocalPlayer?.Entity;
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Health & Hunger -->
+            <div class="space-y-4">
+                <!-- Health -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Health</span>
+                        <span class="text-sm font-medium text-red-400">@(entity?.Health.ToString("F1") ?? "0")/20</span>
+                    </div>
+                    <div class="h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+                        <div class="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-500" 
+                             style="width: @(Math.Clamp((entity?.Health ?? 0) / 20f * 100f, 0, 100))%"></div>
+                    </div>
+                </div>
+
+                <!-- Hunger -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Hunger (Saturation: @(entity?.HungerSaturation.ToString("F1") ?? "0"))</span>
+                        <span class="text-sm font-medium text-orange-400">@(entity?.Hunger ?? 0)/20</span>
+                    </div>
+                    <div class="h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+                        <div class="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-500" 
+                             style="width: @(Math.Clamp((entity?.Hunger ?? 0) / 20f * 100f, 0, 100))%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pathfinding -->
+            <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700/30">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-3">Pathfinding</p>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full @(Bot.PathingService.IsPathing ? "bg-emerald-400 animate-pulse" : "bg-gray-600")"></div>
+                        <span class="text-sm">@(Bot.PathingService.IsPathing ? "Pathing Active" : "Idle")</span>
+                    </div>
+
+                    @if (Bot.PathingService.IsCalculating)
+                    {
+                        <div class="flex items-center gap-2 text-blue-400">
+                            <i class="ph-duotone ph-spinner animate-spin"></i>
+                            <span class="text-sm">Calculating Path...</span>
+                        </div>
+                    }
+
+                    @if (Bot.PathingService.Goal != null)
+                    {
+                        <div class="pt-2 border-t border-slate-700/50">
+                            <p class="text-[10px] text-gray-500 uppercase">Current Goal</p>
+                            <p class="text-sm text-purple-400 font-medium truncate">@Bot.PathingService.Goal.ToString()</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Bot.OnStateChanged += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Bot.OnStateChanged -= HandleStateChanged;
+    }
+}

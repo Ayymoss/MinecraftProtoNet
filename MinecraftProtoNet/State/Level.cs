@@ -15,6 +15,12 @@ public class Level
     private readonly ITickManager _tickManager;
     private readonly IPlayerRegistry _playerRegistry;
     private readonly IChunkManager _chunkManager;
+    
+    public event Action? OnPlayersChanged
+    {
+        add => _playerRegistry.OnPlayersChanged += value;
+        remove => _playerRegistry.OnPlayersChanged -= value;
+    }
 
     public Level() : this(new TickManager(), new PlayerRegistry(), new ChunkManager())
     {

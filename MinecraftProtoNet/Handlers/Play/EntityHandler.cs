@@ -4,6 +4,7 @@ using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Play.Clientbound;
+using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Services;
 
 namespace MinecraftProtoNet.Handlers.Play;
@@ -17,14 +18,8 @@ namespace MinecraftProtoNet.Handlers.Play;
 [HandlesPacket(typeof(MoveEntityPositionRotationPacket))]
 [HandlesPacket(typeof(MoveEntityPositionPacket))]
 [HandlesPacket(typeof(SetEntityMotionPacket))]
-[HandlesPacket(typeof(SetEntityDataPacket))]
-[HandlesPacket(typeof(UpdateAttributesPacket))]
-[HandlesPacket(typeof(SetEquipmentPacket))]
 [HandlesPacket(typeof(HurtAnimationPacket))]
-[HandlesPacket(typeof(TakeItemEntityPacket))]
-[HandlesPacket(typeof(LevelEventPacket))]
-[HandlesPacket(typeof(SoundPacket))]
-[HandlesPacket(typeof(TrackedWaypointPacket))]
+[HandlesPacket(typeof(SetHealthPacket))]
 public class EntityHandler(ILogger<EntityHandler> logger) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
@@ -89,15 +84,22 @@ public class EntityHandler(ILogger<EntityHandler> logger) : IPacketHandler
                 client.State.LocalPlayer.Entity.HurtFromYaw = hurtAnimationPacket.Yaw;
                 break;
 
-            // These packets are logged but don't require action
-            case SetEntityDataPacket:
-            case UpdateAttributesPacket:
-            case SetEquipmentPacket:
-            case LevelEventPacket:
-            case SoundPacket:
-            case TrackedWaypointPacket:
-            case TakeItemEntityPacket:
-                // Handled silently
+            case SetHealthPacket setHealthPacket:
+                if (!client.State.LocalPlayer.HasEntity) break;
+                var localEntity = client.State.LocalPlayer.Entity;
+
+                localEntity.Health = setHealthPacket.Health;
+                localEntity.Hunger = setHealthPacket.Food;
+                localEntity.HungerSaturation = setHealthPacket.FoodSaturation;
+
+                if (setHealthPacket.Health <= 0)
+                {
+                    await client.SendPacketAsync(new ClientCommandPacket
+                    {
+                        ActionId = ClientCommandPacket.Action.PerformRespawn
+                    });
+                }
+
                 break;
         }
     }

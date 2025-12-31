@@ -2,6 +2,7 @@ using System.Diagnostics;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Pathfinding.Goals;
 using MinecraftProtoNet.Pathfinding.Movement;
+using MinecraftProtoNet.Pathfinding.Movement.Movements;
 using Serilog;
 
 namespace MinecraftProtoNet.Pathfinding.Calc;
@@ -268,6 +269,9 @@ public class AStarPathFinder
         
         // Parkour (gap jumps)
         foreach (var move in GetParkourMoves(current)) yield return move;
+        
+        // Multi-block falls (for descending into caves, off edges, etc.)
+        foreach (var move in GetFallMoves(current)) yield return move;
     }
 
     private IEnumerable<(int dx, int dy, int dz, double cost)> GetCardinalMoves(PathNode current)
@@ -311,26 +315,134 @@ public class AStarPathFinder
 
     private IEnumerable<(int dx, int dy, int dz, double cost)> GetParkourMoves(PathNode current)
     {
-        // Simplistic 2-block gap jump (Parkour)
+        // Use Centralized MovementParkour logic (Baritone parity)
+        // This ensures checks for obstructions, valid landing spots, and correct costs are applied.
+        var directions = new[] 
+        { 
+            MoveDirection.ParkourNorth, 
+            MoveDirection.ParkourSouth, 
+            MoveDirection.ParkourEast, 
+            MoveDirection.ParkourWest 
+        };
+
+        foreach (var dir in directions)
+        {
+            foreach (var move in MovementParkour.CreateParkourMoves(_context, current.X, current.Y, current.Z, dir))
+            {
+                // Calculate cost using the robust MovementParkour logic
+                var cost = move.CalculateCost(_context);
+                
+                if (cost < ActionCosts.CostInf)
+                {
+                    yield return (move.Destination.X - current.X, 
+                                  move.Destination.Y - current.Y, 
+                                  move.Destination.Z - current.Z, 
+                                  cost);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Generates multi-block fall moves by scanning downward in cardinal directions.
+    /// Parity with Baritone's MovementDescend.dynamicFallCost logic.
+    /// </summary>
+    private IEnumerable<(int dx, int dy, int dz, double cost)> GetFallMoves(PathNode current)
+    {
+        int x = current.X;
+        int y = current.Y;
+        int z = current.Z;
+
+        // Check if we can fall straight down (no horizontal movement)
+        foreach (var fall in TryFallDown(x, y, z, 0, 0))
+        {
+            yield return fall;
+        }
+
+        // Check cardinal directions for edge falls
         int[] dxs = { 1, -1, 0, 0 };
         int[] dzs = { 0, 0, 1, -1 };
-
+        
         for (int i = 0; i < 4; i++)
         {
-            var dx = dxs[i] * 2;
-            var dz = dzs[i] * 2;
+            int dx = dxs[i];
+            int dz = dzs[i];
             
-            var destFloor = _context.GetBlockState(current.X + dx, current.Y - 1, current.Z + dz);
-            var inter1Body = _context.GetBlockState(current.X + dxs[i], current.Y, current.Z + dzs[i]);
-            var inter1Head = _context.GetBlockState(current.X + dxs[i], current.Y + 1, current.Z + dzs[i]);
-            
-            if (MovementHelper.CanWalkOn(destFloor) && 
-                MovementHelper.CanWalkThrough(inter1Body) && 
-                MovementHelper.CanWalkThrough(inter1Head))
+            foreach (var fall in TryFallDown(x, y, z, dx, dz))
             {
-                var cost = ActionCosts.WalkOneBlockCost * 2 + ActionCosts.JumpOneBlockCost;
-                yield return (dx, 0, dz, cost);
+                yield return fall;
             }
+        }
+    }
+
+    /// <summary>
+    /// Attempts to find a valid fall landing zone at the given horizontal offset.
+    /// </summary>
+    private IEnumerable<(int dx, int dy, int dz, double cost)> TryFallDown(int x, int y, int z, int dx, int dz)
+    {
+        int destX = x + dx;
+        int destZ = z + dz;
+        
+        // For horizontal falls, need to be able to walk off the edge first
+        if (dx != 0 || dz != 0)
+        {
+            var edgeBody = _context.GetBlockState(destX, y, destZ);
+            var edgeHead = _context.GetBlockState(destX, y + 1, destZ);
+            
+            // If edge is blocked, can't fall this way
+            if (!MovementHelper.CanWalkThrough(edgeBody) || !MovementHelper.CanWalkThrough(edgeHead))
+            {
+                yield break;
+            }
+        }
+
+        // Scan downward for valid landing zone
+        int maxFall = _context.HasWaterBucket ? _context.MaxFallHeightBucket : _context.MaxFallHeightNoWater;
+        
+        for (int fallHeight = 2; fallHeight <= maxFall; fallHeight++)
+        {
+            int newY = y - fallHeight;
+            
+            // Don't scan below world
+            if (newY < -64) break;
+            
+            var ontoBlock = _context.GetBlockState(destX, newY, destZ);
+            
+            // Check if we can walk through this block (keep falling)
+            if (MovementHelper.CanWalkThrough(ontoBlock))
+            {
+                continue;
+            }
+            
+            // Check if this is water (safe landing)
+            if (MovementHelper.IsWater(ontoBlock))
+            {
+                // Found water landing
+                var cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(fallHeight);
+                yield return (dx, -fallHeight + 1, dz, cost); // +1 because we land IN the water
+                yield break;
+            }
+            
+            // Check if we can walk on this block (valid landing)
+            if (!MovementHelper.CanWalkOn(ontoBlock))
+            {
+                yield break; // Can't land here and can't fall through - stuck
+            }
+            
+            // Baritone avoids bottom slabs (glitchy fall damage)
+            if (MovementHelper.IsBottomSlab(ontoBlock))
+            {
+                yield break;
+            }
+            
+            // Found valid landing - land on TOP of this block
+            // destY = newY + 1 (we stand on the block)
+            int landingY = newY + 1;
+            int dy = landingY - y;
+            
+            var fallCost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(fallHeight - 1) + ActionCosts.CenterAfterFallCost;
+            yield return (dx, dy, dz, fallCost);
+            yield break;
         }
     }
 
@@ -398,28 +510,67 @@ public class AStarPathFinder
         var destHead = _context.GetBlockState(destX, destY + 1, destZ);
         if (!MovementHelper.CanWalkThrough(destBody) || !MovementHelper.CanWalkThrough(destHead)) return ActionCosts.CostInf;
 
-        var cornerABody = _context.GetBlockState(x + dx, y, z);
-        var cornerAHead = _context.GetBlockState(x + dx, y + 1, z);
-        var cornerBBody = _context.GetBlockState(x, y, z + dz);
-        var cornerBHead = _context.GetBlockState(x, y + 1, z + dz);
+        // Baritone MovementDiagonal.cost lines 185-214: Check corner passability
+        // pb0 = corner A at (x, y, destZ)
+        // pb2 = corner B at (destX, y, z)
+        var cornerABody = _context.GetBlockState(x, y, z + dz);  // Corner A at source Y
+        var cornerAMid = _context.GetBlockState(x, y + 1, z + dz);  // Corner A mid
+        var cornerBBody = _context.GetBlockState(x + dx, y, z);  // Corner B at source Y
+        var cornerBMid = _context.GetBlockState(x + dx, y + 1, z);  // Corner B mid
 
-        bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
-        bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
-        
-        if (!canA && !canB) return ActionCosts.CostInf;
+        bool canALow = MovementHelper.CanWalkThrough(cornerABody);
+        bool canAMid = MovementHelper.CanWalkThrough(cornerAMid);
+        bool canBLow = MovementHelper.CanWalkThrough(cornerBBody);
+        bool canBMid = MovementHelper.CanWalkThrough(cornerBMid);
 
         if (dy > 0)
         {
+            // Diagonal ascending - Baritone lines 187-207
+            // Need to check jump clearance and full 3-block column on corners
             var srcCeil = _context.GetBlockState(x, y + 2, z);
             if (!MovementHelper.CanWalkThrough(srcCeil)) return ActionCosts.CostInf;
+            
+            var destCeil = _context.GetBlockState(destX, y + 2, destZ);
+            if (!MovementHelper.CanWalkThrough(destCeil)) return ActionCosts.CostInf;
 
-            var cornerACeil = _context.GetBlockState(x + dx, y + 2, z);
-            var cornerBCeil = _context.GetBlockState(x, y + 2, z + dz);
+            // Check corner tops for ascending (y+2 level)
+            var cornerATop = _context.GetBlockState(x, y + 2, z + dz);
+            var cornerBTop = _context.GetBlockState(x + dx, y + 2, z);
             
-            bool canACeil = canA && MovementHelper.CanWalkThrough(cornerACeil);
-            bool canBCeil = canB && MovementHelper.CanWalkThrough(cornerBCeil);
+            bool canATop = MovementHelper.CanWalkThrough(cornerATop);
+            bool canBTop = MovementHelper.CanWalkThrough(cornerBTop);
             
-            if (!canACeil && !canBCeil) return ActionCosts.CostInf;
+            // Baritone line 194: Need at least one corner with full 3-block clearance
+            bool optionA = canATop && canAMid && canALow;
+            bool optionB = canBTop && canBMid && canBLow;
+            
+            if (!optionA && !optionB)
+            {
+                return ActionCosts.CostInf; // No valid corner path
+            }
+            
+            // Baritone lines 199-200: Check for head bonk scenarios
+            // If top is blocked but mid/low are clear, we'd bonk our head during the jump
+            if ((!canATop && canAMid && canALow) || (!canBTop && canBMid && canBLow))
+            {
+                return ActionCosts.CostInf; // Would bonk head
+            }
+        }
+        else if (dy < 0)
+        {
+            // Descending diagonal - check corners at source level
+            bool canA = canALow && canAMid;
+            bool canB = canBLow && canBMid;
+            
+            if (!canA && !canB) return ActionCosts.CostInf;
+        }
+        else
+        {
+            // Same level diagonal - standard 2-block corner check
+            bool canA = canALow && canAMid;
+            bool canB = canBLow && canBMid;
+            
+            if (!canA && !canB) return ActionCosts.CostInf;
         }
 
         var multiplier = _context.CanSprint ? ActionCosts.SprintMultiplier : 1.0;
@@ -437,8 +588,22 @@ public class AStarPathFinder
         var destZ = z + dz;
         var destY = y + 1;
 
+        // Baritone MovementAscend.cost lines 68-70: Check destination floor
         var destFloor = _context.GetBlockState(destX, destY - 1, destZ);
         if (!MovementHelper.CanWalkOn(destFloor)) return ActionCosts.CostInf;
+
+        // Baritone lines 114-117: Can't jump from ladder/vine, can't jump from bottom slab (except to another)
+        var srcDown = _context.GetBlockState(x, y - 1, z);
+        if (MovementHelper.IsClimbable(srcDown)) return ActionCosts.CostInf;
+        
+        bool jumpingFromBottomSlab = MovementHelper.IsBottomSlab(srcDown);
+        bool jumpingToBottomSlab = MovementHelper.IsBottomSlab(destFloor);
+        
+        // Baritone line 121-122: Can only ascend from bottom slab to another bottom slab
+        if (jumpingFromBottomSlab && !jumpingToBottomSlab)
+        {
+            return ActionCosts.CostInf;
+        }
 
         var destBody = _context.GetBlockState(destX, destY, destZ);
         var destHead = _context.GetBlockState(destX, destY + 1, destZ);
@@ -455,12 +620,42 @@ public class AStarPathFinder
         double hardnessHead = GetMiningCost(destHead);
         if (hardnessHead >= ActionCosts.CostInf) return ActionCosts.CostInf;
 
-        // Base move cost
-        double cost = ActionCosts.JumpOneBlockCost + _context.JumpPenalty;
-        
-        // If we are breaking blocks, we generally can't sprint jump efficiently? 
-        // Baritone doesn't explicitly disable sprinting here but cost calculation implies duration addition.
-        // We will sum durations.
+        // Base move cost - Baritone lines 124-142
+        double cost;
+        if (jumpingToBottomSlab)
+        {
+            if (jumpingFromBottomSlab)
+            {
+                cost = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
+                cost += _context.JumpPenalty;
+            }
+            else
+            {
+                // Walking into a bottom slab, no jump needed
+                cost = ActionCosts.WalkOneBlockCost;
+            }
+        }
+        else
+        {
+            cost = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
+            cost += _context.JumpPenalty;
+        }
+
+        // Check corners for diagonal ascend
+        if (dx != 0 && dz != 0)
+        {
+            // For ascend, we need to check corners at y+1 (destination body) and y+2 (destination head)
+            var cornerABody = _context.GetBlockState(x + dx, y + 1, z);
+            var cornerAHead = _context.GetBlockState(x + dx, y + 2, z);
+            
+            var cornerBBody = _context.GetBlockState(x, y + 1, z + dz);
+            var cornerBHead = _context.GetBlockState(x, y + 2, z + dz);
+
+            bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
+            bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
+            
+            if (!canA && !canB) return ActionCosts.CostInf;
+        }
 
         return cost + hardnessJump + hardnessBody + hardnessHead;
     }
@@ -487,6 +682,22 @@ public class AStarPathFinder
         double hardness3 = GetMiningCost(destAbove);
         if (hardness3 >= ActionCosts.CostInf) return ActionCosts.CostInf;
 
+        // Check corners for diagonal descent
+        if (dx != 0 && dz != 0)
+        {
+            var cornerABody = _context.GetBlockState(x + dx, y, z);
+            var cornerAHead = _context.GetBlockState(x + dx, y + 1, z);
+            
+            var cornerBBody = _context.GetBlockState(x, y, z + dz);
+            var cornerBHead = _context.GetBlockState(x, y + 1, z + dz);
+
+            bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
+            bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
+            
+            // If neither corner is passable, we are blocked
+            if (!canA && !canB) return ActionCosts.CostInf;
+        }
+
         return ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) + ActionCosts.CenterAfterFallCost + hardness1 + hardness2 + hardness3;
     }
 
@@ -503,25 +714,10 @@ public class AStarPathFinder
         }
 
         var toBreak = _context.GetBlockState(x, y + 2, z);
-        // Simplified skip for fence gates for now
         
         double placeCost = 0;
         if (!ladder)
         {
-            // Use CostOfPlacingAt which checks HasThrowaway and AllowPlace
-            placeCost = _context.CostOfPlacingAt(x, y - 1, z); // Placing at current feet position happens after jumping? 
-            // Baritone Pillar cost logic:
-            // It costs COST_INF if we can't place.
-            // Baritone context.costOfPlacingAt checks context.hasThrowaway.
-            
-            // Actually, for Pillar, we are placing under ourselves.
-            // But we need to check if we can place.
-            // In AStarPathFinder.java:234 (getPillarCost)
-            // double placeCost = context.costOfPlacingAt(x, y, z, fromState); 
-            // Wait, placing at (x, y, z) is placing AT the current block, which we are standing IN?
-            // No, pillar means we are at (x,y,z), we jump to (x,y+1,z), and place at (x,y,z).
-            // So we place at the source node's coordinates.
-            
             placeCost = _context.CostOfPlacingAt(x, y, z);
             if (placeCost >= ActionCosts.CostInf) return ActionCosts.CostInf;
         }
@@ -529,8 +725,8 @@ public class AStarPathFinder
         double hardness = 0;
         if (!MovementHelper.CanWalkThrough(_context, x, y + 2, z))
         {
-            if (!_context.AllowBreak) return ActionCosts.CostInf;
-            hardness = ActionCosts.WalkOneBlockCost * 3; // Placeholder for mining duration
+            hardness = GetMiningCost(toBreak);
+            if (hardness >= ActionCosts.CostInf) return ActionCosts.CostInf;
         }
 
         if (ladder)
@@ -560,8 +756,8 @@ public class AStarPathFinder
             double hardness = 0;
             if (!MovementHelper.CanWalkThrough(down))
             {
-                if (!_context.AllowBreak) return ActionCosts.CostInf;
-                hardness = ActionCosts.WalkOneBlockCost * 3;
+                hardness = GetMiningCost(down);
+                if (hardness >= ActionCosts.CostInf) return ActionCosts.CostInf;
             }
             return ActionCosts.GetFallCost(1) + hardness;
         }
