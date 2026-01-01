@@ -1,3 +1,4 @@
+using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Models.World.Chunk;
@@ -29,7 +30,11 @@ public class Chunk(int x, int z)
         if (sectionIndex < 0 || sectionIndex >= Sections.Length) return null;
 
         var section = Sections[sectionIndex];
-        return section.IsEmpty ? null : section.GetBlockStateId(localX, localY, localZ);
+        return section.IsEmpty 
+            // Empty sections are Air
+            ? ClientState.BlockStateRegistry[0] 
+            // Assuming 0 is Air
+            : section.GetBlockStateId(localX, localY, localZ);
     }
 
     private static int GetSectionIndex(int sectionY) => sectionY - MinSection;

@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <base href="/"/>
+    <title>MinecraftProtoNet Bot</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'mc-dark': '#1a1a2e',
+                        'mc-darker': '#0f0f1a',
+                        'mc-card': 'rgba(30, 30, 50, 0.8)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@@phosphor-icons/web"></script>
+    
+    <ResourcePreloader/>
+    <link rel="stylesheet" href="@Assets["app.css"]"/>
+    <link rel="stylesheet" href="@Assets["Bot-Web.styles.css"]"/>
+    <ImportMap/>
+    <HeadOutlet/>
+</head>
+
+<body class="bg-mc-darker text-gray-100 min-h-screen">
+<Routes/>
+<ReconnectModal/>
+<script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

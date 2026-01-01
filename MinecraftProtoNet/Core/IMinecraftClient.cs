@@ -5,7 +5,7 @@ using MinecraftProtoNet.State.Base;
 
 namespace MinecraftProtoNet.Core;
 
-public interface IMinecraftClient
+public interface IMinecraftClient : IPacketSender
 {
     ProtocolState ProtocolState { get; set; }
     ClientState State { get; }
@@ -13,9 +13,9 @@ public interface IMinecraftClient
     AuthResult AuthResult { get; set; }
     
     /// <summary>
-    /// The shared path follower service for pathfinding operations.
+    /// Whether the client is currently connected to a server.
     /// </summary>
-    IPathFollowerService PathFollowerService { get; }
+    bool IsConnected { get; }
     
     /// <summary>
     /// Raised when the client disconnects from the server.
@@ -27,11 +27,15 @@ public interface IMinecraftClient
     void EnableCompression(int threshold);
     Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
-    Task SendPacketAsync(IServerboundPacket packet);
 
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
 
-    Task PhysicsTickAsync();
+    /// <summary>
+    /// Performs a physics tick for the local player.
+    /// </summary>
+    /// <param name="prePhysicsCallback">Optional callback for pathfinding or AI logic</param>
+    Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null);
+
     Task SendChatSessionUpdate();
 }
 

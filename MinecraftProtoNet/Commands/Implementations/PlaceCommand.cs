@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("place", Description = "Place a block")]
 public class PlaceCommand : ICommand
 {
-    public string Name => "place";
-    public string Description => "Place a block at the looked-at position";
-    public string[] Aliases => [];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         if (!ctx.State.LocalPlayer.HasEntity)

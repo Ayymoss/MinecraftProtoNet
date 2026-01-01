@@ -1,13 +1,62 @@
 namespace MinecraftProtoNet.Models.World.Chunk;
 
-public class BlockState(int id, string name, Dictionary<string, string>? properties = null)
+/// <summary>
+/// Represents a block state with properties aligned to Mojang's BlockBehaviour.BlockStateBase.
+/// </summary>
+public class BlockState
 {
-    public int Id { get; } = id;
-    public string Name { get; } = name;
-    public Dictionary<string, string> Properties { get; } = properties ?? [];
+    // ===== Identity =====
+    public int Id { get; }
+    public string Name { get; }
+    public Dictionary<string, string> Properties { get; }
 
-    public bool IsAir => Id is 0 || Name.EndsWith("air", StringComparison.OrdinalIgnoreCase);
+    // ===== Physics Properties (from Mojang Block.Properties) =====
+    
+    /// <summary>
+    /// Whether this block has collision (most blocks do).
+    /// Set via registry or defaults to true for non-air/liquid blocks.
+    /// </summary>
+    public bool HasCollision { get; set; } = true;
 
+    /// <summary>
+    /// Block friction (0.0-1.0). Default is 0.6.
+    /// Ice = 0.98, Blue Ice = 0.989, Slime = 0.8
+    /// </summary>
+    public float Friction { get; set; } = 0.6f;
+
+    /// <summary>
+    /// Movement speed multiplier on this block. Default is 1.0.
+    /// Soul Sand = 0.4, Honey = 0.4
+    /// </summary>
+    public float SpeedFactor { get; set; } = 1.0f;
+
+    /// <summary>
+    /// Jump height multiplier on this block. Default is 1.0.
+    /// Honey = 0.5
+    /// </summary>
+    public float JumpFactor { get; set; } = 1.0f;
+
+    /// <summary>
+    /// Time to break this block (destroy speed).
+    /// -1 = unbreakable (bedrock), 0 = instant break
+    /// </summary>
+    public float DestroySpeed { get; set; } = 1.0f;
+
+    /// <summary>
+    /// Light level emitted by this block (0-15).
+    /// </summary>
+    public int LightEmission { get; set; }
+
+    // ===== Computed Flags =====
+
+    /// <summary>
+    /// Whether this block is air.
+    /// </summary>
+    public bool IsAir => Id == 0 || Name.EndsWith("air", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether this is a top slab or top half block.
+    /// </summary>
     public bool IsTop
     {
         get
@@ -24,71 +73,54 @@ public class BlockState(int id, string name, Dictionary<string, string>? propert
 
     public int SnowLayers => Properties.TryGetValue("layers", out var layers) && int.TryParse(layers, out var count) ? count : 0;
 
-
-    public bool IsLiquid => Name.Contains("water", StringComparison.CurrentCultureIgnoreCase) ||
-                            Name.Contains("lava", StringComparison.CurrentCultureIgnoreCase);
+    /// <summary>
+    /// Whether this block is a liquid (water/lava).
+    /// </summary>
+    public bool IsLiquid => Name.Contains("water", StringComparison.OrdinalIgnoreCase) ||
+                            Name.Contains("lava", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Whether this block physically blocks movement (has a collision box in Minecraft).
+    /// Whether this block physically blocks movement (has a collision box).
+    /// Aligned with Mojang's blocksMotion() method.
     /// </summary>
-    public bool BlocksMotion => !IsAir && !IsLiquid && !IsPassable(Name);
+    public bool BlocksMotion
+    {
+        get
+        {
+            if (IsAir || IsLiquid) return false;
+            if (!HasCollision) return false;
+            
+            // Special cases from Mojang's blocksMotion() - cobweb and bamboo don't block
+            if (Name.Contains("cobweb", StringComparison.OrdinalIgnoreCase)) return false;
+            if (Name.Contains("bamboo_sapling", StringComparison.OrdinalIgnoreCase)) return false;
+            
+            return true;
+        }
+    }
 
     /// <summary>
     /// Legacy property, now uses BlocksMotion.
     /// </summary>
     public bool IsSolid => BlocksMotion;
 
-    private static bool IsPassable(string name)
-    {
-        var lowerName = name.ToLower();
-        
-        // Exclude inherently solid block types that might contain passable keywords
-        if (lowerName.Contains("block") || 
-            lowerName.Contains("slab") || 
-            lowerName.Contains("stairs") || 
-            lowerName.Contains("wall") || 
-            lowerName.Contains("fence") ||
-            lowerName.Contains("gate") ||
-            lowerName.Contains("door") ||
-            lowerName.Contains("button") ||
-            lowerName.Contains("pressure_plate"))
-            return false;
+    /// <summary>
+    /// Whether this block is nearly impossible to break (e.g. Bedrock).
+    /// </summary>
+    public bool IsExhaustinglyDifficultToBreak => DestroySpeed < 0;
 
-        return lowerName.Contains("sapling") || 
-               lowerName.Contains("flower") || 
-               lowerName == "grass" || 
-               lowerName == "tall_grass" ||
-               lowerName.EndsWith("_grass") ||
-               lowerName.Contains("fern") || 
-               lowerName == "mushroom" ||
-               lowerName.EndsWith("_mushroom") ||
-               lowerName.Contains("poppy") || 
-               lowerName.Contains("dandelion") || 
-               lowerName.EndsWith("_plant") ||
-               lowerName.Contains("sugar_cane") ||
-               lowerName.Contains("torch") ||
-               lowerName.Contains("lever") ||
-               lowerName.Contains("redstone") ||
-               lowerName.Contains("vine") ||
-               lowerName.Contains("dead_bush") ||
-               lowerName.Contains("deadbush") ||
-               lowerName.Contains("fire") ||
-               lowerName.Contains("rail") ||
-               lowerName.Contains("glow_lichen") ||
-               lowerName.Contains("hanging_roots") ||
-               lowerName.Contains("hanging_sign") ||
-               lowerName.Contains("azalea_bush") ||
-               lowerName.Contains("pink_petals") ||
-               lowerName.Contains("spore_blossom") ||
-               lowerName.Contains("sculk_vein") ||
-               lowerName.Contains("sunflower") ||
-               lowerName.Contains("lilac") ||
-               lowerName.Contains("rose_bush") ||
-               lowerName.Contains("peony") ||
-               lowerName.Contains("item_frame") ||
-               lowerName.Contains("glow_item_frame") ||
-               lowerName.Contains("end_rod");
+    // ===== Constructor =====
+
+    public BlockState(int id, string name, Dictionary<string, string>? properties = null)
+    {
+        Id = id;
+        Name = name;
+        Properties = properties ?? [];
+
+        // Apply physics data from registry
+        BlockPhysicsData.ApplyTo(this);
     }
+
+    // ===== Object Overrides =====
 
     public override bool Equals(object? obj)
     {
@@ -96,17 +128,10 @@ public class BlockState(int id, string name, Dictionary<string, string>? propert
         {
             return Id == other.Id;
         }
-
         return false;
     }
 
-    public override int GetHashCode()
-    {
-        return Id.GetHashCode();
-    }
+    public override int GetHashCode() => Id.GetHashCode();
 
-    public override string ToString()
-    {
-        return $"BlockState({Id})";
-    }
+    public override string ToString() => $"BlockState({Id}, {Name})";
 }

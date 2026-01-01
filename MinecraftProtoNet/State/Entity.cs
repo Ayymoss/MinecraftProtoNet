@@ -22,10 +22,44 @@ public class Entity
     // ===== Identity =====
     public int EntityId { get; set; }
 
-    // ===== Health & Hunger =====
-    public float Health { get; set; } = 20f;
-    public int Hunger { get; set; } = 20;
-    public float HungerSaturation { get; set; } = 5f;
+    /// <summary>
+    /// Event fired when health, hunger, or saturation changes.
+    /// </summary>
+    public event Action? OnStatsChanged;
+
+    // ===== Health & Hunger ======
+    public float Health
+    {
+        get;
+        set
+        {
+            if (!(Math.Abs(field - value) > 0.01f)) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 20f;
+
+    public int Hunger
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 20;
+
+    public float HungerSaturation
+    {
+        get;
+        set
+        {
+            if (!(Math.Abs(field - value) > 0.01f)) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 5f;
 
     // ===== Position & Movement =====
     private Vector3<double> _position = new();
@@ -64,6 +98,20 @@ public class Entity
     public bool HasPendingTeleport { get; set; }
 
     /// <summary>
+    /// Event fired when the server sends a teleport packet.
+    /// Used by pathfinding to detect teleport loops vs collision-based stuck states.
+    /// </summary>
+    public event Action<Vector3<double>>? OnServerTeleport;
+
+    /// <summary>
+    /// Notifies listeners that the server has sent a teleport packet.
+    /// </summary>
+    public void NotifyServerTeleport(Vector3<double> position)
+    {
+        OnServerTeleport?.Invoke(position);
+    }
+
+    /// <summary>
     /// The exact Yaw/Pitch sent by the server in the last teleport packet.
     /// Used to acknowledge teleports with 100% precision.
     /// </summary>
@@ -76,10 +124,22 @@ public class Entity
     public bool IsSprinting { get; set; }
 
     /// <summary>
+    /// Ticks remaining before the entity can jump again.
+    /// Matches Mojang's noJumpDelay (10 ticks between jumps).
+    /// </summary>
+    public int JumpCooldown { get; set; }
+
+    /// <summary>
     /// Whether the entity was sprinting in the previous tick.
     /// Used to detect sprint state changes for packet sending.
     /// </summary>
     public bool WasSprinting { get; set; }
+
+    /// <summary>
+    /// Whether the entity was sneaking in the previous tick.
+    /// Used to detect sneak state changes for packet sending.
+    /// </summary>
+    public bool WasSneaking { get; set; }
 
     // ===== Input State =====
     /// <summary>
@@ -159,20 +219,40 @@ public class Entity
     /// </summary>
     public float? HurtFromYaw { get; set; }
 
-    // ===== Inventory =====
     /// <summary>
     /// The entity's inventory.
     /// </summary>
     public EntityInventory Inventory { get; } = new();
 
+    /// <summary>
+    /// Currently open container/menu (null if no container is open).
+    /// </summary>
+    public ContainerState? CurrentContainer { get; set; }
+
+    /// <summary>
+    /// Event fired when a container is opened.
+    /// </summary>
+    public event Action<ContainerState>? OnContainerOpened;
+
+    /// <summary>
+    /// Notifies listeners that a container has been opened.
+    /// </summary>
+    public void NotifyContainerOpened(ContainerState container)
+    {
+        OnContainerOpened?.Invoke(container);
+    }
+
+
     // Convenience accessors that delegate to Inventory
     public int BlockPlaceSequence => Inventory.BlockPlaceSequence;
     public int IncrementSequence() => Inventory.IncrementSequence();
+
     public short HeldSlot
     {
         get => Inventory.HeldSlot;
         set => Inventory.HeldSlot = value;
     }
+
     public short HeldSlotWithOffset => Inventory.HeldSlotWithOffset;
     public Slot HeldItem => Inventory.HeldItem;
 

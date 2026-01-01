@@ -1,34 +1,106 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Pathfinding;
+using MinecraftProtoNet.Pathfinding.Goals;
+using MinecraftProtoNet.Services;
+using Serilog;
 
 namespace MinecraftProtoNet.Commands.Implementations;
 
 [Command("gotopath", Description = "Pathfind to coordinates")]
-public class GotoPathCommand : ICommand
+public class GotoPathCommand(IPathingService pathingService) : ICommand
 {
-    public string Name => "gotopath";
-    public string Description => "Pathfind to coordinates (x y z)";
-    public string[] Aliases => ["path"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        if (!ctx.TryGetArg(0, out float x) ||
-            !ctx.TryGetArg(1, out float y) ||
-            !ctx.TryGetArg(2, out float z))
+        // Check for "cancel" or "stop" as first arg
+        if (ctx.Arguments.Length > 0 && 
+            (ctx.Arguments[0].Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
+             ctx.Arguments[0].Equals("stop", StringComparison.OrdinalIgnoreCase)))
         {
-            await ctx.SendChatAsync("Usage: !gotopath <x> <y> <z>");
+            pathingService.ForceCancel(ctx.State.LocalPlayer.Entity);
+            await ctx.SendChatAsync("Pathfinding cancelled.");
             return;
         }
 
-        var result = MovementActions.PathfindTo(ctx, new Vector3<double>(x, y, z));
-
-        if (!result)
+        // Check for "status"
+        if (ctx.Arguments.Length > 0 && 
+            ctx.Arguments[0].Equals("status", StringComparison.OrdinalIgnoreCase))
         {
-            await ctx.SendChatAsync("I can't reach that position.");
+            if (pathingService.IsPathing)
+            {
+                await ctx.SendChatAsync($"Pathing to {pathingService.Goal}. Calculating: {pathingService.IsCalculating}");
+            }
+            else
+            {
+                await ctx.SendChatAsync("Not currently pathing.");
+            }
             return;
         }
 
-        await ctx.SendChatAsync("Moving to that position.");
+
+        // Parse coordinates
+        if (!ctx.HasMinArgs(3))
+        {
+            await ctx.SendChatAsync("Usage: gotopath <x> <y> <z> | gotopath cancel | gotopath status");
+            return;
+        }
+
+        if (!ctx.TryGetArg<int>(0, out var x) ||
+            !ctx.TryGetArg<int>(1, out var y) ||
+            !ctx.TryGetArg<int>(2, out var z))
+        {
+            await ctx.SendChatAsync("Invalid coordinates. Usage: gotopath <x> <y> <z>");
+            return;
+        }
+
+        var entity = ctx.State.LocalPlayer.Entity;
+
+        // Cancel any existing path
+        if (pathingService.IsPathing || pathingService.IsCalculating)
+        {
+            pathingService.ForceCancel(entity);
+        }
+
+        // Create goal
+        var goal = new GoalBlock(x, y, z);
+
+        // Check if already at goal
+        var currentPos = (
+            (int)Math.Floor(entity.Position.X),
+            (int)Math.Floor(entity.Position.Y),
+            (int)Math.Floor(entity.Position.Z)
+        );
+        
+        if (goal.IsInGoal(currentPos.Item1, currentPos.Item2, currentPos.Item3))
+        {
+            await ctx.SendChatAsync($"Already at destination ({x}, {y}, {z})!");
+            return;
+        }
+
+        // Wire up events (only once ideally, but for simplicity we do it each time)
+        pathingService.OnPathCalculated += path =>
+        {
+            Log.Information("[Pathfinding] Path calculated: {Length} positions, reaches goal: {ReachesGoal}", path.Length, path.ReachesGoal);
+        };
+        
+        pathingService.OnPathComplete += success =>
+        {
+            Log.Information("[Pathfinding] Path {Status}", success ? "completed successfully" : "failed");
+        };
+
+        // Start pathfinding
+        var started = pathingService.SetGoalAndPath(goal, entity);
+        
+        if (started)
+        {
+            var dist = Math.Sqrt(
+                Math.Pow(x - entity.Position.X, 2) +
+                Math.Pow(y - entity.Position.Y, 2) +
+                Math.Pow(z - entity.Position.Z, 2));
+            await ctx.SendChatAsync($"Pathfinding to ({x}, {y}, {z}) - {dist:F0} blocks away...");
+        }
+        else
+        {
+            await ctx.SendChatAsync("Failed to start pathfinding. Already pathing or at goal.");
+        }
     }
 }

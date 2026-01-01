@@ -1,0 +1,70 @@
+@inject BotService Bot
+@using Bot_Web.Services
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl">
+    <div class="flex items-center gap-3 mb-4">
+        <i class="ph-duotone ph-terminal text-2xl text-purple-400"></i>
+        <h2 class="text-xl font-semibold text-gray-100">Commands</h2>
+    </div>
+
+    @if (!Bot.IsConnected)
+    {
+        <div class="text-center py-6 text-gray-500">
+            <i class="ph-duotone ph-terminal-window text-4xl mb-2 block"></i>
+            <p>Connect to run commands</p>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-4">
+            <!-- Command selection -->
+            <div>
+                <label class="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Command</label>
+                <select @bind="_selectedCommand" 
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-purple-500">
+                    <option value="">Select a command...</option>
+                    @foreach (var cmd in GetAvailableCommands())
+                    {
+                        <option value="@cmd.Name">!@cmd.Name - @cmd.Description</option>
+                    }
+                </select>
+            </div>
+            
+            <!-- Arguments input -->
+            <div>
+                <label class="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Arguments</label>
+                <input type="text" @bind="_arguments" @bind:event="oninput"
+                       placeholder="Optional arguments..."
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-purple-500" />
+            </div>
+            
+            <!-- Execute button -->
+            <button @onclick="ExecuteCommand" 
+                    disabled="@(string.IsNullOrEmpty(_selectedCommand) || _executing)"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg transition-all border border-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                @if (_executing)
+                {
+                    <i class="ph-duotone ph-spinner animate-spin"></i>
+                    <span>Executing...</span>
+                }
+                else
+                {
+                    <i class="ph-bold ph-play"></i>
+                    <span>Execute</span>
+                }
+            </button>
+            
+            <!-- Result display -->
+            @if (!string.IsNullOrEmpty(_result))
+            {
+                <div class="p-3 rounded-lg @(_success ? "bg-emerald-900/30 border border-emerald-700/50" : "bg-red-900/30 border border-red-700/50")">
+                    <div class="flex items-center gap-2">
+                        <i class="@(_success ? "ph-bold ph-check-circle text-emerald-400" : "ph-bold ph-x-circle text-red-400")"></i>
+                        <span class="text-sm @(_success ? "text-emerald-200" : "text-red-200")">@_result</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
@@ -102,6 +103,7 @@ public class ChunkManager : IChunkManager
                     if (blockBox.Intersects(queryBox))
                     {
                         collidingBoxes.Add(blockBox);
+                        // Log "phantom" collisions (if needed) or just high counts
                     }
                     else
                     {

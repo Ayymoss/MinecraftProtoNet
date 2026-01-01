@@ -14,6 +14,7 @@ using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
 using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
@@ -28,36 +29,37 @@ public class MinecraftClient : IMinecraftClient
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
 
-    public IPathFollowerService PathFollowerService { get; }
-
     /// <summary>
     /// Raised when the client disconnects from the server.
     /// </summary>
     public event EventHandler<DisconnectReason>? OnDisconnected;
 
-
-    public ClientState State { get; } = new();
+    public ClientState State { get; }
     public AuthResult AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
+    public bool IsConnected { get; private set; }
+
 
     public MinecraftClient(
+        IServiceProvider serviceProvider,
+        ClientState state,
         Connection connection, 
         IPacketService packetService,
         IPhysicsService physicsService,
-        IPathFollowerService pathFollowerService,
         CommandRegistry commandRegistry,
         ILogger<MinecraftClient> logger)
     {
+        State = state;
         _connection = connection;
         _packetService = packetService;
         _physicsService = physicsService;
-        PathFollowerService = pathFollowerService;
         _commandRegistry = commandRegistry;
         _logger = logger;
         
-        _commandRegistry.AutoRegisterCommands();
+        _commandRegistry.AutoRegisterCommands(serviceProvider);
     }
+
 
 
     /// <summary>
@@ -70,6 +72,11 @@ public class MinecraftClient : IMinecraftClient
         var authResult = await AuthenticationFlow.AuthenticateAsync();
         if (authResult is null) return false;
         AuthResult = authResult;
+        
+        // Sync local player info
+        State.LocalPlayer.Uuid = authResult.Uuid;
+        State.LocalPlayer.Username = authResult.Username;
+        
         return true;
     }
 
@@ -88,6 +95,7 @@ public class MinecraftClient : IMinecraftClient
         _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
         await _connection.ConnectAsync(host, port);
+        IsConnected = true;
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
@@ -130,13 +138,14 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task DisconnectAsync()
     {
+        IsConnected = false;
         await _cancellationTokenSource.CancelAsync();
         _connection.Dispose();
     }
 
-    public async Task SendPacketAsync(IServerboundPacket packet)
+    public async Task SendPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken = default)
     {
-        await _connection.SendPacketAsync(packet, _cancellationTokenSource.Token);
+        await _connection.SendPacketAsync(packet, cancellationToken == default ? _cancellationTokenSource.Token : cancellationToken);
     }
 
     private async Task ListenForPacketsAsync(CancellationToken cancellationToken)
@@ -168,6 +177,7 @@ public class MinecraftClient : IMinecraftClient
             catch (EndOfStreamException ex)
             {
                 _logger.LogError(ex, "Connection closed by server");
+                IsConnected = false;
                 OnDisconnected?.Invoke(this, DisconnectReason.EndOfStream);
                 break;
             }
@@ -178,6 +188,7 @@ public class MinecraftClient : IMinecraftClient
             {
                 _logger.LogError(ex, "Connection forcibly closed by the remote host. ErrorCode: {ErrorCode}, SocketErrorCode: {SocketErrorCode}",
                     socket.ErrorCode, socket.SocketErrorCode);
+                IsConnected = false;
                 OnDisconnected?.Invoke(this, DisconnectReason.ConnectionReset);
                 break;
             }
@@ -210,14 +221,15 @@ public class MinecraftClient : IMinecraftClient
 
     // The old PhysicsTickAsync was in MinecraftClient.Physics.cs.
     // It is now replaced by this implementation.
-    public async Task PhysicsTickAsync()
+    public async Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null)
     {
         if (!State.LocalPlayer.HasEntity) return;
-        // The PathFollowerService's UpdatePathFollowingInput will be called by the PhysicsService via a delegate.
-        // This ensures that input decisions (like wanting to jump or sprint based on path) are made *before* physics calculations for the tick.
-        await _physicsService.PhysicsTickAsync(State.LocalPlayer.Entity, State.Level, SendPacketAsync,
-            (entity) => PathFollowerService.UpdatePathFollowingInput(entity)
-        );
+        
+        await _physicsService.PhysicsTickAsync(
+            State.LocalPlayer.Entity, 
+            State.Level, 
+            this,
+            prePhysicsCallback);
     }
 
 

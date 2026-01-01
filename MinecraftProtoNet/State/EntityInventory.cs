@@ -8,6 +8,36 @@ namespace MinecraftProtoNet.State;
 public class EntityInventory
 {
     private int _blockPlaceSequence;
+    private int _stateId;
+    
+    /// <summary>
+    /// The current state ID of the inventory, used for synchronization in ClickContainer transactions.
+    /// </summary>
+    public int StateId { get => _stateId; set => _stateId = value; }
+
+    /// <summary>
+    /// The item currently held by the mouse cursor (floating item).
+    /// </summary>
+    public Slot CursorItem { get; set; } = Slot.Empty;
+
+    /// <summary>
+    /// Event fired when inventory contents change.
+    /// </summary>
+    public event Action? OnInventoryChanged;
+    
+    /// <summary>
+    /// The current block placement sequence number for anti-cheat.
+    /// </summary>
+    private static Services.IItemRegistryService? _registryService;
+
+    /// <summary>
+    /// Sets the registry service for item lookups. 
+    /// Should be called during startup.
+    /// </summary>
+    public static void SetRegistryService(Services.IItemRegistryService service)
+    {
+        _registryService = service;
+    }
 
     /// <summary>
     /// The current block placement sequence number for anti-cheat.
@@ -27,7 +57,19 @@ public class EntityInventory
     /// <summary>
     /// The currently selected hotbar slot (0-8).
     /// </summary>
-    public short HeldSlot { get; set; }
+    private short _heldSlot;
+    public short HeldSlot
+    {
+        get => _heldSlot;
+        set
+        {
+            if (_heldSlot != value)
+            {
+                _heldSlot = value;
+                OnInventoryChanged?.Invoke();
+            }
+        }
+    }
 
     /// <summary>
     /// The held slot index with container offset applied (36-44).
@@ -58,6 +100,7 @@ public class EntityInventory
     public void SetSlot(short slotIndex, Slot slot)
     {
         Items[slotIndex] = slot;
+        OnInventoryChanged?.Invoke();
     }
 
     /// <summary>
@@ -67,6 +110,7 @@ public class EntityInventory
     {
         Items.Clear();
         _blockPlaceSequence = 0;
+        OnInventoryChanged?.Invoke();
     }
 
     /// <summary>
@@ -75,5 +119,34 @@ public class EntityInventory
     public void SetAllSlots(Dictionary<short, Slot> items)
     {
         Items = items;
+        OnInventoryChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Checks if the inventory contains any throwaway blocks suitable for pillaring or bridging.
+    /// </summary>
+    public bool HasThrowawayBlocks()
+    {
+        if (_registryService == null)
+        {
+            // Fallback if registry not loaded yet (shouldn't happen in normal run)
+             foreach (var slot in Items.Values)
+             {
+                 if (slot.ItemId != null && slot.ItemId > 0 && slot.ItemCount > 0) return true;
+             }
+             return false;
+        }
+
+        foreach (var slot in Items.Values)
+        {
+            if (slot.ItemId == null || slot.ItemId <= 0 || slot.ItemCount <= 0) continue; 
+            
+            if (_registryService.IsThrowawayBlock(slot.ItemId.Value))
+            {
+                return true;
+            }
+        }
+        return false;   
     }
 }
+

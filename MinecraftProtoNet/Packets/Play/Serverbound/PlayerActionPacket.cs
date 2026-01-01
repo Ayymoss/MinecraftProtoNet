@@ -27,7 +27,7 @@ public class PlayerActionPacket : IServerboundPacket
     public enum StatusType
     {
         StartedDigging = 0,
-        CancelDigging = 1,
+        CancelledDigging = 1,
         FinishedDigging = 2,
         DropItemStack = 3,
         DropItem = 4,

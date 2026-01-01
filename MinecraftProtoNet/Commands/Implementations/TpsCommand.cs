@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("tps", Description = "Display server TPS and tick interval")]
 public class TpsCommand : ICommand
 {
-    public string Name => "tps";
-    public string Description => "Display server TPS and tick interval";
-    public string[] Aliases => [];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var (tps, mspt) = QueryActions.GetServerPerformance(ctx);

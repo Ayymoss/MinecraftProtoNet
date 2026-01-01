@@ -26,7 +26,7 @@ public class PhysicsService : IPhysicsService
     public async Task PhysicsTickAsync(
         Entity entity,
         Level level,
-        Func<IServerboundPacket, Task> sendPacketAsync,
+        IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null)
     {
         // 1. Pre-physics callback (e.g., pathfinding input)
@@ -115,7 +115,7 @@ public class PhysicsService : IPhysicsService
             var syncPitch = entity.TeleportYawPitch?.Y ?? entity.YawPitch.Y;
             entity.TeleportYawPitch = null; // Clear it
 
-            await sendPacketAsync(new MovePlayerPositionRotationPacket
+            await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
             {
                 X = entity.Position.X,
                 Y = entity.Position.Y,
@@ -138,7 +138,7 @@ public class PhysicsService : IPhysicsService
             // If the world isn't loaded yet, stay at the current position.
             // This prevents falling through the virtual world and getting into teleport loops.
             // Use the same OnGround state as before to avoid triggering server-side move checks.
-            await sendPacketAsync(new MovePlayerPositionRotationPacket
+            await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
             {
                 X = entity.Position.X,
                 Y = entity.Position.Y,
@@ -151,8 +151,10 @@ public class PhysicsService : IPhysicsService
             return;
         }
 
-        // 2. Capture block friction and fluid state at start of tick
+        // 2. Capture block friction, speed factor, jump factor, and fluid state at start of tick
         var blockFriction = MovementCalculator.GetBlockFriction(level, entity.Position);
+        var speedFactor = MovementCalculator.GetBlockSpeedFactor(level, entity.Position);
+        var jumpFactor = MovementCalculator.GetBlockJumpFactor(level, entity.Position);
         UpdateFluidState(entity, level);
 
         if (entity.IsInWater || entity.Velocity.Y != 0)
@@ -161,43 +163,37 @@ public class PhysicsService : IPhysicsService
                 entity.Position, entity.Velocity, entity.IsInWater, entity.FluidHeight, entity.IsJumping, entity.IsOnGround);
         }
 
-        // 3. Handle Jump / Swimming (Source: LivingEntity.aiStep)
+        // 3. Decrement jump cooldown (Source: LivingEntity.aiStep noJumpDelay)
+        if (entity.JumpCooldown > 0)
+        {
+            entity.JumpCooldown--;
+        }
+
+        // 4. Handle Jump / Swimming (Source: LivingEntity.aiStep)
         if (entity.IsJumping)
         {
             if (entity.IsInWater || entity.IsInLava)
             {
-                // Swim up if in liquid. Matching Java's unconditional jumpInLiquid() behavior.
-                // We trust IsInWater/IsInLava which relies on bounding box intersection.
-                if (true) // Simplification: If we are in the block, we can swim.
-                {
-                    entity.Velocity = MovementCalculator.ApplyFluidJump(entity.Velocity);
-                    _logger.LogTrace("Swimming up: NewVelY={VelocityY:F4}", entity.Velocity.Y);
-                }
-                else if (entity.IsOnGround)
-                {
-                    // Regular jump if in shallow liquid on ground
-                    entity.Velocity = MovementCalculator.ApplyJump(
-                        entity.Velocity,
-                        entity.YawPitch.X,
-                        entity.IsSprinting,
-                        BaseJumpPower);
-                    _logger.LogTrace("Shallow fluid jump: NewVelY={VelocityY:F4}", entity.Velocity.Y);
-                }
+                // Swim up if in liquid (no cooldown for swimming)
+                entity.Velocity = MovementCalculator.ApplyFluidJump(entity.Velocity);
+                _logger.LogTrace("Swimming up: NewVelY={VelocityY:F4}", entity.Velocity.Y);
             }
-            else if (entity.IsOnGround)
+            else if (entity.IsOnGround && entity.JumpCooldown == 0)
             {
-                // Standard ground jump
+                // Standard ground jump with cooldown (Source: LivingEntity line 2922-2924)
                 var oldVel = entity.Velocity;
                 entity.Velocity = MovementCalculator.ApplyJump(
                     entity.Velocity,
                     entity.YawPitch.X,
                     entity.IsSprinting,
-                    BaseJumpPower);
-                _logger.LogDebug("Jumped: OldVel={OldVel}, NewVel={NewVel}", oldVel, entity.Velocity);
+                    BaseJumpPower,
+                    jumpFactor);
+                entity.JumpCooldown = 10; // Matches Mojang's noJumpDelay = 10
+                _logger.LogDebug("Jumped: OldVel={OldVel}, NewVel={NewVel}, JumpFactor={JumpFactor}", oldVel, entity.Velocity, jumpFactor);
             }
         }
 
-        // 4. Calculate Input Acceleration
+        // 5. Calculate Input Acceleration (with speed factor applied)
         var (moveX, moveZ) = entity.Input.GetNormalizedMoveVector();
         if (Math.Abs(moveX) > 0.0001f || Math.Abs(moveZ) > 0.0001f)
         {
@@ -205,6 +201,9 @@ public class PhysicsService : IPhysicsService
                 BaseMovementSpeed,
                 entity.IsSprinting,
                 entity.IsSneaking);
+
+            // Apply block speed factor (soul sand, honey slow movement)
+            effectiveSpeed *= speedFactor;
 
             var frictionSpeed = MovementCalculator.GetFrictionInfluencedSpeed(
                 blockFriction,
@@ -220,24 +219,33 @@ public class PhysicsService : IPhysicsService
             entity.Velocity += acceleration;
         }
 
-        // 5. Handle Climbing (Source: LivingEntity.handleOnClimbable)
+        // 6. Handle Climbing (Source: LivingEntity.handleOnClimbable)
         entity.Velocity = MovementCalculator.HandleClimbing(entity.Velocity, false, entity.IsSneaking);
 
-        // 6. Apply Entity Collisions
+        // 7. Apply Entity Collisions
         var pushVelocity = CollisionResolver.ResolveEntityCollisions(entity, level);
         entity.Velocity += pushVelocity;
 
-        // 7. Apply Knockback
+        // 8. Apply Knockback
         ApplyKnockback(entity);
 
-        // 8. MOVE with collision resolution
+        // 9. Apply Edge Detection (prevents falling off blocks while sneaking)
+        // Source: Java's Player.maybeBackOffFromEdge()
+        entity.Velocity = MovementCalculator.MaybeBackOffFromEdge(
+            entity.Velocity,
+            entity.GetBoundingBox(),
+            level,
+            entity.IsOnGround,
+            entity.IsSneaking);
+
+        // 10. MOVE with collision resolution
         var collisionResult = MoveWithCollisions(entity, level);
 
-        // 9. Update state from collision result
+        // 10. Update state from collision result
         entity.IsOnGround = collisionResult.LandedOnGround;
         entity.HorizontalCollision = collisionResult.HorizontalCollision;
 
-        // 10. POST-MOVE: Apply Gravity and Friction / Damping
+        // 11. POST-MOVE: Apply Gravity and Friction / Damping
         if (entity.IsInWater || entity.IsInLava)
         {
             entity.Velocity = MovementCalculator.ApplyFluidPhysics(
@@ -262,9 +270,9 @@ public class PhysicsService : IPhysicsService
         // Final clamp to prevent jitter
         entity.Velocity = MovementCalculator.ClampMinimumMovement(entity.Velocity);
 
-        // 11. Sprint state and packets
+        // 12. Sprint state and packets
         UpdateSprintState(entity, collisionResult);
-        await SendMovementPacketsAsync(entity, collisionResult, sendPacketAsync);
+        await SendMovementPacketsAsync(entity, collisionResult, packetSender);
     }
 
     private void UpdateFluidState(Entity entity, Level level)
@@ -391,22 +399,60 @@ public class PhysicsService : IPhysicsService
         var wantsToMove = entity.Input.HasMovement;
         var hasForwardImpulse = entity.Input.HasForwardImpulse;
         var canSprint = entity.Hunger > 6 && !entity.IsSneaking;
+        
+        var isMinorCollision = collision.HorizontalCollision && IsHorizontalCollisionMinor(entity, collision.ActualDelta);
 
         // Start sprinting conditions
+        // Matches LocalPlayer.canStartSprinting: does not check horizontalCollision
         if (entity.WantsToSprint && !entity.IsSprinting &&
-            wantsToMove && hasForwardImpulse &&
-            !collision.HorizontalCollision && canSprint)
+            wantsToMove && hasForwardImpulse && canSprint && !entity.IsInWater)
         {
             entity.IsSprinting = true;
         }
         // Stop sprinting conditions
+        // Matches LocalPlayer.shouldStopRunSprinting: only stop if collision is NOT minor
         else if (entity.IsSprinting &&
                  (!wantsToMove || !hasForwardImpulse ||
-                  collision.HorizontalCollision || !entity.WantsToSprint ||
-                  entity.Hunger <= 6))
+                  (collision.HorizontalCollision && !isMinorCollision) || 
+                  !entity.WantsToSprint ||
+                  entity.Hunger <= 6 || entity.IsInWater))
         {
             entity.IsSprinting = false;
         }
+    }
+
+    /// <summary>
+    /// Checks if a horizontal collision is "minor" (scraping against a wall at a shallow angle).
+    /// Prevents losing sprint momentum when brushing against blocks.
+    /// Based on LocalPlayer.isHorizontalCollisionMinor.
+    /// </summary>
+    private bool IsHorizontalCollisionMinor(Entity entity, Vector3<double> movement)
+    {
+        var (moveX, moveZ) = entity.Input.GetMoveVector();
+        float yawRad = entity.YawPitch.X * (MathF.PI / 180f);
+        float sinYaw = MathF.Sin(yawRad);
+        float cosYaw = MathF.Cos(yawRad);
+
+        // Calculate global desired movement acceleration components (globalXA, globalZA in LocalPlayer.java)
+        // xxa = moveVector.X (strafe), zza = moveVector.Z (forward)
+        double globalXA = moveX * cosYaw - moveZ * sinYaw;
+        double globalZA = moveZ * cosYaw + moveX * sinYaw;
+
+        double desiredLenSq = globalXA * globalXA + globalZA * globalZA;
+        double actualLenSq = movement.X * movement.X + movement.Z * movement.Z;
+
+        if (desiredLenSq < 1e-5 || actualLenSq < 1e-5)
+            return false;
+
+        double dot = globalXA * movement.X + globalZA * movement.Z;
+        double magnitudeProduct = Math.Sqrt(desiredLenSq * actualLenSq);
+        
+        // Math.Acos throws NaN if dot/mag is slightly outside [-1, 1] due to precision
+        double cosAngle = Math.Clamp(dot / magnitudeProduct, -1.0, 1.0);
+        double angle = Math.Acos(cosAngle);
+
+        // MINOR_COLLISION_ANGLE_THRESHOLD_RADIAN = 0.13962634 (approx 8 degrees)
+        return angle < 0.13962634;
     }
 
     /// <summary>
@@ -416,7 +462,7 @@ public class PhysicsService : IPhysicsService
     private async Task SendMovementPacketsAsync(
         Entity entity,
         CollisionResult collision,
-        Func<IServerboundPacket, Task> sendPacketAsync)
+        IPacketSender packetSender)
     {
         // Send sprint state change if needed
         if (entity.IsSprinting != entity.WasSprinting)
@@ -425,13 +471,29 @@ public class PhysicsService : IPhysicsService
                 ? PlayerAction.StartSprint
                 : PlayerAction.StopSprint;
 
-            await sendPacketAsync(new PlayerCommandPacket
+            await packetSender.SendPacketAsync(new PlayerCommandPacket
             {
                 EntityId = entity.EntityId,
                 Action = action
             });
 
             entity.WasSprinting = entity.IsSprinting;
+        }
+        
+        // Send sneak state change if needed
+        if (entity.IsSneaking != entity.WasSneaking)
+        {
+            var action = entity.IsSneaking
+                ? PlayerAction.StartSneaking
+                : PlayerAction.StopSneaking;
+
+            await packetSender.SendPacketAsync(new PlayerCommandPacket
+            {
+                EntityId = entity.EntityId,
+                Action = action
+            });
+
+            entity.WasSneaking = entity.IsSneaking;
         }
 
         // Send position packet if we moved
@@ -447,12 +509,8 @@ public class PhysicsService : IPhysicsService
 
         var flags = (entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None) |
                     (entity.HorizontalCollision ? MovementFlags.HorizontalCollision : MovementFlags.None);
-        if (entity.HorizontalCollision)
-        {
-            flags |= MovementFlags.HorizontalCollision;
-        }
 
-        await sendPacketAsync(new MovePlayerPositionRotationPacket
+        await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
         {
             X = entity.Position.X,
             Y = entity.Position.Y,

@@ -20,4 +20,11 @@ public class CommandAttribute(string name) : Attribute
     /// Alternative names for the command.
     /// </summary>
     public string[] Aliases { get; set; } = [];
+
+    /// <summary>
+    /// Whether this command requires an in-game player context (e.g., sender position, target entity).
+    /// Commands with this set to true cannot be executed from external sources like web UIs.
+    /// Default: false (can be executed from anywhere).
+    /// </summary>
+    public bool PlayerContextRequired { get; set; }
 }

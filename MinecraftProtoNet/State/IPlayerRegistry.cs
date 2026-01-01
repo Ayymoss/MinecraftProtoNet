@@ -9,6 +9,11 @@ namespace MinecraftProtoNet.State;
 public interface IPlayerRegistry
 {
     /// <summary>
+    /// Event fired when the player list changes (add/remove).
+    /// </summary>
+    event Action? OnPlayersChanged;
+
+    /// <summary>
     /// Adds a player to the registry or updates an existing player.
     /// </summary>
     Task<Player> AddPlayerAsync(Guid uuid, string username);

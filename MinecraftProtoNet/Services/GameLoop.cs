@@ -3,30 +3,25 @@ using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Pathfinding;
 
 namespace MinecraftProtoNet.Services;
 
 /// <summary>
 /// Manages the main game loop that drives physics ticks at the server's tick rate.
 /// </summary>
-public class GameLoop : IGameLoop
+public class GameLoop(ILogger<GameLoop> logger, IPathingService pathingService) : IGameLoop
 {
-    private readonly ILogger<GameLoop> _logger;
     private CancellationTokenSource? _cts;
     private Thread? _gameLoopThread;
 
     public bool IsRunning => _gameLoopThread?.IsAlive ?? false;
 
-    public GameLoop(ILogger<GameLoop> logger)
-    {
-        _logger = logger;
-    }
-
     public void Start(IMinecraftClient client)
     {
         if (IsRunning)
         {
-            _logger.LogWarning("Game loop is already running");
+            logger.LogWarning("Game loop is already running");
             return;
         }
 
@@ -35,7 +30,7 @@ public class GameLoop : IGameLoop
 
         _gameLoopThread = new Thread(async () =>
         {
-            _logger.LogInformation("Game loop started");
+            logger.LogInformation("Game loop started");
             var stopwatch = new Stopwatch();
 
             try
@@ -46,12 +41,12 @@ public class GameLoop : IGameLoop
 
                     try
                     {
-                        await client.PhysicsTickAsync();
+                        await client.PhysicsTickAsync(entity => pathingService.OnPhysicsTick(entity));
                         client.State.Level.IncrementClientTickCounter();
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error in physics tick");
+                        logger.LogError(ex, "Error in physics tick");
                     }
 
                     stopwatch.Stop();
@@ -79,7 +74,7 @@ public class GameLoop : IGameLoop
             }
             finally
             {
-                _logger.LogInformation("Game loop stopped");
+                logger.LogInformation("Game loop stopped");
             }
         })
         {
@@ -97,7 +92,7 @@ public class GameLoop : IGameLoop
             return;
         }
 
-        _logger.LogInformation("Stopping game loop...");
+        logger.LogInformation("Stopping game loop...");
         await _cts.CancelAsync();
         
         // Give the thread a moment to clean up

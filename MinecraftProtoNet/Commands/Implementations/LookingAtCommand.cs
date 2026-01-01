@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("lookingat", Description = "Display block being looked at")]
 public class LookingAtCommand : ICommand
 {
-    public string Name => "lookingat";
-    public string Description => "Display information about the block being looked at";
-    public string[] Aliases => ["block"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var hit = QueryActions.GetLookedAtBlock(ctx);

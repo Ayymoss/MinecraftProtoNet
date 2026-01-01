@@ -15,7 +15,8 @@ public static class LoggingConfiguration
     /// <summary>
     /// Creates or returns the shared logger factory configured with Serilog.
     /// </summary>
-    public static ILoggerFactory CreateLoggerFactory()
+    /// <param name="minLevel">Minimum log level (default: Debug). Use Verbose for detailed tick-by-tick logs.</param>
+    public static ILoggerFactory CreateLoggerFactory(Serilog.Events.LogEventLevel minLevel = Serilog.Events.LogEventLevel.Debug)
     {
         if (_loggerFactory is not null)
             return _loggerFactory;
@@ -26,7 +27,9 @@ public static class LoggingConfiguration
                 return _loggerFactory;
 
             var serilogLogger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
+                .MinimumLevel.Is(minLevel)
+                .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Information)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Components", Serilog.Events.LogEventLevel.Warning)
                 .WriteTo.Console(
                     outputTemplate: "[{Timestamp:HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
                 .WriteTo.File(
@@ -36,8 +39,12 @@ public static class LoggingConfiguration
                 .Enrich.FromLogContext()
                 .CreateLogger();
 
+            // Set the static logger for classes using Log.Verbose(), Log.Debug(), etc.
+            Log.Logger = serilogLogger;
+
             _loggerFactory = new LoggerFactory().AddSerilog(serilogLogger);
             return _loggerFactory;
+
         }
     }
 

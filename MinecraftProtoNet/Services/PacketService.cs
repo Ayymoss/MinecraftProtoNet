@@ -36,7 +36,8 @@ public class PacketService : IPacketService
 
             if (!value.TryAdd(packetId, handler))
             {
-                throw new ArgumentException($"Handler for state {state} and packet ID 0x{packetId:X2} is already registered.");
+                var existingHandler = _handlers[state][packetId];
+                throw new ArgumentException($"Handler for state {state} and packet ID 0x{packetId:X2} is already registered to {existingHandler.GetType().Name}. Cannot add {handler.GetType().Name}.");
             }
         }
     }

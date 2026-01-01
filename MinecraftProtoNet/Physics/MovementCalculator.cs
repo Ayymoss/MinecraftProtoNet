@@ -176,11 +176,15 @@ public static class MovementCalculator
     /// <param name="yawDegrees">Player's yaw for sprint direction</param>
     /// <param name="isSprinting">Whether player is sprinting</param>
     /// <param name="jumpPower">Jump power (default 0.42)</param>
+    /// <param name="jumpFactor">Block's jump factor (e.g., honey = 0.5)</param>
     /// <returns>New velocity with jump applied</returns>
-    public static Vector3<double> ApplyJump(Vector3<double> currentVelocity, float yawDegrees, bool isSprinting, float jumpPower = BaseJumpPower)
+    public static Vector3<double> ApplyJump(Vector3<double> currentVelocity, float yawDegrees, bool isSprinting, float jumpPower = BaseJumpPower, float jumpFactor = 1.0f)
     {
+        // Apply block jump factor (honey reduces jump)
+        var adjustedJumpPower = jumpPower * jumpFactor;
+        
         // Set vertical velocity to jump power (take max in case already moving up)
-        var newY = Math.Max(jumpPower, currentVelocity.Y);
+        var newY = Math.Max(adjustedJumpPower, currentVelocity.Y);
         var newX = currentVelocity.X;
         var newZ = currentVelocity.Z;
 
@@ -229,6 +233,7 @@ public static class MovementCalculator
 
     /// <summary>
     /// Gets the friction value for the block at the given position.
+    /// Uses BlockState.Friction property set from BlockPhysicsData registry.
     /// Source: Java's Block.getFriction()
     /// </summary>
     /// <param name="level">The level to query</param>
@@ -241,21 +246,37 @@ public static class MovementCalculator
         var blockZ = (int)Math.Floor(position.Z);
 
         var block = level.GetBlockAt(blockX, blockY, blockZ);
-        if (block == null)
-        {
-            return DefaultBlockFriction;
-        }
+        return block?.Friction ?? DefaultBlockFriction;
+    }
 
-        // Check for special friction blocks
-        var name = block.Name.ToLowerInvariant();
-        return name switch
-        {
-            var n when n.Contains("ice") && n.Contains("blue") => BlueIceFriction,
-            var n when n.Contains("ice") => IceFriction,
-            var n when n.Contains("slime") => SlimeFriction,
-            var n when n.Contains("honey") => HoneyFriction,
-            _ => DefaultBlockFriction
-        };
+    /// <summary>
+    /// Gets the speed factor for the block at the given position.
+    /// Soul sand = 0.4, Honey = 0.4, default = 1.0
+    /// Source: Java's getBlockSpeedFactor()
+    /// </summary>
+    public static float GetBlockSpeedFactor(Level level, Vector3<double> position)
+    {
+        var blockX = (int)Math.Floor(position.X);
+        var blockY = (int)Math.Floor(position.Y - 0.5);
+        var blockZ = (int)Math.Floor(position.Z);
+
+        var block = level.GetBlockAt(blockX, blockY, blockZ);
+        return block?.SpeedFactor ?? 1.0f;
+    }
+
+    /// <summary>
+    /// Gets the jump factor for the block at the given position.
+    /// Honey = 0.5, default = 1.0
+    /// Source: Java's getBlockJumpFactor()
+    /// </summary>
+    public static float GetBlockJumpFactor(Level level, Vector3<double> position)
+    {
+        var blockX = (int)Math.Floor(position.X);
+        var blockY = (int)Math.Floor(position.Y - 0.5);
+        var blockZ = (int)Math.Floor(position.Z);
+
+        var block = level.GetBlockAt(blockX, blockY, blockZ);
+        return block?.JumpFactor ?? 1.0f;
     }
 
     /// <summary>
@@ -300,5 +321,121 @@ public static class MovementCalculator
             IsBelowMovementThreshold(velocity.Y) ? 0 : velocity.Y,
             IsBelowMovementThreshold(velocity.Z) ? 0 : velocity.Z
         );
+    }
+    
+    /// <summary>
+    /// Reduces movement delta to prevent falling off edges while sneaking.
+    /// Source: Java's Player.maybeBackOffFromEdge()
+    /// </summary>
+    /// <param name="delta">Intended movement delta</param>
+    /// <param name="boundingBox">Entity's bounding box</param>
+    /// <param name="level">Level for collision checking</param>
+    /// <param name="isOnGround">Whether entity is on ground</param>
+    /// <param name="isSneaking">Whether entity is sneaking</param>
+    /// <param name="maxDownStep">Max step height to check (default 0.6)</param>
+    /// <returns>Adjusted delta that won't cause falling off edge</returns>
+    public static Vector3<double> MaybeBackOffFromEdge(
+        Vector3<double> delta,
+        AABB boundingBox,
+        Level level,
+        bool isOnGround,
+        bool isSneaking,
+        double maxDownStep = 0.6)
+    {
+        // Only apply when sneaking, on ground, not jumping upward
+        if (!isSneaking || delta.Y > 0.0 || !isOnGround)
+        {
+            return delta;
+        }
+        
+        // Check if currently above ground (within step distance of support)
+        if (!IsAboveGround(boundingBox, level, maxDownStep))
+        {
+            return delta;
+        }
+        
+        const double step = 0.05;
+        var deltaX = delta.X;
+        var deltaZ = delta.Z;
+        var stepX = Math.Sign(deltaX) * step;
+        var stepZ = Math.Sign(deltaZ) * step;
+        
+        // Reduce X movement until supported
+        while (deltaX != 0.0 && CanFallAtLeast(boundingBox, level, deltaX, 0.0, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+                break;
+            }
+            deltaX -= stepX;
+        }
+        
+        // Reduce Z movement until supported
+        while (deltaZ != 0.0 && CanFallAtLeast(boundingBox, level, 0.0, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+                break;
+            }
+            deltaZ -= stepZ;
+        }
+        
+        // Reduce combined X+Z movement until supported
+        while (deltaX != 0.0 && deltaZ != 0.0 && CanFallAtLeast(boundingBox, level, deltaX, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+            }
+            else
+            {
+                deltaX -= stepX;
+            }
+            
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+            }
+            else
+            {
+                deltaZ -= stepZ;
+            }
+        }
+        
+        return new Vector3<double>(deltaX, delta.Y, deltaZ);
+    }
+    
+    /// <summary>
+    /// Checks if entity is currently above ground (on ground or within step distance).
+    /// Source: Java's Player.isAboveGround()
+    /// </summary>
+    private static bool IsAboveGround(AABB boundingBox, Level level, double maxDownStep)
+    {
+        // Check if there's solid ground below within maxDownStep
+        return !CanFallAtLeast(boundingBox, level, 0.0, 0.0, maxDownStep);
+    }
+    
+    /// <summary>
+    /// Checks if entity can fall at least minHeight at the offset position.
+    /// Returns true if there's NO collision below (can fall).
+    /// Source: Java's Player.canFallAtLeast()
+    /// </summary>
+    private static bool CanFallAtLeast(AABB boundingBox, Level level, double deltaX, double deltaZ, double minHeight)
+    {
+        // Create a box extending from current bottom down to minHeight, offset by delta
+        const double shrink = 1.0E-7;
+        var checkBox = new AABB(
+            boundingBox.Min.X + shrink + deltaX,
+            boundingBox.Min.Y - minHeight - shrink,
+            boundingBox.Min.Z + shrink + deltaZ,
+            boundingBox.Max.X - shrink + deltaX,
+            boundingBox.Min.Y,
+            boundingBox.Max.Z - shrink + deltaZ
+        );
+        
+        // Check for ANY collision in this area - if none, can fall
+        return !CollisionResolver.HasAnyCollision(checkBox, level);
     }
 }

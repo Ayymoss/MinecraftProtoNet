@@ -5,10 +5,6 @@ namespace MinecraftProtoNet.Commands.Implementations;
 [Command("cmd", Description = "Execute a server command")]
 public class CmdCommand : ICommand
 {
-    public string Name => "cmd";
-    public string Description => "Execute a server command";
-    public string[] Aliases => ["command"];
-
     public async Task ExecuteAsync(CommandContext ctx)
     {
         if (!ctx.HasMinArgs(1))
