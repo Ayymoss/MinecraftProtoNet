@@ -219,11 +219,29 @@ public class Entity
     /// </summary>
     public float? HurtFromYaw { get; set; }
 
-    // ===== Inventory =====
     /// <summary>
     /// The entity's inventory.
     /// </summary>
     public EntityInventory Inventory { get; } = new();
+
+    /// <summary>
+    /// Currently open container/menu (null if no container is open).
+    /// </summary>
+    public ContainerState? CurrentContainer { get; set; }
+
+    /// <summary>
+    /// Event fired when a container is opened.
+    /// </summary>
+    public event Action<ContainerState>? OnContainerOpened;
+
+    /// <summary>
+    /// Notifies listeners that a container has been opened.
+    /// </summary>
+    public void NotifyContainerOpened(ContainerState container)
+    {
+        OnContainerOpened?.Invoke(container);
+    }
+
 
     // Convenience accessors that delegate to Inventory
     public int BlockPlaceSequence => Inventory.BlockPlaceSequence;

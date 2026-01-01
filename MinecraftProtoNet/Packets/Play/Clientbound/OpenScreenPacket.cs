@@ -1,5 +1,6 @@
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
 
@@ -19,7 +20,7 @@ public class OpenScreenPacket : IClientboundPacket
     /// <summary>
     /// The menu type from the registry (determines the UI layout).
     /// </summary>
-    public int MenuType { get; set; }
+    public MenuType MenuType { get; set; }
     
     /// <summary>
     /// The title displayed at the top of the screen.
@@ -29,7 +30,8 @@ public class OpenScreenPacket : IClientboundPacket
     public void Deserialize(ref PacketBufferReader buffer)
     {
         ContainerId = buffer.ReadVarInt();
-        MenuType = buffer.ReadVarInt();
+        MenuType = (MenuType)buffer.ReadVarInt();
         Title = buffer.ReadChatComponent();
     }
 }
+

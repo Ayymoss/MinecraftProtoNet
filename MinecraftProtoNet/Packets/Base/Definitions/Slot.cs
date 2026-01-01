@@ -110,7 +110,7 @@ public class Slot
     /// Reads component data based on type. Component types are defined in DataComponents.java.
     /// Each type has a specific stream codec that must be matched.
     /// </summary>
-    private static object? ReadComponentData(ref PacketBufferReader reader, ComponentType type, int typeId)
+    public static object? ReadComponentData(ref PacketBufferReader reader, ComponentType type, int typeId)
     {
         // Based on DataComponents.java from Minecraft 1.21
         // Types use ByteBufCodecs.VAR_INT, FLOAT, BOOL, or complex stream codecs

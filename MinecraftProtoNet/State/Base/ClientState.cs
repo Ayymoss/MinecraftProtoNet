@@ -40,6 +40,12 @@ public class ClientState
     public ConcurrentDictionary<string, Dictionary<string, NbtTag?>> Registry { get; set; } = [];
     
     /// <summary>
+    /// Registry for non-player entities (mobs, villagers, NPCs, etc.).
+    /// </summary>
+    public WorldEntityRegistry WorldEntities { get; } = new();
+
+    
+    /// <summary>
     /// Server-provided settings from the Login packet.
     /// </summary>
     public ServerSettings ServerSettings { get; } = new();

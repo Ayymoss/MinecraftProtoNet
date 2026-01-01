@@ -21,6 +21,9 @@ public class Program
         
         // Add BotService as singleton for UI state
         builder.Services.AddSingleton<BotService>();
+        
+        // Add DragDropState for cross-component drag/drop
+        builder.Services.AddSingleton<DragDropState>();
 
         var app = builder.Build();
 

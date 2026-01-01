@@ -23,7 +23,8 @@ public class BotService : IDisposable
         IItemRegistryService itemRegistry,
         CommandRegistry commandRegistry,
         IInventoryManager inventoryManager,
-        IPathingService pathingService)
+        IPathingService pathingService,
+        IContainerManager containerManager)
     {
         _client = client;
         State = state;
@@ -31,6 +32,7 @@ public class BotService : IDisposable
         CommandRegistry = commandRegistry;
         InventoryManager = inventoryManager;
         PathingService = pathingService;
+        ContainerManager = containerManager;
         
         // Listen for disconnect events to update UI
         _client.OnDisconnected += (_, _) => NotifyStateChanged();
@@ -45,6 +47,10 @@ public class BotService : IDisposable
         state.LocalPlayer.Entity.OnStatsChanged += NotifyStateChanged;
         state.Level.OnPlayersChanged += NotifyStateChanged;
         pathingService.OnStateChanged += NotifyStateChanged;
+        
+        // Container events
+        containerManager.OnContainerOpened += _ => NotifyStateChanged();
+        containerManager.OnContainerClosed += NotifyStateChanged;
     }
 
     // Delegate to core client
@@ -57,6 +63,7 @@ public class BotService : IDisposable
     public CommandRegistry CommandRegistry { get; }
     public IInventoryManager InventoryManager { get; }
     public IPathingService PathingService { get; }
+    public IContainerManager ContainerManager { get; }
     
     // Expose client for command execution
     public IMinecraftClient Client => _client;
@@ -106,3 +113,4 @@ public class BotService : IDisposable
         PathingService.OnStateChanged -= NotifyStateChanged;
     }
 }
+

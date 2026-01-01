@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         
         // Interaction Services
         services.AddSingleton<IInventoryManager, InventoryManager>();
+        services.AddSingleton<IContainerManager, ContainerManager>();
         services.AddSingleton<BlockInteractionService>();
 
         // Command system
@@ -59,6 +60,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketHandler, Handlers.Play.ConnectionHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.EntityHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.InventoryHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.ContainerHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.PlayerInfoHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.TimeAndWorldHandler>();
 
