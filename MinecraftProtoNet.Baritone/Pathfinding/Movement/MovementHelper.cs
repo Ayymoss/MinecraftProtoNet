@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Pathfinding.Calc;
 using MinecraftProtoNet.State;
 using MinecraftProtoNet.Baritone.Pathfinding.Calc;
@@ -371,5 +372,237 @@ public static class MovementHelper
         var length = Math.Sqrt(dx * dx + dz * dz);
         if (length < 0.01) return (0, 0);
         return (dx / length, dz / length);
+    }
+
+    // ===== Block Breaking Safety Checks =====
+
+    /// <summary>
+    /// Returns whether we should avoid breaking this block.
+    /// Checks for ice (becomes water), infested blocks, and adjacent hazards.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:64-78
+    /// </summary>
+    public static bool AvoidBreaking(CalculationContext context, int x, int y, int z, BlockState? state)
+    {
+        if (state == null) return true;
+
+        var name = state.Name.ToLowerInvariant();
+        
+        // Ice becomes water, which can mess up the path
+        if (name.Contains("ice") && !name.Contains("packed")) return true;
+        
+        // Infested blocks spawn silverfish
+        if (name.Contains("infested")) return true;
+
+        // Check adjacent blocks for hazards
+        return AvoidAdjacentBreaking(context, x, y + 1, z, true) ||
+               AvoidAdjacentBreaking(context, x + 1, y, z, false) ||
+               AvoidAdjacentBreaking(context, x - 1, y, z, false) ||
+               AvoidAdjacentBreaking(context, x, y, z + 1, false) ||
+               AvoidAdjacentBreaking(context, x, y, z - 1, false);
+    }
+
+    /// <summary>
+    /// Returns whether we should avoid breaking a block adjacent to this position.
+    /// Checks for falling blocks and liquids that could flow.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:80-107
+    /// </summary>
+    public static bool AvoidAdjacentBreaking(CalculationContext context, int x, int y, int z, bool directlyAbove)
+    {
+        var state = context.GetBlockState(x, y, z);
+        if (state == null) return false;
+
+        // Check for falling blocks that would fall if we break support
+        if (!directlyAbove && IsFallingBlock(state))
+        {
+            var below = context.GetBlockState(x, y - 1, z);
+            if (below == null || IsAir(below) || !CanWalkOn(below))
+            {
+                return true; // Would cause the falling block to fall
+            }
+        }
+
+        // Liquids can flow when adjacent blocks are broken
+        if (IsLiquid(state))
+        {
+            if (directlyAbove) return true; // Never break directly below liquid
+            
+            // Source blocks (level 0) like to flow horizontally
+            // Non-source will flow down if possible
+            var below = context.GetBlockState(x, y - 1, z);
+            if (below == null || !IsLiquid(below))
+            {
+                return true; // Liquid would flow out
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns whether this block is fully passable (no collision AND no slowing).
+    /// Unlike CanWalkThrough, this excludes doors, gates, water, ladders, vines, cobwebs.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:228-289
+    /// </summary>
+    public static bool FullyPassable(BlockState? block)
+    {
+        if (block == null) return false;
+        if (IsAir(block)) return true;
+
+        var name = block.Name.ToLowerInvariant();
+
+        // Exclude blocks that are passable but slow/interact
+        if (name.Contains("fire") ||
+            name.Contains("tripwire") ||
+            name.Contains("cobweb") ||
+            name.Contains("vine") ||
+            name.Contains("ladder") ||
+            name.Contains("cocoa") ||
+            name.Contains("door") ||
+            name.Contains("fence_gate") ||
+            name.Contains("snow_layer") ||
+            name.Contains("trapdoor") ||
+            name.Contains("end_portal") ||
+            name.Contains("skull") ||
+            name.Contains("shulker") ||
+            block.IsLiquid)
+        {
+            return false;
+        }
+
+        // If it has no collision, it's fully passable
+        return !block.HasCollision;
+    }
+
+    /// <summary>
+    /// Returns whether we can place a block against this block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:567-587
+    /// </summary>
+    public static bool CanPlaceAgainst(BlockState? block)
+    {
+        if (block == null) return false;
+
+        // Need a solid face to place against
+        return IsBlockNormalCube(block) || 
+               block.Name.Contains("glass", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Returns whether this block is a normal full cube (solid on all sides).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:725-741
+    /// </summary>
+    public static bool IsBlockNormalCube(BlockState? block)
+    {
+        if (block == null) return false;
+        if (!block.HasCollision) return false;
+
+        var name = block.Name.ToLowerInvariant();
+        
+        // Exclude known non-cube blocks
+        if (name.Contains("bamboo") ||
+            name.Contains("piston") ||
+            name.Contains("scaffolding") ||
+            name.Contains("shulker") ||
+            name.Contains("dripstone") ||
+            name.Contains("amethyst") ||
+            name.Contains("slab") ||
+            name.Contains("stair") ||
+            name.Contains("fence") ||
+            name.Contains("wall") ||
+            name.Contains("pane") ||
+            name.Contains("door") ||
+            name.Contains("trapdoor") ||
+            name.Contains("chest") ||
+            name.Contains("anvil") ||
+            name.Contains("enchanting") ||
+            name.Contains("brewing") ||
+            name.Contains("cauldron") ||
+            name.Contains("hopper") ||
+            name.Contains("bed") ||
+            name.Contains("cake") ||
+            name.Contains("candle") ||
+            name.Contains("carpet") ||
+            name.Contains("snow") ||
+            name.Contains("button") ||
+            name.Contains("lever") ||
+            name.Contains("pressure_plate") ||
+            name.Contains("sign") ||
+            name.Contains("banner") ||
+            name.Contains("torch") ||
+            name.Contains("lantern") ||
+            name.Contains("chain") ||
+            name.Contains("rod") ||
+            name.Contains("flower") ||
+            name.Contains("sapling") ||
+            name.Contains("crop") ||
+            name.Contains("wheat") ||
+            name.Contains("carrot") ||
+            name.Contains("potato") ||
+            name.Contains("beetroot") ||
+            name.Contains("melon_stem") ||
+            name.Contains("pumpkin_stem") ||
+            name.Contains("cocoa") ||
+            name.Contains("chorus") ||
+            name.Contains("dead_bush") ||
+            name.Contains("grass") && !name.Contains("grass_block") ||
+            name.Contains("fern") ||
+            name.Contains("seagrass") ||
+            name.Contains("kelp") ||
+            name.Contains("pickle") ||
+            name.Contains("coral") && !name.Contains("coral_block") ||
+            name.Contains("head") ||
+            name.Contains("skull"))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Calculates the mining duration in ticks for a block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:589-622
+    /// </summary>
+    public static double GetMiningDurationTicks(CalculationContext context, int x, int y, int z, bool includeFalling)
+    {
+        var state = context.GetBlockState(x, y, z);
+        return GetMiningDurationTicks(context, x, y, z, state, includeFalling);
+    }
+
+    /// <summary>
+    /// Calculates the mining duration in ticks for a block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:593-622
+    /// </summary>
+    public static double GetMiningDurationTicks(CalculationContext context, int x, int y, int z, BlockState? state, bool includeFalling)
+    {
+        if (state == null) return 0;
+
+        // If we can walk through, no mining needed
+        if (CanWalkThrough(state)) return 0;
+
+        // Can't mine liquids
+        if (state.IsLiquid) return ActionCosts.CostInf;
+
+        // Check if we should avoid breaking this block
+        if (AvoidBreaking(context, x, y, z, state)) return ActionCosts.CostInf;
+
+        // Get mining speed from tool
+        float toolSpeed = context.GetBestToolSpeed?.Invoke(state) ?? 1.0f;
+        if (toolSpeed <= 0) return ActionCosts.CostInf;
+
+        // Calculate base mining time
+        double result = ActionCosts.CalculateMiningDuration(toolSpeed, state.DestroySpeed, true);
+        if (result >= ActionCosts.CostInf) return ActionCosts.CostInf;
+
+        // Add cost for falling blocks above if requested
+        if (includeFalling)
+        {
+            var above = context.GetBlockState(x, y + 1, z);
+            if (IsFallingBlock(above))
+            {
+                result += GetMiningDurationTicks(context, x, y + 1, z, above, true);
+            }
+        }
+
+        return result;
     }
 }
