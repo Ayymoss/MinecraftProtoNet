@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Physics.Shapes;
 using MinecraftProtoNet.State;
 
 namespace MinecraftProtoNet.Baritone.Tests.Infrastructure;
@@ -106,6 +107,15 @@ public class TestChunkManager : IChunkManager
         return result;
     }
 
+    public IEnumerable<VoxelShape> GetCollidingShapes(AABB queryBox)
+    {
+        var aabbs = GetCollidingBlockAABBs(queryBox);
+        foreach (var box in aabbs)
+        {
+            yield return Shapes.Block().Move(box.Min.X, box.Min.Y, box.Min.Z);
+        }
+    }
+    
     public RaycastHit? RayCast(Vector3<double> start, Vector3<double> direction, double maxDistance = 100.0)
     {
         // Simplified raycast for testing

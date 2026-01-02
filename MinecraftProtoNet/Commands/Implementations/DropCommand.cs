@@ -15,6 +15,6 @@ public class DropCommand : ICommand
             return;
         }
 
-        await InteractionActions.DropHeldItemAsync(ctx);
+        await ctx.Client.InteractionManager.DropHeldItemAsync();
     }
 }

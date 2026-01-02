@@ -19,7 +19,7 @@ public class InteractCommand : ICommand
             hand = Hand.OffHand;
         }
 
-        var success = await InteractionActions.InteractWithLookedAtEntityAsync(ctx, hand);
+        var success = await ctx.Client.InteractionManager.InteractAsync(hand);
         if (!success)
         {
             await ctx.SendChatAsync("I'm not looking at an entity.");

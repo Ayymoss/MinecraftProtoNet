@@ -19,7 +19,7 @@ public class SlotCommand : ICommand
                 return;
             }
 
-            var success = await InteractionActions.SetHeldSlotAsync(ctx, slot);
+            var success = await ctx.Client.InteractionManager.SetHeldSlotAsync(slot);
             if (!success)
             {
                 await ctx.SendChatAsync("Failed to change slot.");

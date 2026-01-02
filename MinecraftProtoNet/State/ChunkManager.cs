@@ -6,6 +6,8 @@ using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Physics.Shapes;
 
 namespace MinecraftProtoNet.State;
 
@@ -15,6 +17,19 @@ namespace MinecraftProtoNet.State;
 public class ChunkManager : IChunkManager
 {
     private readonly ILogger _logger = LoggingConfiguration.CreateLogger("ChunkManager");
+
+    private readonly IBlockShapeRegistry _blockShapeRegistry;
+
+    public ChunkManager(IBlockShapeRegistry blockShapeRegistry)
+    {
+        _blockShapeRegistry = blockShapeRegistry;
+    }
+    
+    // Default constructor for cases where DI might not provide it immediately or for tests, though strictly DI should be used.
+    // If we enforce DI, we remove parameterless. But existing usages might break if they rely on "new ChunkManager()".
+    // I will add a default that uses a basic registry if needed, or rely on DI.
+    // For safety in this migration, I'll keep a parameterless one that creates a default registry.
+    public ChunkManager() : this(new BlockShapeRegistry()) { }
 
     /// <inheritdoc />
     public ConcurrentDictionary<(int ChunkX, int ChunkZ), Chunk> Chunks { get; } = [];
@@ -46,16 +61,14 @@ public class ChunkManager : IChunkManager
     }
 
     /// <inheritdoc />
-    public List<AABB> GetCollidingBlockAABBs(AABB queryBox)
+    public IEnumerable<Physics.Shapes.VoxelShape> GetCollidingShapes(AABB queryBox)
     {
-        var collidingBoxes = new List<AABB>();
-
-        var minBx = (int)Math.Floor(queryBox.Min.X);
-        var minBy = (int)Math.Floor(queryBox.Min.Y);
-        var minBz = (int)Math.Floor(queryBox.Min.Z);
-        var maxBx = (int)Math.Floor(queryBox.Max.X);
-        var maxBy = (int)Math.Floor(queryBox.Max.Y);
-        var maxBz = (int)Math.Floor(queryBox.Max.Z);
+        var minBx = (int)Math.Floor(queryBox.MinX);
+        var minBy = (int)Math.Floor(queryBox.MinY);
+        var minBz = (int)Math.Floor(queryBox.MinZ);
+        var maxBx = (int)Math.Floor(queryBox.MaxX);
+        var maxBy = (int)Math.Floor(queryBox.MaxY);
+        var maxBz = (int)Math.Floor(queryBox.MaxZ);
 
         for (var y = minBy; y <= maxBy; y++)
         {
@@ -68,64 +81,52 @@ public class ChunkManager : IChunkManager
                     var blockState = GetBlockAt(x, y, z);
                     if (blockState is not { BlocksMotion: true }) continue;
 
-                    // I'm only supporting floor slabs for now. Everything else is a full block.
-                    var blockBox = new AABB(x, y, z, x + 1, y + 1, z + 1);
-
-                    if (blockState.IsSlab)
+                    var shape = _blockShapeRegistry.GetShape(blockState);
+                    if (!shape.IsEmpty())
                     {
-                        var type = blockState.Properties.GetValueOrDefault("type", "bottom");
-                        if (type == "top")
-                            blockBox = new AABB(x, y + 0.5, z, x + 1, y + 1, z + 1);
-                        else if (type == "bottom")
-                            blockBox = new AABB(x, y, z, x + 1, y + 0.5, z + 1);
-                        // double is handled by default full blockbox
-                    }
-                    else if (blockState.IsSnow)
-                    {
-                        var layers = blockState.SnowLayers;
-                        if (layers > 0)
-                            blockBox = new AABB(x, y, z, x + 1, y + layers * 0.125, z + 1);
-                        else continue; 
-                    }
-                    else if (blockState.IsStairs)
-                    {
-                        var isTop = blockState.IsTop;
-                        // Base part
-                        var baseBox = isTop ? new AABB(x, y + 0.5, z, x + 1, y + 1, z + 1) : new AABB(x, y, z, x + 1, y + 0.5, z + 1);
-                        if (baseBox.Intersects(queryBox)) collidingBoxes.Add(baseBox);
-                        
-                        // Top part (simplification: always exists for now, we'll refine facing later if needed)
-                        // In reality, it depends on 'facing' and 'shape'. 
-                        // For stepping up, even this base is enough to trigger the step-up logic.
-                        continue; 
-                    }
-
-                    if (blockBox.Intersects(queryBox))
-                    {
-                        collidingBoxes.Add(blockBox);
-                        // Log "phantom" collisions (if needed) or just high counts
-                    }
-                    else
-                    {
-                        // Optional: Log misses if we are debugging a specific block
-                        // _logger.LogTrace("Block {Name} at {X},{Y},{Z} does not intersect {Query}", blockState.Name, x, y, z, queryBox);
+                        var offsetShape = shape.Move(x, y, z);
+                        // Check bounds intersection optimization?
+                        // VoxelShape.Bounds() is relative to origin. Move works.
+                        // We yield it.
+                         yield return offsetShape;
                     }
                 }
             }
         }
+    }
 
-        if (collidingBoxes.Count == 0 && Math.Abs(queryBox.Min.Y - 82.2522) < 0.1)
+    /// <inheritdoc />
+    public List<AABB> GetCollidingBlockAABBs(AABB queryBox)
+    {
+        var list = new List<AABB>();
+        foreach (var shape in GetCollidingShapes(queryBox))
         {
-             // Debugging the specific spot the user mentioned
-             var targetX = (int)Math.Floor(queryBox.Min.X);
-             var targetY = (int)Math.Floor(queryBox.Min.Y - 0.01);
-             var targetZ = (int)Math.Floor(queryBox.Min.Z);
+             // VoxelShape consists of boxes.
+             // We need to check intersection with queryBox.
+             // VoxelShape.ToAABBs() returns all boxes.
+             
+             // Optimization: Shape already moved to world coords.
+             foreach(var box in shape.ToAABBs())
+             {
+                 if (box.Intersects(queryBox))
+                 {
+                     list.Add(box);
+                 }
+             }
+        }
+        
+        // Debugging specific block kept from original code
+        if (list.Count == 0 && Math.Abs(queryBox.MinY - 82.2522) < 0.1)
+        {
+             var targetX = (int)Math.Floor(queryBox.MinX);
+             var targetY = (int)Math.Floor(queryBox.MinY - 0.01);
+             var targetZ = (int)Math.Floor(queryBox.MinZ);
              var block = GetBlockAt(targetX, targetY, targetZ);
              _logger.LogDebug("[TargetDebug] Block at ({X},{Y},{Z}) is {BlockName} (ID: {BlockId}), BlocksMotion={BM}", 
                  targetX, targetY, targetZ, block?.Name ?? "NULL", block?.Id ?? -1, block?.BlocksMotion ?? false);
         }
 
-        return collidingBoxes;
+        return list;
     }
 
     /// <inheritdoc />
@@ -134,93 +135,83 @@ public class ChunkManager : IChunkManager
         var length = Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y + direction.Z * direction.Z);
         if (length < 1e-10) return null;
 
-        direction = new Vector3<double>(direction.X / length, direction.Y / length, direction.Z / length);
+        var normDir = new Vector3<double>(direction.X / length, direction.Y / length, direction.Z / length);
+        var end = start + normDir * maxDistance;
 
         var x = (int)Math.Floor(start.X);
         var y = (int)Math.Floor(start.Y);
         var z = (int)Math.Floor(start.Z);
 
-        var stepX = direction.X > 0 ? 1 : -1;
-        var stepY = direction.Y > 0 ? 1 : -1;
-        var stepZ = direction.Z > 0 ? 1 : -1;
+        var stepX = normDir.X > 0 ? 1 : -1;
+        var stepY = normDir.Y > 0 ? 1 : -1;
+        var stepZ = normDir.Z > 0 ? 1 : -1;
 
-        var tMaxX = direction.X != 0 ? (stepX > 0 ? x + 1 - start.X : start.X - x) / Math.Abs(direction.X) : double.MaxValue;
-        var tMaxY = direction.Y != 0 ? (stepY > 0 ? y + 1 - start.Y : start.Y - y) / Math.Abs(direction.Y) : double.MaxValue;
-        var tMaxZ = direction.Z != 0 ? (stepZ > 0 ? z + 1 - start.Z : start.Z - z) / Math.Abs(direction.Z) : double.MaxValue;
+        var tMaxX = normDir.X != 0 ? (stepX > 0 ? x + 1 - start.X : start.X - x) / Math.Abs(normDir.X) : double.MaxValue;
+        var tMaxY = normDir.Y != 0 ? (stepY > 0 ? y + 1 - start.Y : start.Y - y) / Math.Abs(normDir.Y) : double.MaxValue;
+        var tMaxZ = normDir.Z != 0 ? (stepZ > 0 ? z + 1 - start.Z : start.Z - z) / Math.Abs(normDir.Z) : double.MaxValue;
 
-        var tDeltaX = direction.X != 0 ? Math.Abs(1.0 / direction.X) : double.MaxValue;
-        var tDeltaY = direction.Y != 0 ? Math.Abs(1.0 / direction.Y) : double.MaxValue;
-        var tDeltaZ = direction.Z != 0 ? Math.Abs(1.0 / direction.Z) : double.MaxValue;
+        var tDeltaX = normDir.X != 0 ? Math.Abs(1.0 / normDir.X) : double.MaxValue;
+        var tDeltaY = normDir.Y != 0 ? Math.Abs(1.0 / normDir.Y) : double.MaxValue;
+        var tDeltaZ = normDir.Z != 0 ? Math.Abs(1.0 / normDir.Z) : double.MaxValue;
 
-        var lastT = 0d;
+        // Check start block first
+        var hit = CheckBlock(x, y, z, start, end);
+        if (hit != null) return hit;
 
-        var startBlock = GetBlockAt(x, y, z);
-        if (startBlock is { IsAir: false, IsLiquid: false })
-        {
-            return new RaycastHit
-            {
-                Block = startBlock,
-                Face = BlockFace.Top,
-                InsideBlock = true,
-                BlockPosition = new Vector3<int>(x, y, z),
-                ExactHitPosition = start,
-                Distance = 0
-            };
-        }
-
-        var maxSteps = Math.Max(10, (int)(maxDistance * 3));
+        var maxSteps = Math.Max(10, (int)(maxDistance * 3)); // Heuristic limit
         var steps = 0;
 
         while (steps < maxSteps)
         {
-            if (lastT > maxDistance)
-                return null;
-
-            BlockFace lastFace;
             if (tMaxX < tMaxY && tMaxX < tMaxZ)
             {
+                if (tMaxX > maxDistance) break;
                 x += stepX;
-                lastT = tMaxX;
                 tMaxX += tDeltaX;
-                lastFace = stepX > 0 ? BlockFace.West : BlockFace.East;
             }
             else if (tMaxY < tMaxZ)
             {
+                if (tMaxY > maxDistance) break;
                 y += stepY;
-                lastT = tMaxY;
                 tMaxY += tDeltaY;
-                lastFace = stepY > 0 ? BlockFace.Bottom : BlockFace.Top;
             }
             else
             {
+                 if (tMaxZ > maxDistance) break;
                 z += stepZ;
-                lastT = tMaxZ;
                 tMaxZ += tDeltaZ;
-                lastFace = stepZ > 0 ? BlockFace.North : BlockFace.South;
             }
 
-            var block = GetBlockAt(x, y, z);
-            if (block is { IsAir: false, IsLiquid: false })
-            {
-                var exactHitPosition = new Vector3<double>(
-                    start.X + direction.X * lastT,
-                    start.Y + direction.Y * lastT,
-                    start.Z + direction.Z * lastT
-                );
-
-                return new RaycastHit
-                {
-                    Block = block,
-                    Face = lastFace,
-                    BlockPosition = new Vector3<int>(x, y, z),
-                    ExactHitPosition = exactHitPosition,
-                    Distance = lastT
-                };
-            }
+            hit = CheckBlock(x, y, z, start, end);
+            if (hit != null) return hit;
 
             steps++;
         }
 
+        return null;
+    }
+
+    private RaycastHit? CheckBlock(int x, int y, int z, Vector3<double> start, Vector3<double> end)
+    {
+        var block = GetBlockAt(x, y, z);
+        if (block == null || block.IsAir || block.IsLiquid) return null;
+
+        var shape = _blockShapeRegistry.GetShape(block);
+        if (shape.IsEmpty()) return null;
+
+        var clipResult = shape.Clip(start, end, new Vector3<int>(x, y, z));
+        if (clipResult != null && clipResult.Value.Hit)
+        {
+            return new RaycastHit
+            {
+                Block = block,
+                Face = clipResult.Value.Face,
+                InsideBlock = false, // Clip handles boundary usually
+                BlockPosition = new Vector3<int>(x, y, z),
+                ExactHitPosition = clipResult.Value.Point,
+                Distance = (clipResult.Value.Point - start).Length()
+            };
+        }
         return null;
     }
 

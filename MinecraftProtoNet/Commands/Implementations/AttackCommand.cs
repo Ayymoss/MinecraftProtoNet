@@ -7,7 +7,7 @@ public class AttackCommand : ICommand
 {
     public async Task ExecuteAsync(CommandContext ctx)
     {
-        var success = await InteractionActions.AttackLookedAtEntityAsync(ctx);
+        var success = await ctx.Client.InteractionManager.AttackAsync();
         if (!success)
         {
             await ctx.SendChatAsync("I'm not looking at a player.");

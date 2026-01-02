@@ -143,6 +143,7 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return readValues;
     }
 
+
     public ReadOnlySpan<byte> ReadBuffer(int count)
     {
         if (count > ReadableBytes) throw new ArgumentOutOfRangeException(nameof(count), "Cannot read beyond the readable bytes.");

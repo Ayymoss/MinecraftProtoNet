@@ -22,47 +22,138 @@ public class MovementPillar : MovementBase
     {
     }
 
+    /// <summary>
+    /// Calculates cost for pillaring up one block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementPillar.java:58-139
+    /// </summary>
     public override double CalculateCost(CalculationContext context)
     {
         var x = Source.X;
         var y = Source.Y;
         var z = Source.Z;
 
-        if (!context.AllowPlace || !context.HasThrowaway)
-        {
-            return ActionCosts.CostInf;
-        }
+        // Baritone lines 59-70: Basic checks
+        var fromState = context.GetBlockState(x, y, z);
+        bool ladder = MovementHelper.IsClimbable(fromState);
+        var fromDown = context.GetBlockState(x, y - 1, z);
 
-        // Check space above (need 2 blocks of clearance)
-        var above1 = context.GetBlockState(x, y + 1, z);
-        var above2 = context.GetBlockState(x, y + 2, z);
-
-        if (!MovementHelper.CanWalkThrough(above1) || !MovementHelper.CanWalkThrough(above2))
+        if (!ladder)
         {
-            // Need to break blocks above
-            if (!context.AllowBreak)
+            // Can't pillar from a ladder/vine onto something that isn't climbable
+            if (MovementHelper.IsClimbable(fromDown))
             {
                 return ActionCosts.CostInf;
             }
-            // TODO: Add break cost
-            Cost = ActionCosts.JumpOneBlockCost + context.PlaceBlockCost + context.JumpPenalty + ActionCosts.WalkOneBlockCost * 3;
-            return Cost;
+            // Can't pillar from bottom slab onto non-ladder (Baritone line 67-69)
+            if (MovementHelper.IsBottomSlab(fromDown))
+            {
+                return ActionCosts.CostInf;
+            }
         }
 
-        // Check current floor we're standing on (need to place against it)
-        var floor = context.GetBlockState(x, y - 1, z);
-        if (!MovementHelper.CanWalkOn(floor))
+        // Baritone line 74-78: Check block at y+2 (the one we need to move into headspace)
+        var toBreak = context.GetBlockState(x, y + 2, z);
+        
+        // Fence gates are always impossible (issue #172)
+        if (MovementHelper.IsFenceGate(toBreak))
         {
             return ActionCosts.CostInf;
         }
 
-        // Can't pillar from ladder/vine
-        if (MovementHelper.IsClimbable(floor))
+        // Baritone lines 80-85: Water swimming up check
+        if (MovementHelper.IsWater(toBreak) && MovementHelper.IsWater(fromState))
         {
-            return ActionCosts.CostInf;
+            var srcUp = context.GetBlockState(x, y + 1, z);
+            if (MovementHelper.IsWater(srcUp))
+            {
+                return ActionCosts.LadderUpOneCost; // Allow ascending water columns
+            }
         }
 
-        Cost = ActionCosts.JumpOneBlockCost + context.PlaceBlockCost + context.JumpPenalty;
+        // Baritone lines 86-96: Calculate place cost (if not ladder)
+        double placeCost = 0;
+        if (!ladder)
+        {
+            if (!context.AllowPlace || !context.HasThrowaway)
+            {
+                return ActionCosts.CostInf;
+            }
+            placeCost = context.PlaceBlockCost;
+            
+            // Can't place if floor below isn't solid
+            if (!MovementHelper.CanWalkOn(fromDown))
+            {
+                return ActionCosts.CostInf;
+            }
+            
+            // Slight penalty for pillaring on air (Baritone line 93-95)
+            if (MovementHelper.IsAir(fromDown))
+            {
+                placeCost += 0.1;
+            }
+        }
+
+        // Baritone lines 97-106: Check for liquid standing conditions
+        if (MovementHelper.IsLiquid(fromState) && !MovementHelper.CanWalkOn(fromDown))
+        {
+            return ActionCosts.CostInf; // Can't pillar while standing in water without floor
+        }
+
+        // Baritone line 107-133: Calculate mining cost for block at y+2
+        float toolSpeed = context.GetBestToolSpeed?.Invoke(toBreak) ?? 1.0f;
+        double hardness = toBreak != null 
+            ? ActionCosts.CalculateMiningDuration(toolSpeed, toBreak.DestroySpeed, true)
+            : 0;
+        if (hardness >= ActionCosts.CostInf)
+        {
+            // Block is unbreakable and we can't walk through it
+            if (!MovementHelper.CanWalkThrough(toBreak))
+            {
+                if (!context.AllowBreak)
+                {
+                    return ActionCosts.CostInf;
+                }
+                return ActionCosts.CostInf; // Truly unbreakable
+            }
+            hardness = 0; // Can walk through, no mining needed
+        }
+
+        // If we can walk through the block, no mining needed
+        if (MovementHelper.CanWalkThrough(toBreak))
+        {
+            hardness = 0;
+        }
+
+        // Baritone lines 112-113: Ladders/vines at y+2 don't need breaking (we climb them)
+        if (hardness != 0 && MovementHelper.IsClimbable(toBreak))
+        {
+            hardness = 0;
+        }
+
+        // Baritone lines 115-124: Check for falling blocks above what we're breaking
+        if (hardness != 0)
+        {
+            var blockAboveBreak = context.GetBlockState(x, y + 3, z);
+            if (MovementHelper.IsFallingBlock(blockAboveBreak))
+            {
+                var srcUp = context.GetBlockState(x, y + 1, z);
+                // Chain of falling blocks is ok, but a falling block on top of non-falling is dangerous
+                if (!MovementHelper.IsFallingBlock(toBreak) || !MovementHelper.IsFallingBlock(srcUp))
+                {
+                    return ActionCosts.CostInf;
+                }
+            }
+        }
+
+        // Baritone lines 134-138: Final cost calculation
+        if (ladder)
+        {
+            Cost = ActionCosts.LadderUpOneCost + hardness * 5;
+        }
+        else
+        {
+            Cost = ActionCosts.JumpOneBlockCost + placeCost + context.JumpPenalty + hardness;
+        }
         return Cost;
     }
 

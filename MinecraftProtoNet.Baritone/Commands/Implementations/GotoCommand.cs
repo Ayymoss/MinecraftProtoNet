@@ -5,8 +5,8 @@ using Serilog;
 
 namespace MinecraftProtoNet.Baritone.Commands.Implementations;
 
-[Command("gotopath", Description = "Pathfind to coordinates")]
-public class GotoPathCommand(IPathingService pathingService) : ICommand
+[Command("goto", Aliases = ["gotopath"], Description = "Pathfind to coordinates")]
+public class GotoCommand(IPathingService pathingService) : ICommand
 {
     public async Task ExecuteAsync(CommandContext ctx)
     {

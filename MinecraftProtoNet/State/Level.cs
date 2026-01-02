@@ -1,9 +1,10 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Physics.Shapes;
 
 namespace MinecraftProtoNet.State;
 
@@ -107,6 +108,9 @@ public class Level
 
     public List<AABB> GetCollidingBlockAABBs(AABB queryBox)
         => _chunkManager.GetCollidingBlockAABBs(queryBox);
+
+    public IEnumerable<Physics.Shapes.VoxelShape> GetCollidingShapes(AABB queryBox)
+        => _chunkManager.GetCollidingShapes(queryBox);
 
     public RaycastHit? RayCast(Vector3<double> start, Vector3<double> direction, double maxDistance = 100.0)
         => _chunkManager.RayCast(start, direction, maxDistance);

@@ -18,7 +18,7 @@ public class PlaceCommand : ICommand
             return;
         }
 
-        var success = await InteractionActions.PlaceBlockAsync(ctx);
+        var success = await ctx.Client.InteractionManager.PlaceBlockAsync();
         if (!success)
         {
             await ctx.SendChatAsync("Cannot place block here.");

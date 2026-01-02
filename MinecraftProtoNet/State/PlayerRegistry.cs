@@ -146,7 +146,7 @@ public class PlayerRegistry : IPlayerRegistry
     /// <inheritdoc />
     public Player? GetPlayerByUsername(string username)
     {
-        return _players.Values.FirstOrDefault(p => p.Username == username);
+        return _players.Values.FirstOrDefault(p => string.Equals(p.Username, username, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <inheritdoc />

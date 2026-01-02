@@ -4,18 +4,20 @@ using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Services;
+using MinecraftProtoNet.State;
 
 namespace MinecraftProtoNet.Services;
 
 /// <summary>
 /// Manages the main game loop that drives physics ticks at the server's tick rate.
 /// </summary>
-public class GameLoop(ILogger<GameLoop> logger, IPathingService pathingService) : IGameLoop
+public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 {
     private CancellationTokenSource? _cts;
     private Thread? _gameLoopThread;
 
     public bool IsRunning => _gameLoopThread?.IsAlive ?? false;
+    public event Action<Entity>? PhysicsTick;
 
     public void Start(IMinecraftClient client)
     {
@@ -41,7 +43,7 @@ public class GameLoop(ILogger<GameLoop> logger, IPathingService pathingService) 
 
                     try
                     {
-                        await client.PhysicsTickAsync(entity => pathingService.OnPhysicsTick(entity));
+                        await client.PhysicsTickAsync(entity => PhysicsTick?.Invoke(entity));
                         client.State.Level.IncrementClientTickCounter();
                     }
                     catch (Exception ex)

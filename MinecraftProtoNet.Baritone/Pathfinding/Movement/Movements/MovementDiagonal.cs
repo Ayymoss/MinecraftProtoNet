@@ -76,6 +76,77 @@ public class MovementDiagonal : MovementBase
         return Cost;
     }
 
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+        var srcX = Source.X;
+        var srcY = Source.Y;
+        var srcZ = Source.Z;
+
+        var dy = destY - srcY;
+        var dx = destX - srcX;
+        var dz = destZ - srcZ;
+
+        // Destination body and head
+        var destBody = context.GetBlockState(destX, destY, destZ);
+        var destHead = context.GetBlockState(destX, destY + 1, destZ);
+        if (!MovementHelper.CanWalkThrough(destBody)) yield return (destX, destY, destZ);
+        if (!MovementHelper.CanWalkThrough(destHead)) yield return (destX, destY + 1, destZ);
+
+        // Intermediate corner checks
+        // We need EITHER corner A (Body+Head) OR corner B (Body+Head) clear
+        // If both blocked, we break one set (prefer A for simplicity or closeness)
+        
+        var cornerABody = context.GetBlockState(srcX + dx, srcY, srcZ);
+        var cornerAHead = context.GetBlockState(srcX + dx, srcY + 1, srcZ);
+        bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
+        
+        var cornerBBody = context.GetBlockState(srcX, srcY, srcZ + dz);
+        var cornerBHead = context.GetBlockState(srcX, srcY + 1, srcZ + dz);
+        bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
+
+        if (!canA && !canB)
+        {
+            // Both blocked, break A
+            if (!MovementHelper.CanWalkThrough(cornerABody)) yield return (srcX + dx, srcY, srcZ);
+            if (!MovementHelper.CanWalkThrough(cornerAHead)) yield return (srcX + dx, srcY + 1, srcZ);
+        }
+
+        if (dy > 0) // Ascend diagonal
+        {
+            var srcCeil = context.GetBlockState(srcX, srcY + 2, srcZ);
+            if (!MovementHelper.CanWalkThrough(srcCeil)) yield return (srcX, srcY + 2, srcZ);
+
+            var cornerACeil = context.GetBlockState(srcX + dx, srcY + 2, srcZ);
+            var cornerBCeil = context.GetBlockState(srcX, srcY + 2, srcZ + dz);
+            
+            bool canACeil = canA && MovementHelper.CanWalkThrough(cornerACeil);
+            bool canBCeil = canB && MovementHelper.CanWalkThrough(cornerBCeil);
+
+            if (!canACeil && !canBCeil)
+            {
+                // Both paths blocked above, break A path ceiling if we chose A, or just A ceiling
+                if (!MovementHelper.CanWalkThrough(cornerACeil)) yield return (srcX + dx, srcY + 2, srcZ);
+            }
+        }
+    }
+
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+
+        // Check destination floor
+        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
+        if (!MovementHelper.CanWalkOn(destFloor) && context.HasThrowaway && MovementHelper.IsReplaceable(destFloor))
+        {
+             yield return (destX, destY - 1, destZ);
+        }
+    }
+
     public override MovementState UpdateState(Entity entity, Level level)
     {
         if (HasReachedDestination(entity))

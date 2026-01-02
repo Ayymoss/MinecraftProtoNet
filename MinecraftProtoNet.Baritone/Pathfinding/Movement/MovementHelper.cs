@@ -113,6 +113,28 @@ public static class MovementHelper
         return block.IsLiquid;
     }
 
+    /// <summary>
+    /// Returns whether this block is air.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java
+    /// </summary>
+    public static bool IsAir(BlockState? block)
+    {
+        if (block == null) return false;
+        return block.IsAir;
+    }
+
+    /// <summary>
+    /// Returns whether this block is a falling block (sand, gravel, concrete powder, etc.).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java
+    /// </summary>
+    public static bool IsFallingBlock(BlockState? block)
+    {
+        if (block == null) return false;
+        var name = block.Name.ToLowerInvariant();
+        return name.Contains("sand") || name.Contains("gravel") || 
+               name.Contains("concrete_powder") || name.Contains("anvil");
+    }
+
     // ===== Special Block Checks =====
 
     /// <summary>

@@ -54,11 +54,14 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
                         };
                         break;
                     case PlayerAction.InitChat:
+                        // MC: input.readNullable(RemoteChatSession.Data::read)
+                        // RemoteChatSession.Data.read: readUUID(), new ProfilePublicKey.Data(input)
+                        // ProfilePublicKey.Data(input): readInstant() [Long], readPublicKey() [VarInt+bytes], readByteArray(4096) [VarInt+bytes]
                         if (!buffer.ReadBoolean()) break;
                         var sessionUuid = buffer.ReadUuid();
-                        var publicKeyExpiration = buffer.ReadVarLong();
-                        var encodedPublicKey = buffer.ReadPrefixedArray<byte>();
-                        var publicKeySignature = buffer.ReadPrefixedArray<byte>();
+                        var publicKeyExpiration = buffer.ReadSignedLong(); // Instant.ofEpochMilli(readLong())
+                        var encodedPublicKey = buffer.ReadPrefixedArray<byte>(); // readPublicKey() -> readByteArray(512)
+                        var publicKeySignature = buffer.ReadPrefixedArray<byte>(); // readByteArray(4096)
                         PlayerInfos[i].Actions[j] = new InitChat(action)
                         {
                             SessionUuid = sessionUuid,
@@ -95,11 +98,11 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
                             DisplayName = displayName
                         };
                         break;
-                    case PlayerAction.UpdateListPriority:
-                        var listPriority = buffer.ReadVarInt();
-                        PlayerInfos[i].Actions[j] = new UpdateListPriority(action)
+                    case PlayerAction.UpdateListOrder:
+                        var listOrder = buffer.ReadVarInt();
+                        PlayerInfos[i].Actions[j] = new UpdateListOrder(action)
                         {
-                            ListPriority = listPriority
+                            ListOrder = listOrder
                         };
                         break;
                     case PlayerAction.UpdateHat:
@@ -114,16 +117,18 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
         }
     }
 
+    // Minecraft reference: net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action
+    // Values must be in ordinal order (0-7) for ReadEnumSet to work correctly.
     public enum PlayerAction : byte
     {
-        AddPlayer = 0x01,
-        InitChat = 0x02,
-        UpdateGameMode = 0x04,
-        UpdateListed = 0x08,
-        UpdateLatency = 0x10,
-        UpdateDisplayName = 0x20,
-        UpdateListPriority = 0x40,
-        UpdateHat = 0x80
+        AddPlayer = 0,          // ADD_PLAYER
+        InitChat = 1,           // INITIALIZE_CHAT  
+        UpdateGameMode = 2,     // UPDATE_GAME_MODE
+        UpdateListed = 3,       // UPDATE_LISTED
+        UpdateLatency = 4,      // UPDATE_LATENCY
+        UpdateDisplayName = 5,  // UPDATE_DISPLAY_NAME
+        UpdateListOrder = 6,    // UPDATE_LIST_ORDER (was UpdateListPriority)
+        UpdateHat = 7           // UPDATE_HAT
     }
 
     public class PlayerInfo(Guid uuid)
@@ -176,9 +181,9 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
         public required NbtTag? DisplayName { get; set; }
     }
 
-    public class UpdateListPriority(PlayerAction action) : PlayerActionBase(action)
+    public class UpdateListOrder(PlayerAction action) : PlayerActionBase(action)
     {
-        public required int ListPriority { get; set; }
+        public required int ListOrder { get; set; }
     }
 
     public class UpdateHat(PlayerAction action) : PlayerActionBase(action)

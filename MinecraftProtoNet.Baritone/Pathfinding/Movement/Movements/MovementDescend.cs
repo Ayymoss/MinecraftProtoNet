@@ -43,22 +43,39 @@ public class MovementDescend : MovementBase
         // Check body and head clearance at destination
         var destBody = context.GetBlockState(destX, destY, destZ);
         var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody) || !MovementHelper.CanWalkThrough(destHead))
+        
+        double breakCost = 0;
+        
+        if (!MovementHelper.CanWalkThrough(destBody))
         {
-            // Need to break blocks
-            if (!context.AllowBreak)
-            {
-                return ActionCosts.CostInf;
-            }
-            Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) * 3; // Placeholder
-            return Cost;
+            if (!context.AllowBreak) return ActionCosts.CostInf;
+            var time = ActionCosts.CalculateMiningDuration(1.0f, destBody.DestroySpeed, true); // Placeholder tool
+            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
+            breakCost += time;
+        }
+
+        if (!MovementHelper.CanWalkThrough(destHead))
+        {
+            if (!context.AllowBreak) return ActionCosts.CostInf;
+            var time = ActionCosts.CalculateMiningDuration(1.0f, destHead.DestroySpeed, true);
+            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
+            breakCost += time;
         }
 
         // Check we can walk off current position (head clearance going forward)
         var forwardHead = context.GetBlockState(destX, srcY + 1, destZ);
         if (!MovementHelper.CanWalkThrough(forwardHead))
         {
-            return ActionCosts.CostInf;
+            if (!context.AllowBreak) return ActionCosts.CostInf;
+            var time = ActionCosts.CalculateMiningDuration(1.0f, forwardHead.DestroySpeed, true);
+            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
+            breakCost += time;
+        }
+
+        if (breakCost > 0)
+        {
+            Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) * 3 + breakCost;
+            return Cost;
         }
 
         // Check for dangerous blocks
@@ -78,6 +95,38 @@ public class MovementDescend : MovementBase
 
         Cost = cost;
         return Cost;
+    }
+
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+        var srcY = Source.Y;
+
+        // Check body and head clearance at destination
+        var destBody = context.GetBlockState(destX, destY, destZ);
+        var destHead = context.GetBlockState(destX, destY + 1, destZ);
+        if (!MovementHelper.CanWalkThrough(destBody)) yield return (destX, destY, destZ);
+        if (!MovementHelper.CanWalkThrough(destHead)) yield return (destX, destY + 1, destZ);
+
+        // Check head clearance going forward (above starting position edge)
+        var forwardHead = context.GetBlockState(destX, srcY + 1, destZ);
+        if (!MovementHelper.CanWalkThrough(forwardHead)) yield return (destX, srcY + 1, destZ);
+    }
+
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+
+        // Check destination floor
+        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
+        if (!MovementHelper.CanWalkOn(destFloor) && context.HasThrowaway && MovementHelper.IsReplaceable(destFloor))
+        {
+             yield return (destX, destY - 1, destZ);
+        }
     }
 
     public override MovementState UpdateState(Entity entity, Level level)
@@ -107,7 +156,7 @@ public class MovementDescend : MovementBase
         State.Status = MovementStatus.Running;
         
         // Baritone line 242: Check if we should use safe mode
-        if (SafeMode())
+        if (SafeMode(level))
         {
             // Safe mode: move towards a point between source and destination (83% towards dest)
             // Baritone lines 243-250
@@ -207,7 +256,7 @@ public class MovementDescend : MovementBase
     /// Determines if this descend should use safe mode.
     /// Baritone lines 272-289.
     /// </summary>
-    public bool SafeMode()
+    public bool SafeMode(Level level)
     {
         if (ForceSafeMode)
         {
@@ -216,7 +265,7 @@ public class MovementDescend : MovementBase
         
         // Note: Full implementation would check blocks ahead like Baritone does
         // For now, we check if SkipToAscend would cause a glitch
-        if (SkipToAscend())
+        if (SkipToAscend(level))
         {
             return true;
         }
@@ -228,10 +277,18 @@ public class MovementDescend : MovementBase
     /// Checks if sprinting through this descend could cause the player to glitch.
     /// Baritone lines 291-293: returns true if dest is blocked but the blocks above are passable.
     /// </summary>
-    public bool SkipToAscend()
+    public bool SkipToAscend(Level level)
     {
-        // This would need a Level reference to check blocks properly
-        // For now, return false as a safe default (doesn't trigger extra safe mode)
+        // Baritone logic: Check if we are descending into a block that is blocked above
+        // This implies we have to jump immediately after descending
+        var destHead = level.GetBlockAt(Destination.X, Destination.Y + 1, Destination.Z);
+        var destAbove = level.GetBlockAt(Destination.X, Destination.Y + 2, Destination.Z);
+        
+        // If head or above is blocked (normal cube), it forces a "squeeze" or jump
+        // Baritone isBlockNormalCube() is essentially "blocks motion" here
+        if (destHead != null && destHead.BlocksMotion) return true;
+        if (destAbove != null && destAbove.BlocksMotion) return true;
+        
         return false;
     }
 

@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Models.Core;
+using MinecraftProtoNet.Physics.Shapes;
 using MinecraftProtoNet.State;
 using static MinecraftProtoNet.Physics.PhysicsConstants;
 

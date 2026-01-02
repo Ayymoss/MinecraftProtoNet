@@ -9,6 +9,7 @@ public interface IInventoryManager
     /// Returns true if a valid tool was found and equipped (or if hand is best).
     /// </summary>
     Task<bool> EquipBestTool(BlockState block);
+    Task<bool> EquipItemMatches(IEnumerable<string> itemNames);
 
     /// <summary>
     /// Moves an item from a source slot to a destination slot.

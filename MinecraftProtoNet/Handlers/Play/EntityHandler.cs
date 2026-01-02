@@ -32,7 +32,16 @@ public class EntityHandler() : IPacketHandler
         {
             case AddEntityPacket addEntityPacket:
                 // Track player entities in PlayerRegistry
-                if (addEntityPacket.Type == EntityTypes.Player)
+                bool isPlayer = addEntityPacket.Type == EntityTypes.Player;
+
+                // Fallback: Check if UUID is known in PlayerRegistry (in case Type ID mismatch)
+                if (!isPlayer)
+                {
+                     var p = client.State.Level.GetPlayerByUuid(addEntityPacket.EntityUuid);
+                     if (p != null) isPlayer = true;
+                }
+
+                if (isPlayer)
                 {
                     await client.State.Level.AddEntityAsync(
                         addEntityPacket.EntityUuid,

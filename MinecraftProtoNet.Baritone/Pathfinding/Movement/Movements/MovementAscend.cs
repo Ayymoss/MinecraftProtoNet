@@ -109,6 +109,40 @@ public class MovementAscend : MovementBase
         return Cost;
     }
 
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+        var srcX = Source.X;
+        var srcY = Source.Y;
+        var srcZ = Source.Z;
+
+        // Check destination clearance (2 blocks high)
+        var destBody = context.GetBlockState(destX, destY, destZ);
+        var destHead = context.GetBlockState(destX, destY + 1, destZ);
+        if (!MovementHelper.CanWalkThrough(destBody)) yield return (destX, destY, destZ);
+        if (!MovementHelper.CanWalkThrough(destHead)) yield return (destX, destY + 1, destZ);
+
+        // Check jump clearance above current position
+        var jumpSpace = context.GetBlockState(srcX, srcY + 2, srcZ);
+        if (!MovementHelper.CanWalkThrough(jumpSpace)) yield return (srcX, srcY + 2, srcZ);
+    }
+
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y;
+        var destZ = Destination.Z;
+
+        // Check destination floor (the block we're jumping onto)
+        var jumpOnto = context.GetBlockState(destX, destY - 1, destZ);
+        if (!MovementHelper.CanWalkOn(jumpOnto) && context.HasThrowaway && MovementHelper.IsReplaceable(jumpOnto))
+        {
+            yield return (destX, destY - 1, destZ);
+        }
+    }
+
     public override MovementState UpdateState(Entity entity, Level level)
     {
         var feet = GetFeetPosition(entity);

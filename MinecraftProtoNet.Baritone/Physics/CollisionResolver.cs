@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Physics.Shapes;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.State;
 using static MinecraftProtoNet.Physics.PhysicsConstants;
@@ -39,8 +40,8 @@ public static class CollisionResolver
         var actualDelta = Vector3<double>.Zero;
 
         // Early exit if no movement
-        if (Math.Abs(desiredDelta.X) < Epsilon && 
-            Math.Abs(desiredDelta.Y) < Epsilon && 
+        if (Math.Abs(desiredDelta.X) < Epsilon &&
+            Math.Abs(desiredDelta.Y) < Epsilon &&
             Math.Abs(desiredDelta.Z) < Epsilon)
         {
             return new CollisionResult
@@ -50,17 +51,20 @@ public static class CollisionResolver
             };
         }
 
-        // Get potential colliders for the entire movement path (directional expansion)
+        // Get potential collider shapes for the entire movement path (directional expansion)
         var expandedBox = currentBox.ExpandTowards(desiredDelta.X, desiredDelta.Y, desiredDelta.Z).Expand(Epsilon);
 
-        var colliders = level.GetCollidingBlockAABBs(expandedBox);
+        // We fetch shapes instead of AABBs
+        // ToList() because we iterate multiple times (resolve axes, logging, step up)
+        var shapes = level.GetCollidingShapes(expandedBox).ToList();
 
-        if (colliders.Count > 0)
+        if (shapes.Count > 0)
         {
-            _logger.LogTrace("Found {Count} colliders for move path. ExpandedBox={Box}", colliders.Count, expandedBox);
+            // _logger.LogTrace("Found {Count} colliders for move path. ExpandedBox={Box}", shapes.Count, expandedBox);
         }
 
-        actualDelta = ResolveMovement(originalDelta, boundingBox, colliders);
+        // We pass null for legacy AABB list as we use shapes overload/param
+        actualDelta = ResolveMovement(originalDelta, boundingBox, null, shapes);
         currentBox = boundingBox.Offset(actualDelta);
 
         var collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
@@ -72,20 +76,15 @@ public static class CollisionResolver
         var horizontalCollision = collidedX || collidedZ;
         if (DefaultStepHeight > 0 && (landedOnGround || wasOnGround || isInFluid) && horizontalCollision && !isSneaking)
         {
-            // If we landed on ground this tick, step-up should start from the landed position
-            var groundedBox = landedOnGround ? boundingBox.Offset(0, actualDelta.Y, 0) : boundingBox;
-            
-            var stepVector = Vector3<double>.Zero;
-
             // 1. Rise StepHeight
             var upBox = boundingBox.Offset(0, DefaultStepHeight, 0);
             // 2. Move Horizontal (using the original delta)
             // We only care about X/Z here.
-            var stepDelta = ResolveMovement(new Vector3<double>(originalDelta.X, 0, originalDelta.Z), upBox, colliders);
+            var stepDelta = ResolveMovement(new Vector3<double>(originalDelta.X, 0, originalDelta.Z), upBox, null, shapes);
             var horizBox = upBox.Offset(stepDelta.X, 0, stepDelta.Z);
-            
+
             // 3. Drop StepHeight (search down)
-            var dropY = ResolveMovement(new Vector3<double>(0, -DefaultStepHeight, 0), horizBox, colliders).Y;
+            var dropY = ResolveMovement(new Vector3<double>(0, -DefaultStepHeight, 0), horizBox, null, shapes).Y;
             var finalStepBox = horizBox.Offset(0, dropY, 0);
 
             // Calculate progress
@@ -93,31 +92,31 @@ public static class CollisionResolver
             // + a bias if we end up higher? No, primarily horizontal.
             var stepDistSq = stepDelta.X * stepDelta.X + stepDelta.Z * stepDelta.Z;
             var normalDistSq = actualDelta.X * actualDelta.X + actualDelta.Z * actualDelta.Z;
-            
+
             if (stepDistSq > normalDistSq)
             {
-                 // We moved further horizontally by stepping!
-                 // The actualDelta needs to be the strict vector from Start to End
-                 // Start: boundingBox.Min
-                 // End: finalStepBox.Min
-                  // The actualDelta needs to be the strict vector from Start to End
-                  actualDelta = finalStepBox.Min - boundingBox.Min;
-                  currentBox = finalStepBox;
-                  landedOnGround = true; 
-                  collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
-                  collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
-                  collidedY = false; // Stepping replaces the collision with a valid move
-             }
+                // We moved further horizontally by stepping!
+                // The actualDelta needs to be the strict vector from Start to End
+                // Start: boundingBox.Min
+                // End: finalStepBox.Min
+                // The actualDelta needs to be the strict vector from Start to End
+                actualDelta = finalStepBox.Min - boundingBox.Min;
+                currentBox = finalStepBox;
+                landedOnGround = true;
+                collidedX = Math.Abs(actualDelta.X - originalDelta.X) > Epsilon;
+                collidedZ = Math.Abs(actualDelta.Z - originalDelta.Z) > Epsilon;
+                collidedY = false; // Stepping replaces the collision with a valid move
+            }
         }
 
         if ((collidedX || collidedZ) && (landedOnGround || wasOnGround))
         {
             // Diagnostic logging for "jumping in place"
-            _logger.LogDebug("[Collision] Horizontal collision at ({X:F2}, {Y:F2}, {Z:F2}). Colliders: {Count}", 
-                currentBox.Min.X, currentBox.Min.Y, currentBox.Min.Z, colliders.Count);
-            foreach (var c in colliders)
+            _logger.LogDebug("[Collision] Horizontal collision at ({X:F2}, {Y:F2}, {Z:F2}). Collider Shapes: {Count}",
+                currentBox.Min.X, currentBox.Min.Y, currentBox.Min.Z, shapes.Count);
+            foreach (var s in shapes)
             {
-                _logger.LogTrace("  Collider: {Box}", c);
+                // _logger.LogTrace("  Collider Shape: {Bounds}", s.Bounds());
             }
         }
 
@@ -136,37 +135,51 @@ public static class CollisionResolver
     /// Resolves movement components sequentially: Y, then X, then Z.
     /// Helper to reduce code duplication between normal move and step-up.
     /// </summary>
+    /// <summary>
+    /// Resolves movement using VoxelShape collision logic.
+    /// Replaces legacy AABB iteration with Shapes.Collide.
+    /// </summary>
     private static Vector3<double> ResolveMovement(
         Vector3<double> delta,
         AABB startBox,
-        List<AABB> colliders)
+        List<AABB>? legacyColliders, /* Kept to satisfy method signature if called by step logic using legacy list,
+                                     * BUT we need Shapes here.
+                                     * Refactoring: I should pass Level or Shapes list to this method.
+                                     * Legacy `ResolveMovement` took List<AABB>.
+                                     * I will overload or change call sites.
+                                     * Actually, MoveWithCollisions calls this.
+                                     * I will change MoveWithCollisions to fetch shapes and pass them to a new ResolveMovement or inline it.
+                                     */
+        IEnumerable<VoxelShape> shapes)
     {
         var currentBox = startBox;
 
         // Resolve Y
-        var yScale = delta.Y;
-        foreach (var collider in colliders)
+        double yDist = delta.Y;
+        if (Math.Abs(yDist) > Epsilon)
         {
-            yScale = currentBox.CalculateYOffset(collider, yScale);
+            yDist = Shapes.Collide(Axis.Y, currentBox, shapes, yDist);
         }
-        currentBox = currentBox.Offset(0, yScale, 0);
+
+        currentBox = currentBox.Offset(0, yDist, 0);
 
         // Resolve X
-        var xScale = delta.X;
-        foreach (var collider in colliders)
+        double xDist = delta.X;
+        if (Math.Abs(xDist) > Epsilon)
         {
-            xScale = currentBox.CalculateXOffset(collider, xScale);
+            xDist = Shapes.Collide(Axis.X, currentBox, shapes, xDist);
         }
-        currentBox = currentBox.Offset(xScale, 0, 0);
+
+        currentBox = currentBox.Offset(xDist, 0, 0);
 
         // Resolve Z
-        var zScale = delta.Z;
-        foreach (var collider in colliders)
+        double zDist = delta.Z;
+        if (Math.Abs(zDist) > Epsilon)
         {
-            zScale = currentBox.CalculateZOffset(collider, zScale);
+            zDist = Shapes.Collide(Axis.Z, currentBox, shapes, zDist);
         }
 
-        return new Vector3<double>(xScale, yScale, zScale);
+        return new Vector3<double>(xDist, yDist, zDist);
     }
 
 
@@ -219,7 +232,7 @@ public static class CollisionResolver
 
         return pushVelocity;
     }
-    
+
     /// <summary>
     /// Checks if a bounding box collides with any blocks.
     /// Used by edge detection to check for ground support.
@@ -229,8 +242,7 @@ public static class CollisionResolver
     /// <returns>True if there is ANY collision with blocks</returns>
     public static bool HasAnyCollision(AABB box, Level level)
     {
-        var colliders = level.GetCollidingBlockAABBs(box);
-        return colliders.Count > 0;
+        var shapes = level.GetCollidingShapes(box);
+        return shapes.Any(s => !s.IsEmpty());
     }
 }
-

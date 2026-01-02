@@ -2,6 +2,7 @@ using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Actions;
 
 namespace MinecraftProtoNet.Core;
 
@@ -17,6 +18,11 @@ public interface IMinecraftClient : IPacketSender
     /// </summary>
     bool IsConnected { get; }
     
+    /// <summary>
+    /// Gets the interaction manager.
+    /// </summary>
+    IInteractionManager InteractionManager { get; }
+
     /// <summary>
     /// Raised when the client disconnects from the server.
     /// </summary>

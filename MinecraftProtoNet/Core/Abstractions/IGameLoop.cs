@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Core;
+using MinecraftProtoNet.State;
 
 namespace MinecraftProtoNet.Core.Abstractions;
 
@@ -16,6 +17,11 @@ public interface IGameLoop
     /// Starts the game loop.
     /// </summary>
     void Start(IMinecraftClient client);
+
+    /// <summary>
+    /// Event fired on each physics tick for an entity.
+    /// </summary>
+    event Action<Entity>? PhysicsTick;
 
     /// <summary>
     /// Stops the game loop.

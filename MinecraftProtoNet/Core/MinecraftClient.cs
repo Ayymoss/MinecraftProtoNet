@@ -54,10 +54,17 @@ public class MinecraftClient : IMinecraftClient
         _packetService = packetService;
         _physicsService = physicsService;
         _commandRegistry = commandRegistry;
+        _commandRegistry = commandRegistry;
         _logger = logger;
+        
+        // Manual instantiation for now if not provided by DI, or could be added to constructor params.
+        // For this refactor, simplest is to instantiate it here using 'this'.
+        InteractionManager = new InteractionManager(this, LoggingConfiguration.CreateLogger<InteractionManager>());
         
         _commandRegistry.AutoRegisterCommands(serviceProvider);
     }
+
+    public IInteractionManager InteractionManager { get; }
 
     /// <summary>
     /// Creates an action context for invoking actions from external code (API, console, etc.)

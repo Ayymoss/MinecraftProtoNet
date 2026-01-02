@@ -3,6 +3,7 @@ using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.Packets.Base.Definitions;
 using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Physics.Shapes;
 using InputModel = MinecraftProtoNet.Models.Input.Input;
 
 namespace MinecraftProtoNet.State;
@@ -142,73 +143,68 @@ public class Entity
     public bool WasSneaking { get; set; }
 
     // ===== Input State =====
+    public InputState InputState { get; } = new();
+
     /// <summary>
     /// Current input state for this tick.
+    /// Delegated to InputState.Current for backward compat.
     /// </summary>
-    public InputModel Input { get; set; } = InputModel.Empty;
+    public InputModel Input
+    {
+        get => InputState.Current;
+        set => InputState.Current = value;
+    }
 
     /// <summary>
     /// Previous tick's input state.
-    /// Used to detect changes for packet sending.
+    /// Delegated to InputState.LastSent for backward compat.
     /// </summary>
-    public InputModel LastSentInput { get; set; } = InputModel.Empty;
+    public InputModel LastSentInput
+    {
+        get => InputState.LastSent;
+        set => InputState.LastSent = value;
+    }
 
-    // ===== Legacy Input Properties (for backward compatibility during migration) =====
-    // These delegate to the Input record
+    // ===== Legacy Input Properties (Delegates) =====
 
-    /// <summary>Gets/sets forward movement. Delegates to Input.Forward.</summary>
     public bool Forward
     {
-        get => Input.Forward;
-        set => Input = Input with { Forward = value };
+        get => InputState.Current.Forward;
+        set => InputState.SetForward(value);
     }
 
-    /// <summary>Gets/sets backward movement. Delegates to Input.Backward.</summary>
     public bool Backward
     {
-        get => Input.Backward;
-        set => Input = Input with { Backward = value };
+        get => InputState.Current.Backward;
+        set => InputState.SetBackward(value);
     }
 
-    /// <summary>Gets/sets left strafe. Delegates to Input.Left.</summary>
     public bool Left
     {
-        get => Input.Left;
-        set => Input = Input with { Left = value };
+        get => InputState.Current.Left;
+        set => InputState.SetLeft(value);
     }
 
-    /// <summary>Gets/sets right strafe. Delegates to Input.Right.</summary>
     public bool Right
     {
-        get => Input.Right;
-        set => Input = Input with { Right = value };
+        get => InputState.Current.Right;
+        set => InputState.SetRight(value);
     }
 
-    /// <summary>Gets whether jumping. Delegates to Input.Jump.</summary>
-    public bool IsJumping => Input.Jump;
+    public bool IsJumping => InputState.Current.Jump;
+    public bool IsSneaking => InputState.Current.Shift;
+    public bool WantsToSprint => InputState.Current.Sprint;
 
-    /// <summary>Gets whether sneaking. Delegates to Input.Shift.</summary>
-    public bool IsSneaking => Input.Shift;
+    // ===== Input Methods (Delegates) =====
 
-    /// <summary>Gets whether sprint is being requested. Delegates to Input.Sprint.</summary>
-    public bool WantsToSprint => Input.Sprint;
+    public void StartJumping() => InputState.SetJump(true);
+    public void StopJumping() => InputState.SetJump(false);
+    public void StartSprinting() => InputState.SetSprint(true);
+    public void StopSprinting() => InputState.SetSprint(false);
+    public void StartSneaking() => InputState.SetSneak(true);
+    public void StopSneaking() => InputState.SetSneak(false);
 
-    // ===== Input Methods (for backward compatibility) =====
-
-    public void StartJumping() => Input = Input with { Jump = true };
-    public void StopJumping() => Input = Input with { Jump = false };
-    public void StartSprinting() => Input = Input with { Sprint = true };
-    public void StopSprinting() => Input = Input with { Sprint = false };
-    public void StartSneaking() => Input = Input with { Shift = true };
-    public void StopSneaking() => Input = Input with { Shift = false };
-
-    /// <summary>
-    /// Clears all movement input.
-    /// </summary>
-    public void ClearMovementInput()
-    {
-        Input = InputModel.Empty;
-    }
+    public void ClearMovementInput() => InputState.ClearMovement();
 
     // ===== Damage State =====
     [MemberNotNullWhen(true, nameof(HurtFromYaw))]

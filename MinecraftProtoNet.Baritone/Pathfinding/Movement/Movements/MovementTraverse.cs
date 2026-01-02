@@ -100,6 +100,41 @@ public class MovementTraverse : MovementBase
         return Cost;
     }
 
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var destY = Destination.Y; // srcY
+        var destZ = Destination.Z;
+
+        // Check body and head at destination
+        var destBody = context.GetBlockState(destX, destY, destZ);
+        var destHead = context.GetBlockState(destX, destY + 1, destZ);
+
+        if (!MovementHelper.CanWalkThrough(destBody))
+            yield return (destX, destY, destZ);
+            
+        if (!MovementHelper.CanWalkThrough(destHead))
+            yield return (destX, destY + 1, destZ);
+    }
+
+    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
+    {
+        var destX = Destination.X;
+        var srcY = Source.Y;
+        var destZ = Destination.Z;
+
+        // Check destination floor
+        var destFloor = context.GetBlockState(destX, srcY - 1, destZ);
+        if (!MovementHelper.CanWalkOn(destFloor))
+        {
+            // If we can bridge, return the location
+            if (context.HasThrowaway && MovementHelper.IsReplaceable(destFloor))
+            {
+                yield return (destX, srcY - 1, destZ);
+            }
+        }
+    }
+
     private bool _wasTheBridgeBlockAlwaysThere = true;
     private int _ticksWithoutProgress;
 

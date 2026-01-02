@@ -1,15 +1,12 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Physics;
 using MinecraftProtoNet.State;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Pathfinding.Goals;
 using static MinecraftProtoNet.Physics.PhysicsConstants;
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Physics.Shapes;
 
 namespace MinecraftProtoNet.Baritone.Physics;
 
@@ -18,10 +15,8 @@ namespace MinecraftProtoNet.Baritone.Physics;
 /// Orchestrates MovementCalculator and CollisionResolver.
 /// Based on Java's LivingEntity movement methods.
 /// </summary>
-public class PhysicsService : IPhysicsService
+public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 {
-    private readonly ILogger<PhysicsService> _logger = LoggingConfiguration.CreateLogger<PhysicsService>();
-
     /// <summary>
     /// Performs a physics tick for the given entity.
     /// </summary>
@@ -43,23 +38,26 @@ public class PhysicsService : IPhysicsService
         if (entity.HasPendingTeleport)
         {
             entity.HasPendingTeleport = false;
-            
+
             // Diagnostic: What block are we actually standing on?
-            var blockBelow = level.GetBlockAt((int)Math.Floor(entity.Position.X), (int)Math.Floor(entity.Position.Y - 0.01), (int)Math.Floor(entity.Position.Z));
+            var blockBelow = level.GetBlockAt((int)Math.Floor(entity.Position.X), (int)Math.Floor(entity.Position.Y - 0.01),
+                (int)Math.Floor(entity.Position.Z));
             if (blockBelow is { IsAir: true })
             {
                 // If direct feet is air, check slightly deeper (e.g. 0.1 below) to see if we are standing on a partial block
-                var deeperBlock = level.GetBlockAt((int)Math.Floor(entity.Position.X), (int)Math.Floor(entity.Position.Y - 0.1), (int)Math.Floor(entity.Position.Z));
+                var deeperBlock = level.GetBlockAt((int)Math.Floor(entity.Position.X), (int)Math.Floor(entity.Position.Y - 0.1),
+                    (int)Math.Floor(entity.Position.Z));
                 if (deeperBlock is { IsAir: false }) blockBelow = deeperBlock;
             }
-            
+
             // Heuristic for initial spawn: If chunks aren't loaded, don't claim to be falling if Y is an integer.
             int chunkX = (int)Math.Floor(entity.Position.X) >> 4;
             int chunkZ = (int)Math.Floor(entity.Position.Z) >> 4;
             if (!level.HasChunk(chunkX, chunkZ))
             {
                 entity.IsOnGround = Math.Abs(entity.Position.Y - Math.Floor(entity.Position.Y)) < 0.001;
-                _logger.LogDebug("Chunk ({ChunkX}, {ChunkZ}) missing for teleport sync. Heuristic Ground={IsOnGround} (PosY={PositionY:F4})",
+                logger.LogDebug(
+                    "Chunk ({ChunkX}, {ChunkZ}) missing for teleport sync. Heuristic Ground={IsOnGround} (PosY={PositionY:F4})",
                     chunkX, chunkZ, entity.IsOnGround, entity.Position.Y);
             }
             else
@@ -68,31 +66,31 @@ public class PhysicsService : IPhysicsService
                 // We use a larger vertical search (0.5) to find the ground if we are floating slightly above it
                 var scanGround = false;
                 var box = entity.GetBoundingBox();
-                
+
                 // First check center
-                 var centerCheck = CollisionResolver.MoveWithCollisions(
-                            box, 
-                            level, 
-                            new Vector3<double>(0, -0.6, 0), // Check down up to step height
-                            false, false);
-                 
-                 if (centerCheck.LandedOnGround)
-                 {
-                     scanGround = true;
-                 }
-                 else
-                 {
-                     // Check corners if center failed
-                     for (var dx = -0.3; dx <= 0.3; dx += 0.3)
-                     {
+                var centerCheck = CollisionResolver.MoveWithCollisions(
+                    box,
+                    level,
+                    new Vector3<double>(0, -0.6, 0), // Check down up to step height
+                    false, false);
+
+                if (centerCheck.LandedOnGround)
+                {
+                    scanGround = true;
+                }
+                else
+                {
+                    // Check corners if center failed
+                    for (var dx = -0.3; dx <= 0.3; dx += 0.3)
+                    {
                         for (var dz = -0.3; dz <= 0.3; dz += 0.3)
                         {
                             if (Math.Abs(dx) < 0.01 && Math.Abs(dz) < 0.01) continue; // Skip center
-                            
+
                             var checkResult = CollisionResolver.MoveWithCollisions(
-                                box.Offset(dx, 0, dz), 
-                                level, 
-                                new Vector3<double>(0, -0.6, 0), 
+                                box.Offset(dx, 0, dz),
+                                level,
+                                new Vector3<double>(0, -0.6, 0),
                                 false, false);
                             if (checkResult.LandedOnGround)
                             {
@@ -100,12 +98,13 @@ public class PhysicsService : IPhysicsService
                                 break;
                             }
                         }
+
                         if (scanGround) break;
-                     }
-                 }
+                    }
+                }
 
                 entity.IsOnGround = scanGround;
-                _logger.LogDebug("Chunk loaded. Detected Ground={IsOnGround} at {Pos}. BlockBelow: {Block}. ScanDepth=0.6", 
+                logger.LogDebug("Chunk loaded. Detected Ground={IsOnGround} at {Pos}. BlockBelow: {Block}. ScanDepth=0.6",
                     entity.IsOnGround, entity.Position, blockBelow?.Name ?? "NULL");
             }
 
@@ -123,8 +122,9 @@ public class PhysicsService : IPhysicsService
                 Pitch = syncPitch,
                 Flags = entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None
             });
-            
-            _logger.LogDebug("Sent teleport acknowledgement sync packet: Position={Position}, Rotation=({Yaw:F2}, {Pitch:F2}), OnGround={IsOnGround}",
+
+            logger.LogDebug(
+                "Sent teleport acknowledgement sync packet: Position={Position}, Rotation=({Yaw:F2}, {Pitch:F2}), OnGround={IsOnGround}",
                 entity.Position, syncYaw, syncPitch, entity.IsOnGround);
             return;
         }
@@ -158,7 +158,8 @@ public class PhysicsService : IPhysicsService
 
         if (entity.IsInWater || entity.Velocity.Y != 0)
         {
-            _logger.LogTrace("Tick start: Position={Position}, Velocity={Velocity}, InWater={InWater}, FluidHeight={FluidHeight:F2}, Jump={IsJumping}, Ground={IsOnGround}",
+            logger.LogTrace(
+                "Tick start: Position={Position}, Velocity={Velocity}, InWater={InWater}, FluidHeight={FluidHeight:F2}, Jump={IsJumping}, Ground={IsOnGround}",
                 entity.Position, entity.Velocity, entity.IsInWater, entity.FluidHeight, entity.IsJumping, entity.IsOnGround);
         }
 
@@ -175,7 +176,7 @@ public class PhysicsService : IPhysicsService
             {
                 // Swim up if in liquid (no cooldown for swimming)
                 entity.Velocity = MovementCalculator.ApplyFluidJump(entity.Velocity);
-                _logger.LogTrace("Swimming up: NewVelY={VelocityY:F4}", entity.Velocity.Y);
+                logger.LogTrace("Swimming up: NewVelY={VelocityY:F4}", entity.Velocity.Y);
             }
             else if (entity.IsOnGround && entity.JumpCooldown == 0)
             {
@@ -188,12 +189,12 @@ public class PhysicsService : IPhysicsService
                     BaseJumpPower,
                     jumpFactor);
                 entity.JumpCooldown = 10; // Matches Mojang's noJumpDelay = 10
-                _logger.LogDebug("Jumped: OldVel={OldVel}, NewVel={NewVel}, JumpFactor={JumpFactor}", oldVel, entity.Velocity, jumpFactor);
+                logger.LogDebug("Jumped: OldVel={OldVel}, NewVel={NewVel}, JumpFactor={JumpFactor}", oldVel, entity.Velocity, jumpFactor);
             }
         }
 
         // 5. Calculate Input Acceleration (with speed factor applied)
-        var (moveX, moveZ) = entity.Input.GetNormalizedMoveVector();
+        var (moveX, moveZ) = entity.InputState.Current.GetNormalizedMoveVector();
         if (Math.Abs(moveX) > 0.0001f || Math.Abs(moveZ) > 0.0001f)
         {
             var effectiveSpeed = MovementCalculator.GetEffectiveSpeed(
@@ -308,7 +309,7 @@ public class PhysicsService : IPhysicsService
                         {
                             if (isWater) inWater = true;
                             if (isLava) inLava = true;
-                            
+
                             // Height of fluid in this column relative to the entity's feet
                             var height = (y + 1) - box.Min.Y;
                             maxFluidHeight = Math.Max(maxFluidHeight, height);
@@ -322,7 +323,6 @@ public class PhysicsService : IPhysicsService
         entity.IsInLava = inLava;
         entity.FluidHeight = maxFluidHeight;
     }
-
 
 
     /// <summary>
@@ -367,7 +367,7 @@ public class PhysicsService : IPhysicsService
         // Zero out velocity components that collided
         if (result.CollidedX || result.CollidedY || result.CollidedZ)
         {
-            _logger.LogTrace("Collision detected: X={X}, Y={Y}, Z={Z}, landed={Landed}", 
+            logger.LogTrace("Collision detected: X={X}, Y={Y}, Z={Z}, landed={Landed}",
                 result.CollidedX, result.CollidedY, result.CollidedZ, result.LandedOnGround);
         }
 
@@ -395,15 +395,15 @@ public class PhysicsService : IPhysicsService
     /// </summary>
     private void UpdateSprintState(Entity entity, CollisionResult collision)
     {
-        var wantsToMove = entity.Input.HasMovement;
-        var hasForwardImpulse = entity.Input.HasForwardImpulse;
-        var canSprint = entity.Hunger > 6 && !entity.IsSneaking;
-        
+        var wantsToMove = entity.InputState.Current.HasMovement;
+        var hasForwardImpulse = entity.InputState.Current.HasForwardImpulse;
+        var canSprint = entity is { Hunger: > 6, IsSneaking: false };
+
         var isMinorCollision = collision.HorizontalCollision && IsHorizontalCollisionMinor(entity, collision.ActualDelta);
 
         // Start sprinting conditions
         // Matches LocalPlayer.canStartSprinting: does not check horizontalCollision
-        if (entity.WantsToSprint && !entity.IsSprinting &&
+        if (entity is { WantsToSprint: true, IsSprinting: false } &&
             wantsToMove && hasForwardImpulse && canSprint && !entity.IsInWater)
         {
             entity.IsSprinting = true;
@@ -412,7 +412,7 @@ public class PhysicsService : IPhysicsService
         // Matches LocalPlayer.shouldStopRunSprinting: only stop if collision is NOT minor
         else if (entity.IsSprinting &&
                  (!wantsToMove || !hasForwardImpulse ||
-                  (collision.HorizontalCollision && !isMinorCollision) || 
+                  (collision.HorizontalCollision && !isMinorCollision) ||
                   !entity.WantsToSprint ||
                   entity.Hunger <= 6 || entity.IsInWater))
         {
@@ -427,7 +427,7 @@ public class PhysicsService : IPhysicsService
     /// </summary>
     private bool IsHorizontalCollisionMinor(Entity entity, Vector3<double> movement)
     {
-        var (moveX, moveZ) = entity.Input.GetMoveVector();
+        var (moveX, moveZ) = entity.InputState.Current.GetMoveVector();
         float yawRad = entity.YawPitch.X * (MathF.PI / 180f);
         float sinYaw = MathF.Sin(yawRad);
         float cosYaw = MathF.Cos(yawRad);
@@ -445,7 +445,7 @@ public class PhysicsService : IPhysicsService
 
         double dot = globalXA * movement.X + globalZA * movement.Z;
         double magnitudeProduct = Math.Sqrt(desiredLenSq * actualLenSq);
-        
+
         // Math.Acos throws NaN if dot/mag is slightly outside [-1, 1] due to precision
         double cosAngle = Math.Clamp(dot / magnitudeProduct, -1.0, 1.0);
         double angle = Math.Acos(cosAngle);
@@ -478,7 +478,7 @@ public class PhysicsService : IPhysicsService
 
             entity.WasSprinting = entity.IsSprinting;
         }
-        
+
         // Send sneak state change if needed
         if (entity.IsSneaking != entity.WasSneaking)
         {

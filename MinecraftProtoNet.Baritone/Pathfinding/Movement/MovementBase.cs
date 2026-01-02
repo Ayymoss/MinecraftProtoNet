@@ -66,6 +66,24 @@ public abstract class MovementBase
     }
 
     /// <summary>
+    /// Returns the list of blocks that need to be broken for this movement.
+    /// Used for proactive breaking (Horizon).
+    /// </summary>
+    public virtual IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    {
+        return Enumerable.Empty<(int X, int Y, int Z)>();
+    }
+
+    /// <summary>
+    /// Returns the list of blocks that need to be placed for this movement.
+    /// Used for proactive placing (Horizon).
+    /// </summary>
+    public virtual IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
+    {
+        return Enumerable.Empty<(int X, int Y, int Z)>();
+    }
+
+    /// <summary>
     /// Returns whether the given position is valid for this movement.
     /// Used for path recovery after server teleport.
     /// Based on Baritone's Movement.getValidPositions()

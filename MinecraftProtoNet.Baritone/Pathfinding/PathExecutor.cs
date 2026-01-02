@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Pathfinding.Calc;
+using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 using MinecraftProtoNet.State;
@@ -467,20 +468,70 @@ public class PathExecutor(ILogger<PathExecutor> logger, Path path, CalculationCo
             }
         }
 
-        // Handle block breaking
         if (state.BreakBlockTarget.HasValue)
         {
             var target = state.BreakBlockTarget.Value;
-            // Only log verbose to avoid spam if called every tick
-            logger.LogTrace("[Executor] Block breaking requested at ({X}, {Y}, {Z})", target.X, target.Y, target.Z);
+            OnBreakBlockRequest?.Invoke(target.X, target.Y, target.Z);
+        }
+        else
+        {
+            // PROACTIVE INTERACTION: If current movement has no break target, look ahead (Horizon)
+            ProcessHorizon(entity);
             
-            if (OnBreakBlockRequest != null)
+            // RUNTIME VERIFICATION: Check if the path is still valid
+            VerifyFuturePath();
+        }
+    }
+
+    /// <summary>
+    /// Verifies that upcoming movements are still possible.
+    /// If the world changes (block placed), we must abort.
+    /// </summary>
+    private void VerifyFuturePath()
+    {
+        // Check next 5 movements
+        var verifyEnd = Math.Min(_movements.Count, _currentMovementIndex + 5);
+        
+        for (int i = _currentMovementIndex + 1; i < verifyEnd; i++)
+        {
+            var mov = _movements[i];
+            var cost = mov.CalculateCost(context);
+            
+            if (cost >= ActionCosts.CostInf)
             {
-                OnBreakBlockRequest(target.X, target.Y, target.Z);
+                logger.LogWarning("[Executor] Path blocked at index {Index} ({Type}). Recalculated cost is Infinite. Aborting.", 
+                    i, mov.GetType().Name);
+                Failed = true;
+                Finished = true;
+                return;
             }
-            else
+        }
+    }
+
+    /// <summary>
+    /// Look ahead in the path to find blocks that can be broken early (Proactive Interaction).
+    /// </summary>
+    private void ProcessHorizon(Entity entity)
+    {
+        // Limit lookahead to 10 movements or end of path
+        var horizonEnd = Math.Min(_movements.Count, _currentMovementIndex + 10);
+        
+        for (int i = _currentMovementIndex + 1; i < horizonEnd; i++)
+        {
+            var nextMov = _movements[i];
+            var breakTargets = nextMov.GetBlocksToBreak(context);
+            
+            foreach (var target in breakTargets)
             {
-                logger.LogWarning("[Executor] OnBreakBlockRequest callback not set!");
+                // Check if target is within reach (e.g. 4.5 blocks)
+                var dist = DistanceToBlockCenter(entity.Position, target.X, target.Y, target.Z);
+                if (dist <= 4.5) // Standard reach
+                {
+                    // Found a future block to break!
+                    logger.LogTrace("[Horizon] Proactive break found at {Index}: ({X}, {Y}, {Z})", i, target.X, target.Y, target.Z);
+                    OnBreakBlockRequest?.Invoke(target.X, target.Y, target.Z);
+                    return; // Focus on the first executable interaction
+                }
             }
         }
     }

@@ -137,6 +137,64 @@ public class InventoryManager(
         return true;
     }
 
+    public async Task<bool> EquipItemMatches(IEnumerable<string> itemNames)
+    {
+        var validNames = itemNames.ToHashSet();
+        var inventory = state.LocalPlayer?.Entity?.Inventory;
+        if (inventory == null) return false;
+
+        // Check if held item is already valid
+        var held = inventory.HeldItem;
+        if (held.ItemId.HasValue)
+        {
+            var heldName = itemRegistry.GetItemName(held.ItemId.Value);
+            if (!string.IsNullOrEmpty(heldName) && validNames.Contains(heldName))
+            {
+                // Already equipped
+                return true;
+            }
+        }
+
+        // Scan Hotbar (36-44)
+        for (int i = 36; i <= 44; i++)
+        {
+            if (inventory.Items.TryGetValue((short)i, out var item) && item.ItemId.HasValue)
+            {
+                var name = itemRegistry.GetItemName(item.ItemId.Value);
+                if (!string.IsNullOrEmpty(name) && validNames.Contains(name))
+                {
+                    logger.LogInformation("[InventoryManager] Found matching item {Item} in hotbar slot {Slot}, equipping.", name, i);
+                    await SetHotbarSlot(i - 36);
+                    return true;
+                }
+            }
+        }
+
+        // Scan Main Inventory (9-35)
+        foreach (var kvp in inventory.Items)
+        {
+            if (kvp.Key is >= 9 and <= 35)
+            {
+                var item = kvp.Value;
+                if (item.ItemId.HasValue)
+                {
+                    var name = itemRegistry.GetItemName(item.ItemId.Value);
+                    if (!string.IsNullOrEmpty(name) && validNames.Contains(name))
+                    {
+                        var targetHotbarSlot = inventory.HeldSlot;
+                        var targetContainerSlot = targetHotbarSlot + 36;
+                        logger.LogInformation("[InventoryManager] Found matching item {Item} in inventory slot {Slot}, swapping to hotbar {Hotbar}.", name, kvp.Key, targetHotbarSlot);
+                        await SwapItems(kvp.Key, targetContainerSlot);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        logger.LogWarning("[InventoryManager] No matching item found for request: [{Names}]", string.Join(", ", validNames));
+        return false;
+    }
+
     public async Task SetHotbarSlot(int hotbarSlot)
     {
         if (hotbarSlot < 0 || hotbarSlot > 8)

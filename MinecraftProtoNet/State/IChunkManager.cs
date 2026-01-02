@@ -3,6 +3,8 @@ using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Physics.Shapes;
 
 namespace MinecraftProtoNet.State;
 
@@ -30,6 +32,11 @@ public interface IChunkManager
     /// Gets all AABBs that collide with the query box.
     /// </summary>
     List<AABB> GetCollidingBlockAABBs(AABB queryBox);
+
+    /// <summary>
+    /// Gets all VoxelShapes that collide with the query box.
+    /// </summary>
+    IEnumerable<VoxelShape> GetCollidingShapes(AABB queryBox);
 
     /// <summary>
     /// Performs a raycast from start in direction.

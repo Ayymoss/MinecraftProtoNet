@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Actions;
 using MinecraftProtoNet.Commands;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
@@ -40,7 +41,7 @@ public static class ServiceCollectionExtensions
         // Interaction Services
         services.AddSingleton<IInventoryManager, InventoryManager>();
         services.AddSingleton<IContainerManager, ContainerManager>();
-        services.AddSingleton<BlockInteractionService>();
+        services.AddSingleton<IInteractionManager, InteractionManager>();
 
         // Command system
         services.AddSingleton<CommandRegistry>();

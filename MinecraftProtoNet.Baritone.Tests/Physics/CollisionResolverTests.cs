@@ -3,6 +3,7 @@ using MinecraftProtoNet.Baritone.Physics;
 using MinecraftProtoNet.Baritone.Tests.Infrastructure;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Physics.Shapes;
 
 namespace MinecraftProtoNet.Baritone.Tests.Physics;
 

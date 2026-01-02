@@ -14,6 +14,6 @@ public class SwingCommand : ICommand
             hand = parsedHand;
         }
 
-        await InteractionActions.SwingHandAsync(ctx, hand);
+        await ctx.Client.InteractionManager.SwingHandAsync(hand);
     }
 }
