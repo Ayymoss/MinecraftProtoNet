@@ -1,0 +1,100 @@
+@using Bot.Webcore.Services
+@using MinecraftProtoNet.Packets.Base.Definitions
+@using MinecraftProtoNet.State
+@inject BotService Bot
+
+<div class="space-y-4">
+    <!-- Villager Info -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1 text-amber-400">
+                @for (int i = 1; i <= 5; i++)
+                {
+                    var level = i;
+                    <i class="@(level <= MerchantData.VillagerLevel ? "ph-fill" : "ph-duotone") ph-star text-sm"></i>
+                }
+            </div>
+            <span class="text-sm text-gray-400">Level @MerchantData.VillagerLevel</span>
+        </div>
+        @if (MerchantData.ShowProgress)
+        {
+            <div class="flex items-center gap-2">
+                <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 transition-all" 
+                         style="width: @GetXpProgress()%"></div>
+                </div>
+                <span class="text-xs text-gray-500">@MerchantData.VillagerXp XP</span>
+            </div>
+        }
+    </div>
+
+    <!-- Trade Offers -->
+    <div class="space-y-2">
+        @for (int i = 0; i < MerchantData.Offers.Count; i++)
+        {
+            var index = i;
+            var offer = MerchantData.Offers[i];
+            var isSelected = MerchantData.SelectedTradeIndex == index;
+            var isDisabled = offer.IsOutOfStock;
+
+            <div class="@GetTradeClass(isSelected, isDisabled)"
+                 @onclick="() => SelectTrade(index)">
+                <!-- Input Items -->
+                <div class="flex items-center gap-2">
+                    <div class="@GetItemSlotClass()">
+                        <span class="text-[10px] text-center">@GetItemName(offer.BaseCostA.ItemId)</span>
+                        <span class="absolute bottom-0 right-0.5 text-[8px] text-emerald-400 font-bold">
+                            @offer.GetModifiedCostCount()
+                        </span>
+                    </div>
+                    @if (offer.CostB != null)
+                    {
+                        <span class="text-gray-600">+</span>
+                        <div class="@GetItemSlotClass()">
+                            <span class="text-[10px] text-center">@GetItemName(offer.CostB.ItemId)</span>
+                            <span class="absolute bottom-0 right-0.5 text-[8px] text-emerald-400 font-bold">
+                                @offer.CostB.Count
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Arrow -->
+                <i class="ph-bold ph-arrow-right text-gray-500"></i>
+
+                <!-- Result Item -->
+                <div class="@GetItemSlotClass() border-amber-500/50">
+                    <span class="text-[10px] text-center text-amber-300">
+                        @GetItemName(offer.Result.ItemId ?? 0)
+                    </span>
+                    <span class="absolute bottom-0 right-0.5 text-[8px] text-amber-400 font-bold">
+                        @offer.Result.ItemCount
+                    </span>
+                </div>
+
+                <!-- Trade Info -->
+                <div class="ml-auto text-right">
+                    <div class="text-xs text-gray-400">
+                        @offer.Uses / @offer.MaxUses
+                    </div>
+                    @if (isDisabled)
+                    {
+                        <span class="text-[10px] text-red-400">Sold Out</span>
+                    }
+                    else if (MerchantData.CanRestock)
+                    {
+                        <span class="text-[10px] text-gray-500">Restocks</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (MerchantData.Offers.Count == 0)
+    {
+        <div class="text-center py-4 text-gray-500">
+            <i class="ph-duotone ph-x-circle text-2xl mb-1 block"></i>
+            <p class="text-sm">No trades available</p>
+        </div>
+    }
+</div>

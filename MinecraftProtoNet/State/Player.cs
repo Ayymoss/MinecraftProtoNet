@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Player;
 

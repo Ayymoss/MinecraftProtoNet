@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Player;
@@ -12,8 +12,8 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class PlayerInfoUpdatePacket : IClientboundPacket
 {
     // TODO: Properly implement the object types.
-    public PlayerAction[] Actions { get; set; }
-    public PlayerInfo[] PlayerInfos { get; set; } = [];
+    public required PlayerAction[] Actions { get; set; }
+    public required PlayerInfo[] PlayerInfos { get; set; } = [];
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
@@ -129,7 +129,7 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
     public class PlayerInfo(Guid uuid)
     {
         public Guid Uuid { get; set; } = uuid;
-        public PlayerActionBase[] Actions { get; set; }
+        public required PlayerActionBase[] Actions { get; set; }
 
         public override string ToString()
         {
@@ -139,7 +139,7 @@ public class PlayerInfoUpdatePacket : IClientboundPacket
 
     public abstract class PlayerActionBase(PlayerAction action)
     {
-        public PlayerAction Action { get; set; }
+        public PlayerAction Action { get; set; } = action;
     }
 
     public class AddPlayer(PlayerAction action) : PlayerActionBase(action)

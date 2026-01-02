@@ -14,7 +14,6 @@ using MinecraftProtoNet.Packets.Play.Serverbound;
 using MinecraftProtoNet.Packets.Status.Serverbound;
 using MinecraftProtoNet.State.Base;
 using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.Utilities;
 
@@ -35,7 +34,7 @@ public class MinecraftClient : IMinecraftClient
     public event EventHandler<DisconnectReason>? OnDisconnected;
 
     public ClientState State { get; }
-    public AuthResult AuthResult { get; set; }
+    public AuthResult? AuthResult { get; set; }
     public ProtocolState ProtocolState { get; set; } = ProtocolState.Handshaking;
     public int ProtocolVersion { get; set; } = -1; // Unknown
     public bool IsConnected { get; private set; }
@@ -60,12 +59,10 @@ public class MinecraftClient : IMinecraftClient
         _commandRegistry.AutoRegisterCommands(serviceProvider);
     }
 
-
-
     /// <summary>
     /// Creates an action context for invoking actions from external code (API, console, etc.)
     /// </summary>
-    public IActionContext CreateActionContext() => new ActionContext(this, State, AuthResult);
+    public IActionContext CreateActionContext() => new ActionContext(this, State, AuthResult!);
 
     public async Task<bool> AuthenticateAsync()
     {
@@ -129,7 +126,7 @@ public class MinecraftClient : IMinecraftClient
                 await SendPacketAsync(new StatusRequestPacket());
                 break;
             case ProtocolState.Login:
-                await SendPacketAsync(new HelloPacket { Username = AuthResult.Username, Uuid = AuthResult.Uuid });
+                await SendPacketAsync(new HelloPacket { Username = AuthResult!.Username, Uuid = AuthResult.Uuid });
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
@@ -214,7 +211,7 @@ public class MinecraftClient : IMinecraftClient
         var commandName = parts[0];
         var args = parts.Skip(1).ToArray();
 
-        var context = new CommandContext(this, State, AuthResult, senderGuid, args);
+        var context = new CommandContext(this, State, AuthResult!, senderGuid, args);
         await _commandRegistry.ExecuteAsync(commandName, context);
     }
 
@@ -235,18 +232,18 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task SendChatSessionUpdate()
     {
-        if (AuthResult.ChatSession is null)
+        if (AuthResult?.ChatSession is null)
         {
             _logger.LogWarning("Skipping ChatSessionUpdate: AuthResult.ChatSession is null");
             return;
         }
 
         _logger.LogDebug("Sending ChatSessionUpdatePacket. SessionId: {SessionId}",
-            AuthResult.ChatSession.ChatContext.ChatSessionGuid);
+            AuthResult!.ChatSession.ChatContext.ChatSessionGuid);
 
         await SendPacketAsync(new ChatSessionUpdatePacket
         {
-            SessionId = AuthResult.ChatSession.ChatContext.ChatSessionGuid,
+            SessionId = AuthResult!.ChatSession.ChatContext.ChatSessionGuid,
             ExpiresAt = AuthResult.ChatSession.ExpiresAtEpochMs,
             PublicKey = AuthResult.ChatSession.PublicKeyDer,
             KeySignature = AuthResult.ChatSession.MojangSignature

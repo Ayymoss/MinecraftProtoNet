@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Packets.Base;

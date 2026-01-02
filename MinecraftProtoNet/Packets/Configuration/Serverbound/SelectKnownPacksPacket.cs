@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Services;
@@ -24,8 +24,8 @@ public class SelectKnownPacksPacket : IServerboundPacket
 
     public sealed class Packs
     {
-        public string Namespace { get; set; }
-        public string Id { get; set; }
-        public string Version { get; set; }
+        public required string Namespace { get; set; }
+        public required string Id { get; set; }
+        public required string Version { get; set; }
     }
 }

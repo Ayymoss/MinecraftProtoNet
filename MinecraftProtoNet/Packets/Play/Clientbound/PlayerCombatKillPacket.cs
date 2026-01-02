@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class PlayerCombatKillPacket : IClientboundPacket
 {
     public int PlayerId { get; set; }
-    public NbtTag DeathMessage { get; set; }
+    public required NbtTag DeathMessage { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

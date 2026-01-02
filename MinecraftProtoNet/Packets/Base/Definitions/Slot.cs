@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Utilities;
 using Serilog;
 
 namespace MinecraftProtoNet.Packets.Base.Definitions;

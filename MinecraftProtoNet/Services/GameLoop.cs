@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Pathfinding;
+using MinecraftProtoNet.Services;
 
 namespace MinecraftProtoNet.Services;
 

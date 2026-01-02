@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using MinecraftProtoNet.Models.Json;
 using MinecraftProtoNet.Models.World.Chunk;

@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class UpdateAttributesPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
-    public Property[] Properties { get; set; }
+    public required Property[] Properties { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

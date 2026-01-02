@@ -1,4 +1,4 @@
-﻿namespace MinecraftProtoNet.Packets.Base.Definitions;
+namespace MinecraftProtoNet.Packets.Base.Definitions;
 
 public class LightData(
     long[] skyLightMask,

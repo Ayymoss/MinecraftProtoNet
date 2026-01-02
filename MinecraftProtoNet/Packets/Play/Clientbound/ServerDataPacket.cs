@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -9,8 +9,8 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x55, ProtocolState.Play)]
 public class ServerDataPacket : IClientboundPacket
 {
-    public NbtTag Motd { get; set; }
-    public byte[] Icon { get; set; }
+    public required NbtTag Motd { get; set; }
+    public required byte[] Icon { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

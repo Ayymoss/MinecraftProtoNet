@@ -1,14 +1,20 @@
-﻿using System.Globalization;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Numerics;
 
 namespace MinecraftProtoNet.Models.Core;
 
 public class Vector3<TNumber> : IFormattable where TNumber : INumber<TNumber>
 {
+    [SetsRequiredMembers]
     public Vector3()
     {
+        X = default!;
+        Y = default!;
+        Z = default!;
     }
 
+    [SetsRequiredMembers]
     public Vector3(TNumber x, TNumber y, TNumber z)
     {
         X = x;
@@ -16,9 +22,9 @@ public class Vector3<TNumber> : IFormattable where TNumber : INumber<TNumber>
         Z = z;
     }
 
-    public TNumber X { get; set; }
-    public TNumber Y { get; set; }
-    public TNumber Z { get; set; }
+    public required TNumber X { get; set; }
+    public required TNumber Y { get; set; }
+    public required TNumber Z { get; set; }
 
     public void Set(TNumber x, TNumber y, TNumber z)
     {
@@ -113,4 +119,30 @@ public class Vector3<TNumber> : IFormattable where TNumber : INumber<TNumber>
     }
 
     public static Vector3<TNumber> Zero => new(TNumber.Zero, TNumber.Zero, TNumber.Zero);
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is Vector3<TNumber> other)
+        {
+            return X == other.X && Y == other.Y && Z == other.Z;
+        }
+        return false;
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(X, Y, Z);
+    }
+
+    public static bool operator ==(Vector3<TNumber>? left, Vector3<TNumber>? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null) return false;
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(Vector3<TNumber>? left, Vector3<TNumber>? right)
+    {
+        return !(left == right);
+    }
 }

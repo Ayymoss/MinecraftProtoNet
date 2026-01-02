@@ -1,21 +1,26 @@
-﻿using System.Numerics;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 
 namespace MinecraftProtoNet.Models.Core;
 
 public class Vector2<TNumber> where TNumber : INumber<TNumber>
 {
+    [SetsRequiredMembers]
     public Vector2()
     {
+        X = default!;
+        Y = default!;
     }
 
+    [SetsRequiredMembers]
     public Vector2(TNumber x, TNumber y)
     {
         X = x;
         Y = y;
     }
 
-    public TNumber X { get; set; }
-    public TNumber Y { get; set; }
+    public required TNumber X { get; set; }
+    public required TNumber Y { get; set; }
 
     public void Set(TNumber x, TNumber y)
     {
@@ -61,5 +66,31 @@ public class Vector2<TNumber> where TNumber : INumber<TNumber>
     public override string ToString()
     {
         return $"({X}, {Y})";
+    }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is Vector2<TNumber> other)
+        {
+            return X == other.X && Y == other.Y;
+        }
+        return false;
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(X, Y);
+    }
+
+    public static bool operator ==(Vector2<TNumber>? left, Vector2<TNumber>? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null) return false;
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(Vector2<TNumber>? left, Vector2<TNumber>? right)
+    {
+        return !(left == right);
     }
 }

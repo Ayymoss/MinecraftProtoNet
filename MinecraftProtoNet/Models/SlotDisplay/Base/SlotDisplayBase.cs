@@ -1,4 +1,4 @@
-﻿namespace MinecraftProtoNet.Models.SlotDisplay.Base;
+namespace MinecraftProtoNet.Models.SlotDisplay.Base;
 
 public class SlotDisplayBase
 {

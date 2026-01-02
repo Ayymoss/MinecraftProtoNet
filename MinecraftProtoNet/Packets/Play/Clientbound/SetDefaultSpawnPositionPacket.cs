@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x60, ProtocolState.Play)]
 public class SetDefaultSpawnPositionPacket : IClientboundPacket
 {
-    public Vector3<double> Location { get; set; }
+    public required Vector3<double> Location { get; set; }
     public float Angle { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

@@ -1,4 +1,4 @@
-﻿namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Models.World.Chunk;
 
 public enum PaletteType
 {

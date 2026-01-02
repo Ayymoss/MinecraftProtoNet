@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Packets.Play.Serverbound;

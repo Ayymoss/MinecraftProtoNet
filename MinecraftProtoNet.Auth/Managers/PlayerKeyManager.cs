@@ -198,9 +198,9 @@ public sealed class PlayerKeyManager : IDisposable
 
     private record ChatSessionInfoDto
     {
-        public string PublicKeyDerB64 { get; init; }
+        public required string PublicKeyDerB64 { get; init; }
         public long ExpiresAtEpochMs { get; init; }
-        public string MojangSignatureB64 { get; init; }
+        public required string MojangSignatureB64 { get; init; }
     }
 
     private void SaveChatSessionInfoToFile(string path)
@@ -503,17 +503,17 @@ public sealed class PlayerKeyManager : IDisposable
 
     private record UploadCertificateRequest
     {
-        [JsonPropertyName("publicKey")] public string PublicKey { get; init; }
+        [JsonPropertyName("publicKey")] public required string PublicKey { get; init; }
 
         [JsonPropertyName("publicKeySignatureV2")]
-        public string PublicKeySignatureV2 { get; init; }
+        public required string PublicKeySignatureV2 { get; init; }
 
-        [JsonPropertyName("expiresAt")] public string ExpiresAt { get; init; }
+        [JsonPropertyName("expiresAt")] public required string ExpiresAt { get; init; }
     }
 
     private record PublicKeyInfo
     {
-        public string PublicKeyPem { get; init; }
+        public required string PublicKeyPem { get; init; }
         public DateTimeOffset ExpiresAt { get; init; }
     }
 

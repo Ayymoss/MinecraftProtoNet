@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Player;
 using MinecraftProtoNet.Packets.Base;
@@ -11,7 +11,7 @@ public class LoginSuccessPacket : IClientboundPacket
 {
     public Guid UUID { get; set; }
     public string Username { get; set; } = string.Empty;
-    public Property[] Properties { get; set; }
+    public required Property[] Properties { get; set; }
 
     // TODO: This packet needs to be revised for latest protocol (1.21.4)
     public void Deserialize(ref PacketBufferReader buffer)

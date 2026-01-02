@@ -21,7 +21,7 @@ namespace MinecraftProtoNet.Handlers.Play;
 [HandlesPacket(typeof(SetEntityMotionPacket))]
 [HandlesPacket(typeof(HurtAnimationPacket))]
 [HandlesPacket(typeof(SetHealthPacket))]
-public class EntityHandler(ILogger<EntityHandler> logger) : IPacketHandler
+public class EntityHandler() : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(EntityHandler));

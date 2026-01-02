@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Player;
@@ -13,7 +13,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class SetEquipmentPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
-    public Equipment[] Equipment { get; set; }
+    public required Equipment[] Equipment { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

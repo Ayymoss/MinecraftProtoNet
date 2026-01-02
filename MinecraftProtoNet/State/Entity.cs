@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.Packets.Base.Definitions;

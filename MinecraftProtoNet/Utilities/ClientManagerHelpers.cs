@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Play.Serverbound;

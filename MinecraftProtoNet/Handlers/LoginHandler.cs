@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Auth.Authenticators;
@@ -75,7 +75,7 @@ public class LoginHandler : IPacketHandler
             _logger.LogInformation("Server requires authentication. Contacting Mojang session server...");
             // 2. Authenticate with Mojang Session Server
             var authenticated = await MinecraftAuthenticator.AuthenticateWithMojangAsync(helloPacket.ServerId, sharedSecret,
-                helloPacket.PublicKey, client.AuthResult);
+                helloPacket.PublicKey, client.AuthResult!);
 
             if (!authenticated)
             {

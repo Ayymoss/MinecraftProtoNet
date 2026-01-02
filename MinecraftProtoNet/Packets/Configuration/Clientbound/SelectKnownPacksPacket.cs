@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Utilities;
@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 [Packet(0x0E, ProtocolState.Configuration)]
 public class SelectKnownPacksPacket : IClientboundPacket
 {
-    public Packs[] KnownPacks { get; set; }
+    public required Packs[] KnownPacks { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
@@ -30,8 +30,8 @@ public class SelectKnownPacksPacket : IClientboundPacket
 
     public sealed class Packs
     {
-        public string Namespace { get; set; }
-        public string Id { get; set; }
-        public string Version { get; set; }
+        public required string Namespace { get; set; }
+        public required string Id { get; set; }
+        public required string Version { get; set; }
     }
 }

@@ -17,7 +17,7 @@ public interface IClientStateAccessor
     /// <summary>
     /// Gets the local player's entity. Always returns the current value (lazy access).
     /// </summary>
-    Entity LocalPlayer { get; }
+    Entity? LocalPlayer { get; }
 
     /// <summary>
     /// Gets the full ClientState for advanced access.

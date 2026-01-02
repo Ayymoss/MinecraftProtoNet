@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Handlers.Base;
 using MinecraftProtoNet.Packets.Base;
 using Spectre.Console;

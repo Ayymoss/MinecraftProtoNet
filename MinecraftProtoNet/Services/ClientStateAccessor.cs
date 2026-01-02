@@ -20,7 +20,7 @@ public class ClientStateAccessor : IClientStateAccessor
     public Level Level => _state.Level;
 
     /// <inheritdoc/>
-    public Entity LocalPlayer => _state.LocalPlayer.Entity;
+    public Entity? LocalPlayer => _state.LocalPlayer.Entity;
 
     /// <inheritdoc/>
     public ClientState State => _state;

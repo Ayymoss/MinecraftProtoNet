@@ -1,8 +1,8 @@
-﻿namespace MinecraftProtoNet.Models.Player;
+namespace MinecraftProtoNet.Models.Player;
 
 public class Property
 {
-    public string Name { get; set; }
-    public string Value { get; set; }
+    public required string Name { get; set; }
+    public required string Value { get; set; }
     public string? Signature { get; set; }
 }

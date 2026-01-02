@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
@@ -11,9 +11,9 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class PlayerPositionPacket : IClientboundPacket
 {
     public int TeleportId { get; set; }
-    public Vector3<double> Position { get; set; }
-    public Vector3<double> Velocity { get; set; }
-    public Vector2<float> YawPitch { get; set; }
+    public required Vector3<double> Position { get; set; }
+    public required Vector3<double> Velocity { get; set; }
+    public required Vector2<float> YawPitch { get; set; }
     public PositionFlags Flags { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

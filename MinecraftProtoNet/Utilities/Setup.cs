@@ -1,11 +1,10 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Commands;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Handlers;
 using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Pathfinding;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.State.Base;
 
@@ -31,8 +30,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
 
         // Game services
-        services.AddSingleton<IPhysicsService, PhysicsService>();
-        services.AddSingleton<IPathingService, PathingService>();
         services.AddSingleton<IClientStateAccessor, ClientStateAccessor>();
         services.AddSingleton<IGameLoop, GameLoop>();
 

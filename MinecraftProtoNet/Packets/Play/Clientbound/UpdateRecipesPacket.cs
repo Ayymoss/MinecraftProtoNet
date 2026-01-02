@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.SlotDisplay.Base;
@@ -19,7 +19,7 @@ public class UpdateRecipesPacket : IClientboundPacket
 
     public class Recipe
     {
-        public IdSet IdSet { get; set; }
-        public SlotDisplay SlotDisplay { get; set; }
+        public required IdSet IdSet { get; set; }
+        public required SlotDisplay SlotDisplay { get; set; }
     }
 }

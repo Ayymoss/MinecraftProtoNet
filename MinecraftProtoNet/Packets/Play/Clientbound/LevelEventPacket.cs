@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class LevelEventPacket : IClientboundPacket
 {
     public int EventId { get; set; }
-    public Vector3<double>  Position { get; set; }
+    public required Vector3<double>  Position { get; set; }
     public int Data { get; set; }
     public bool DisableRelativeVolume { get; set; }
 

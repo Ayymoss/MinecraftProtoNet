@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Packets.Base.Definitions;
 
 namespace MinecraftProtoNet.Models.Player;
@@ -6,7 +6,7 @@ namespace MinecraftProtoNet.Models.Player;
 public class Equipment
 {
     public EquipmentSlot Slot { get; set; }
-    public Slot Item { get; set; }
+    public required Slot Item { get; set; }
 
     public override string ToString()
     {

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Bot.Webcore</RootNamespace>
+        <AssemblyName>$(AssemblyName.Replace(' ', '_'))</AssemblyName>
+        <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+        <EnablePreviewFeatures>true</EnablePreviewFeatures>
+        <UserSecretsId>7b99bc4a-fd1a-407f-b4bb-e8a3ff1f0e18</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MinecraftProtoNet\MinecraftProtoNet.csproj" />
+        <ProjectReference Include="..\MinecraftProtoNet.Baritone\MinecraftProtoNet.Baritone.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Commands\" />
+    </ItemGroup>
+
+</Project>
+

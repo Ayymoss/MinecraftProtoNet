@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Models.World.Meta;
 using MinecraftProtoNet.NBT.Tags;
 
 namespace MinecraftProtoNet.Packets.Base.Definitions;

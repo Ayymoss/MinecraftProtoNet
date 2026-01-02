@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 [Packet(0x07, ProtocolState.Configuration)]
 public class RegistryDataPacket : IClientboundPacket
 {
-    public string RegistryId { get; set; }
+    public required string RegistryId { get; set; }
     public Dictionary<string, NbtTag?> Tags { get; set; } = new();
 
     public void Deserialize(ref PacketBufferReader buffer)

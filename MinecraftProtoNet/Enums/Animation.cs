@@ -1,4 +1,4 @@
-﻿namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Enums;
 
 public enum Animation
 {

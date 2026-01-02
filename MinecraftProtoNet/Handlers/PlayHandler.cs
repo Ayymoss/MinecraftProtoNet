@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Abstractions;
@@ -18,17 +18,9 @@ namespace MinecraftProtoNet.Handlers;
 
 [HandlesPacket(typeof(LoginPacket))]
 [HandlesPacket(typeof(PlayerPositionPacket))]
-public class PlayHandler : IPacketHandler
+public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPacketHandler
 {
     private bool _playerLoaded;
-    private readonly ILogger<PlayHandler> _logger;
-    private readonly IGameLoop _gameLoop;
-
-    public PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop)
-    {
-        _logger = logger;
-        _gameLoop = gameLoop;
-    }
 
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
@@ -46,7 +38,7 @@ public class PlayHandler : IPacketHandler
                 client.State.ServerSettings.ViewDistance = loginPacket.ViewDistance;
                 client.State.ServerSettings.SimulationDistance = loginPacket.SimulationDistance;
                 
-                if (client.AuthResult.ChatSession is not null)
+                if (client.AuthResult?.ChatSession is not null)
                 {
                     await client.SendPacketAsync(new ChatSessionUpdatePacket
                     {
@@ -76,7 +68,7 @@ public class PlayHandler : IPacketHandler
                     await client.SendPacketAsync(new PlayerLoadedPacket());
 
                     // Start the game loop (physics tick loop)
-                    _gameLoop.Start(client);
+                    gameLoop.Start(client);
 
                     _playerLoaded = true;
                 }
@@ -101,7 +93,7 @@ public class PlayHandler : IPacketHandler
                 var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
                 entity.YawPitch = new Vector2<float>(yaw, pitch);
 
-                _logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
+                logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
                     playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
                 entity.IsOnGround = false; // Reset on-ground state until next physics tick
                 

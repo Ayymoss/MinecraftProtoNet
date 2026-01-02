@@ -229,6 +229,8 @@ public class InventoryManager(
         if (heldItem.ItemId == null) return 1.0f;
 
         var itemName = itemRegistry.GetItemName(heldItem.ItemId.Value);
+        if (string.IsNullOrEmpty(itemName)) return 1.0f;
+        
         var toolType = ToolData.GetToolType(itemName);
         
         float speed = 1.0f;
@@ -257,6 +259,8 @@ public class InventoryManager(
             if (item.ItemId == null || item.ItemId <= 0 || item.ItemCount <= 0) continue;
 
             var name = itemRegistry.GetItemName(item.ItemId.Value);
+            if (string.IsNullOrEmpty(name)) continue;
+
             var tier = ToolData.GetToolTier(name);
             var type = ToolData.GetToolType(name);
 

@@ -51,25 +51,6 @@ public class Path
         ReachesGoal = reachesGoal;
     }
 
-    /// <summary>
-    /// Creates a path by backtracking from the end node to the start.
-    /// </summary>
-    public static Path FromEndNode(PathNode endNode, IGoal goal, int numNodesConsidered)
-    {
-        var positions = new List<(int, int, int)>();
-        var current = endNode;
-
-        while (current != null)
-        {
-            positions.Add((current.X, current.Y, current.Z));
-            current = current.Previous;
-        }
-
-        positions.Reverse();
-
-        var reachesGoal = goal.IsInGoal(endNode.X, endNode.Y, endNode.Z);
-        return new Path(positions, goal, numNodesConsidered, reachesGoal);
-    }
 
     public override string ToString()
     {

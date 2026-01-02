@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x5F, ProtocolState.Play)]
 public class SetCursorItemPacket : IClientboundPacket
 {
-    public Slot Contents { get; set; }
+    public required Slot Contents { get; set; }
 
     public void Deserialize(ref PacketBufferReader reader)
     {

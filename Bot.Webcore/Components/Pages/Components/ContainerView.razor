@@ -1,0 +1,69 @@
+@using Bot.Webcore.Services
+@using MinecraftProtoNet.Packets.Base.Definitions
+@using MinecraftProtoNet.Enums
+@using MinecraftProtoNet.State
+@using MinecraftProtoNet.Utilities
+@inject BotService Bot
+@inject DragDropState DragState
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl">
+    @if (Container is null || !Container.IsOpen)
+    {
+        <div class="text-center py-8 text-gray-500">
+            <i class="ph-duotone ph-storefront text-4xl mb-2 block"></i>
+            <p>No container open</p>
+        </div>
+    }
+    else
+    {
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <i class="ph-duotone @GetContainerIcon() text-2xl text-amber-400"></i>
+                <h2 class="text-xl font-semibold text-gray-100">@Container.Title</h2>
+            </div>
+            <button @onclick="CloseContainer" 
+                    class="text-gray-400 hover:text-red-400 transition-colors">
+                <i class="ph-bold ph-x text-xl"></i>
+            </button>
+        </div>
+
+        @if (Container.Type == MenuType.Merchant && Container.MerchantData != null)
+        {
+            <MerchantView MerchantData="Container.MerchantData" OnTradeSelected="SelectTrade" />
+        }
+        else
+        {
+            <!-- Container Slots Grid -->
+            <div class="mb-4">
+                <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide">Container (@Container.Type)</p>
+                <div class="grid gap-1" style="grid-template-columns: repeat(@GetColumnCount(), minmax(0, 1fr));">
+                    @for (int i = 0; i < GetSlotCount(); i++)
+                    {
+                        var slotIndex = (short)i;
+                        var slot = Container.GetSlot(slotIndex);
+                        var isDragging = DragState.IsDragging && DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
+                        
+                        <div class="@GetSlotClass(isDragging) group relative cursor-pointer"
+                             @onclick="e => OnSlotClick(slotIndex, e)"
+                             draggable="true"
+                             @ondragstart="() => OnDragStart(slotIndex, slot)"
+                             @ondrop="() => OnDrop(slotIndex)"
+                             @ondragover:preventDefault
+                             title="@GetSlotTooltip(slot)">
+                            @if (slot is { ItemCount: > 0, ItemId: not null })
+                            {
+                                <span class="text-[10px] leading-tight text-center break-words hyphens-auto">
+                                    @GetItemDisplayName(slot)
+                                </span>
+                                <span class="absolute bottom-0.5 right-1 text-[9px] text-amber-400 font-bold">
+                                    @slot.ItemCount
+                                </span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>

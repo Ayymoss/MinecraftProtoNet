@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 
 namespace MinecraftProtoNet.Services;

@@ -49,7 +49,7 @@ public class ChatHandler(ILogger<ChatHandler> logger) : IPacketHandler
                     playerChatPacket.Body.Message,
                     signatureHex);
 
-                if (signatureBytes is not null)
+                if (signatureBytes is not null && client.AuthResult is not null)
                 {
                     ChatSigning.ChatMessageReceived(client.AuthResult, signatureBytes);
                 }

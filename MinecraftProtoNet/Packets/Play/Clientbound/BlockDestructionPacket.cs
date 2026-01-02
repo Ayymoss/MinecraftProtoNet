@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class BlockDestructionPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
-    public Vector3<double> Location { get; set; }
+    public required Vector3<double> Location { get; set; }
     public byte Stage { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

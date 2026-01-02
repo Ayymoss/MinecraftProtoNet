@@ -124,7 +124,7 @@ public static class PhysicsConstants
     /// Maximum step height for automatic stepping up blocks.
     /// Source: Attributes.STEP_HEIGHT default for players
     /// </summary>
-    public const double DefaultStepHeight = 0.6;
+    public const double DefaultStepHeight = 1.0;
 
     /// <summary>
     /// Player bounding box width.

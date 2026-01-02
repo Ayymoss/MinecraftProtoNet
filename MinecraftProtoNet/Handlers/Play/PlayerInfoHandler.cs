@@ -13,7 +13,7 @@ namespace MinecraftProtoNet.Handlers.Play;
 /// </summary>
 [HandlesPacket(typeof(PlayerInfoUpdatePacket))]
 [HandlesPacket(typeof(PlayerInfoRemovePacket))]
-public class PlayerInfoHandler(ILogger<PlayerInfoHandler> logger) : IPacketHandler
+public class PlayerInfoHandler() : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayerInfoHandler));

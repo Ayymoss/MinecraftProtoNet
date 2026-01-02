@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Packets.Base.Definitions;
@@ -12,7 +12,7 @@ public class ContainerSetSlotPacket : IClientboundPacket
     public int WindowId { get; set; }
     public int StateId { get; set; }
     public short SlotToUpdate { get; set; }
-    public Slot Slot { get; set; }
+    public required Slot Slot { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

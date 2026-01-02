@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -11,8 +11,8 @@ public class LevelParticlesPacket : IClientboundPacket
 {
     public bool LongDistance { get; set; }
     public bool AlwaysVisible { get; set; }
-    public Vector3<double> Position { get; set; }
-    public Vector3<float> Offset { get; set; }
+    public required Vector3<double> Position { get; set; }
+    public required Vector3<float> Offset { get; set; }
     public float MaxSpeed { get; set; }
     public int ParticleCount { get; set; }
     // ParticleId and Data are read from particle codec - skipped for now

@@ -8,6 +8,11 @@ public class SprintCommand : ICommand
     public async Task ExecuteAsync(CommandContext ctx)
     {
         var entity = ctx.State.LocalPlayer.Entity;
+        if (entity == null)
+        {
+            await ctx.SendChatAsync("Local player entity not found.");
+            return;
+        }
         
         // Check for explicit start/stop
         if (ctx.Arguments.Length > 0)

@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Auth.Dtos;
+using MinecraftProtoNet.Auth.Dtos;
 using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.State.Base;
@@ -10,7 +10,7 @@ public interface IMinecraftClient : IPacketSender
     ProtocolState ProtocolState { get; set; }
     ClientState State { get; }
     int ProtocolVersion { get; set; }
-    AuthResult AuthResult { get; set; }
+    AuthResult? AuthResult { get; set; }
     
     /// <summary>
     /// Whether the client is currently connected to a server.

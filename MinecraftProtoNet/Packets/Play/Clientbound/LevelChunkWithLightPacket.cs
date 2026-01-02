@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
@@ -12,7 +12,7 @@ public class LevelChunkWithLightPacket : IClientboundPacket
 {
     public int ChunkX { get; set; }
     public int ChunkZ { get; set; }
-    public Chunk Chunk { get; set; }
+    public required Chunk Chunk { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

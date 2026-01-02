@@ -16,17 +16,17 @@ public class MinecraftAuthenticator
 
     public class MinecraftLoginResponse
     {
-        [JsonPropertyName("username")] string Username { get; init; }
-        [JsonPropertyName("roles")] public string[] Roles { get; init; }
-        [JsonPropertyName("access_token")] public string AccessToken { get; init; }
-        [JsonPropertyName("token_type")] public string TokenType { get; init; }
+        [JsonPropertyName("username")] public required string Username { get; init; }
+        [JsonPropertyName("roles")] public required string[] Roles { get; init; }
+        [JsonPropertyName("access_token")] public required string AccessToken { get; init; }
+        [JsonPropertyName("token_type")] public required string TokenType { get; init; }
         [JsonPropertyName("expires_in")] public int ExpiresIn { get; init; }
     }
 
     public class MinecraftProfile
     {
-        [JsonPropertyName("id")] public string Id { get; init; }
-        [JsonPropertyName("name")] public string Name { get; init; }
+        [JsonPropertyName("id")] public required string Id { get; init; }
+        [JsonPropertyName("name")] public required string Name { get; init; }
     }
 
     public async Task<MinecraftLoginResponse?> LoginWithXboxAsync(string userHash, string xstsToken)

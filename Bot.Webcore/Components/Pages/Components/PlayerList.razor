@@ -1,0 +1,88 @@
+@inject BotService Bot
+@using Bot.Webcore.Services
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl h-full">
+    <div class="flex items-center gap-3 mb-6">
+        <i class="ph-duotone ph-users-three text-2xl text-blue-400"></i>
+        <h2 class="text-xl font-semibold text-gray-100">Players</h2>
+        @if (Bot.IsConnected)
+        {
+            <span class="ml-auto text-sm text-gray-500">@GetOtherPlayerCount() online</span>
+        }
+    </div>
+
+    @if (!Bot.IsConnected)
+    {
+        <div class="text-center py-8 text-gray-500">
+            <i class="ph-duotone ph-user-circle text-4xl mb-2 block"></i>
+            <p>Connect to view players</p>
+        </div>
+    }
+    else
+    {
+        var localUuid = Bot.State.LocalPlayer?.Uuid ?? Guid.Empty;
+        var players = Bot.State.Level.GetAllPlayers()
+            .Where(p => p.Uuid != localUuid)
+            .ToList();
+        
+        @if (players.Count == 0)
+        {
+            <div class="text-center py-8 text-gray-500">
+                <i class="ph-duotone ph-user-circle-minus text-4xl mb-2 block"></i>
+                <p>No other players nearby</p>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                @foreach (var player in players)
+                {
+                    var entity = player.Entity;
+                    <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/30 hover:border-slate-600/50 transition-all">
+                        <!-- Avatar placeholder -->
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
+                            <i class="ph-duotone ph-user text-lg text-slate-400"></i>
+                        </div>
+                        
+                        <!-- Player info -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse flex-shrink-0"></span>
+                                <span class="font-medium text-gray-100 truncate">@(player.Username ?? "Unknown")</span>
+                            </div>
+                            
+                            @if (entity != null)
+                            {
+                                <!-- Health bar -->
+                                <div class="flex items-center gap-2 mt-1">
+                                    <i class="ph ph-heart text-red-400 text-xs"></i>
+                                    <div class="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                        <div class="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all" 
+                                             style="width: @(Math.Clamp(entity.Health / 20f * 100, 0, 100))%"></div>
+                                    </div>
+                                    <span class="text-[10px] text-gray-500 w-8">@entity.Health.ToString("F0")/20</span>
+                                </div>
+                                
+                                <!-- Position and held item -->
+                                <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                    <span title="Position">
+                                        <i class="ph ph-map-pin mr-0.5"></i>
+                                        @FormatPosition(entity.Position.X, entity.Position.Y, entity.Position.Z)
+                                    </span>
+                                    @if (entity.HeldItem.ItemId.HasValue && entity.HeldItem.ItemCount > 0)
+                                    {
+                                        <span title="Held Item" class="text-amber-400">
+                                            <i class="ph ph-hand-grabbing mr-0.5"></i>
+                                            @GetItemName(entity.HeldItem.ItemId.Value)
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>

@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x08, ProtocolState.Play)]
 public class BlockUpdatePacket : IClientboundPacket
 {
-    public Vector3<double> Position { get; set; }
+    public required Vector3<double> Position { get; set; }
     public int BlockId { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

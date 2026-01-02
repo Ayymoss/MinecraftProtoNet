@@ -141,7 +141,7 @@ public class CommandRegistry
         try
         {
             // Create a context with no sender (external execution)
-            var context = new CommandContext(client, client.State, client.AuthResult, Guid.Empty, args);
+            var context = new CommandContext(client, client.State, client.AuthResult!, Guid.Empty, args);
             await command.ExecuteAsync(context);
             return (true, $"Command '{commandName}' executed successfully");
         }

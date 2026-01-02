@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -9,11 +9,11 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x40, ProtocolState.Play)]
 public class PlayerChatPacket : IClientboundPacket
 {
-    public HeaderPayload Header { get; set; }
-    public BodyPayload Body { get; set; }
-    public MessageValidationPayload[] Validations { get; set; }
-    public OtherPayload Other { get; set; }
-    public FormattingPayload Formatting { get; set; }
+    public required HeaderPayload Header { get; set; }
+    public required BodyPayload Body { get; set; }
+    public required MessageValidationPayload[] Validations { get; set; }
+    public required OtherPayload Other { get; set; }
+    public required FormattingPayload Formatting { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

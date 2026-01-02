@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 
@@ -8,8 +8,8 @@ public class RaycastHit
 {
     public BlockState? Block { get; set; }
     public BlockFace Face { get; set; }
-    public Vector3<int> BlockPosition { get; set; }
-    public Vector3<double> ExactHitPosition { get; set; }
+    public required Vector3<int> BlockPosition { get; set; }
+    public required Vector3<double> ExactHitPosition { get; set; }
     public double Distance { get; set; }
     public bool InsideBlock { get; set; }
 

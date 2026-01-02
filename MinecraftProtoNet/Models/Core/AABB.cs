@@ -1,4 +1,4 @@
-﻿namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Models.Core;
 
 // ReSharper disable once InconsistentNaming
 public struct AABB

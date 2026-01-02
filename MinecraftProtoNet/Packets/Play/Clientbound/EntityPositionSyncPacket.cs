@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -10,9 +10,9 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 public class EntityPositionSyncPacket : IClientboundPacket
 {
     public int EntityId { get; set; }
-    public Vector3<double> Position { get; set; }
-    public Vector3<double> Velocity { get; set; }
-    public Vector2<float> YawPitch { get; set; }
+    public required Vector3<double> Position { get; set; }
+    public required Vector3<double> Velocity { get; set; }
+    public required Vector2<float> YawPitch { get; set; }
     public bool OnGround { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

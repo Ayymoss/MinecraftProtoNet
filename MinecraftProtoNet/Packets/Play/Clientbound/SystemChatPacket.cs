@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.NBT.Tags;
 using MinecraftProtoNet.Packets.Base;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Play.Clientbound;
 [Packet(0x78, ProtocolState.Play)]
 public class SystemChatPacket : IClientboundPacket
 {
-    public NbtTag Tags { get; set; }
+    public required NbtTag Tags { get; set; }
     public bool Overlay { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)

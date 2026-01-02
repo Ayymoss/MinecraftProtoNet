@@ -1,4 +1,4 @@
-﻿using MinecraftProtoNet.Attributes;
+using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -12,8 +12,8 @@ public class AddEntityPacket : IClientboundPacket
     public int EntityId { get; set; }
     public Guid EntityUuid { get; set; }
     public int Type { get; set; }
-    public Vector3<double> Position { get; set; }
-    public Vector3<double> Velocity { get; set; }
+    public required Vector3<double> Position { get; set; }
+    public required Vector3<double> Velocity { get; set; }
     public sbyte Pitch { get; set; }
     public sbyte Yaw { get; set; }
     public sbyte HeadYaw { get; set; }

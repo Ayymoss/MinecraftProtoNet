@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
 [Packet(0x02, ProtocolState.Configuration)]
 public class DisconnectPacket : IClientboundPacket
 {
-    public string Reason { get; set; }
+    public required string Reason { get; set; }
 
     public void Deserialize(ref PacketBufferReader buffer)
     {

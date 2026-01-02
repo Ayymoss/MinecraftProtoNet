@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +6,7 @@ using MinecraftProtoNet.Attributes;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Packets.Base;
 using MinecraftProtoNet.Services;
+using System.Diagnostics.CodeAnalysis;
 using MinecraftProtoNet.Utilities;
 
 namespace MinecraftProtoNet.Packets.Play.Serverbound;
@@ -13,6 +14,7 @@ namespace MinecraftProtoNet.Packets.Play.Serverbound;
 [Packet(0x08, ProtocolState.Play)]
 public class ChatPacket : IServerboundPacket
 {
+    [SetsRequiredMembers]
      public ChatPacket(string message)
     {
         Message = message;
@@ -27,7 +29,7 @@ public class ChatPacket : IServerboundPacket
     {
     }
 
-    [MaxLength(256)] public string Message { get; set; }
+    [MaxLength(256)] public required string Message { get; set; }
     public long Timestamp { get; set; }
     public long Salt { get; set; }
 

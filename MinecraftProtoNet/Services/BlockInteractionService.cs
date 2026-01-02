@@ -4,8 +4,9 @@ using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Enums;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Pathfinding;
+using MinecraftProtoNet.Services;
 using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Pathfinding;
 using Serilog;
 
 namespace MinecraftProtoNet.Services;
@@ -22,7 +23,6 @@ public class BlockInteractionService(
     private bool _isBreaking;
     private (int X, int Y, int Z)? _currentBreakPos;
     private int _breakTicksRemaining;
-    private int _breakSequence;
     private bool _breakStartSent;
 
     /// <summary>
@@ -131,8 +131,11 @@ public class BlockInteractionService(
         }
 
         // Check if target block is already air
-        var targetBlock = state.Level.GetBlockAt(x, y, z);
-        if (targetBlock.IsAir)
+        var level = state.Level;
+        if (level == null) return false;
+        
+        var targetBlock = level.GetBlockAt(x, y, z);
+        if (targetBlock == null || targetBlock.IsAir)
         {
             // Block already broken - reset state for next block
             if (_isBreaking && _currentBreakPos == newPos)
