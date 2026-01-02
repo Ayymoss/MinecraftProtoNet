@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using MinecraftProtoNet.Models.Core;
 using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.Models.World.Meta;
+using MinecraftProtoNet.Physics;
 using MinecraftProtoNet.Physics.Shapes;
 using MinecraftProtoNet.State;
 
@@ -107,18 +108,120 @@ public class TestChunkManager : IChunkManager
         return result;
     }
 
+    private readonly IBlockShapeRegistry _blockShapeRegistry = new BlockShapeRegistry();
+
     public IEnumerable<VoxelShape> GetCollidingShapes(AABB queryBox)
     {
-        var aabbs = GetCollidingBlockAABBs(queryBox);
-        foreach (var box in aabbs)
+        int minX = (int)Math.Floor(queryBox.Min.X);
+        int maxX = (int)Math.Ceiling(queryBox.Max.X);
+        int minY = (int)Math.Floor(queryBox.Min.Y);
+        int maxY = (int)Math.Ceiling(queryBox.Max.Y);
+        int minZ = (int)Math.Floor(queryBox.Min.Z);
+        int maxZ = (int)Math.Ceiling(queryBox.Max.Z);
+
+        for (int x = minX; x < maxX; x++)
+        for (int y = minY; y < maxY; y++)
+        for (int z = minZ; z < maxZ; z++)
         {
-            yield return Shapes.Block().Move(box.Min.X, box.Min.Y, box.Min.Z);
+            var block = GetBlockAt(x, y, z);
+            if (block is { BlocksMotion: true, IsAir: false })
+            {
+                var shape = _blockShapeRegistry.GetShape(block);
+                if (!shape.IsEmpty())
+                {
+                    var movedShape = shape.Move(x, y, z);
+                    // Check if the shape actually intersects the queryBox
+                    if (queryBox.Intersects(movedShape.Bounds()))
+                    {
+                        yield return movedShape;
+                    }
+                }
+            }
         }
     }
     
     public RaycastHit? RayCast(Vector3<double> start, Vector3<double> direction, double maxDistance = 100.0)
     {
-        // Simplified raycast for testing
+        var length = Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y + direction.Z * direction.Z);
+        if (length < 1e-10) return null;
+
+        var normDir = new Vector3<double>(direction.X / length, direction.Y / length, direction.Z / length);
+        var end = start + normDir * maxDistance;
+
+        var x = (int)Math.Floor(start.X);
+        var y = (int)Math.Floor(start.Y);
+        var z = (int)Math.Floor(start.Z);
+
+        var stepX = normDir.X > 0 ? 1 : -1;
+        var stepY = normDir.Y > 0 ? 1 : -1;
+        var stepZ = normDir.Z > 0 ? 1 : -1;
+
+        var tMaxX = normDir.X != 0 ? (stepX > 0 ? x + 1 - start.X : start.X - x) / Math.Abs(normDir.X) : double.MaxValue;
+        var tMaxY = normDir.Y != 0 ? (stepY > 0 ? y + 1 - start.Y : start.Y - y) / Math.Abs(normDir.Y) : double.MaxValue;
+        var tMaxZ = normDir.Z != 0 ? (stepZ > 0 ? z + 1 - start.Z : start.Z - z) / Math.Abs(normDir.Z) : double.MaxValue;
+
+        var tDeltaX = normDir.X != 0 ? Math.Abs(1.0 / normDir.X) : double.MaxValue;
+        var tDeltaY = normDir.Y != 0 ? Math.Abs(1.0 / normDir.Y) : double.MaxValue;
+        var tDeltaZ = normDir.Z != 0 ? Math.Abs(1.0 / normDir.Z) : double.MaxValue;
+
+        // Check start block first
+        var hit = CheckBlock(x, y, z, start, end);
+        if (hit != null) return hit;
+
+        var maxSteps = Math.Max(10, (int)(maxDistance * 3)); // Heuristic limit
+        var steps = 0;
+
+        while (steps < maxSteps)
+        {
+            if (tMaxX < tMaxY && tMaxX < tMaxZ)
+            {
+                if (tMaxX > maxDistance) break;
+                x += stepX;
+                tMaxX += tDeltaX;
+            }
+            else if (tMaxY < tMaxZ)
+            {
+                if (tMaxY > maxDistance) break;
+                y += stepY;
+                tMaxY += tDeltaY;
+            }
+            else
+            {
+                 if (tMaxZ > maxDistance) break;
+                z += stepZ;
+                tMaxZ += tDeltaZ;
+            }
+
+            hit = CheckBlock(x, y, z, start, end);
+            if (hit != null) return hit;
+
+            steps++;
+        }
+
+        return null;
+    }
+
+    private RaycastHit? CheckBlock(int x, int y, int z, Vector3<double> start, Vector3<double> end)
+    {
+        var block = GetBlockAt(x, y, z);
+        if (block == null || block.IsAir || block.IsLiquid) return null;
+
+        var shape = _blockShapeRegistry.GetShape(block);
+        if (shape.IsEmpty()) return null;
+
+        var clipResult = shape.Clip(start, end, new Vector3<int>(x, y, z));
+        if (clipResult != null && clipResult.Value.Hit)
+        {
+            return new RaycastHit
+            {
+                Block = block,
+                Face = clipResult.Value.Face,
+                InsideBlock = false,
+                BlockPosition = new Vector3<int>(x, y, z),
+                ExactHitPosition = clipResult.Value.Point,
+                Distance = (clipResult.Value.Point - start).Length()
+            };
+        }
         return null;
     }
 

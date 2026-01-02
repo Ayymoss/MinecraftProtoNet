@@ -18,7 +18,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     private IGoal? _goal;
     private CalculationContext? _context;
 
-    private AStarPathFinder? _inProgress;
+    private IPathFinder? _inProgress;
     private readonly Lock _pathCalcLock = new();
     private readonly Lock _pathPlanLock = new();
 
@@ -26,6 +26,11 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     private int _ticksElapsedSoFar;
     private (int X, int Y, int Z)? _startPosition;
     
+    // Backoff and State
+    private int _failureCount;
+    private int _ticksUntilNextCalculation;
+    private bool _paused;
+
     // Track current entity for teleport event subscription
     private Entity? _subscribedEntity;
 
@@ -56,6 +61,12 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     public Func<int, int, int, bool>? OnBreakBlockRequest { get; set; }
 
     /// <summary>
+    /// Factory for creating pathfinders. Can be replaced for testing.
+    /// </summary>
+    public Func<CalculationContext, IGoal, int, int, int, IPathFinder> PathFinderFactory { get; set; } = 
+        (ctx, goal, x, y, z) => new AStarPathFinder(ctx, goal, x, y, z);
+
+    /// <summary>
     /// Callback to get best tool speed.
     /// </summary>
     public Func<Models.World.Chunk.BlockState, float>? GetBestToolSpeed { get; set; }
@@ -84,6 +95,29 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     /// Gets whether it's safe to cancel the current path.
     /// </summary>
     public bool IsSafeToCancel => _safeToCancel;
+
+    /// <summary>
+    /// Gets whether pathing is currently paused.
+    /// </summary>
+    public bool IsPaused => _paused;
+
+    /// <summary>
+    /// Pauses pathing execution.
+    /// </summary>
+    public void Pause()
+    {
+        _paused = true;
+        OnStateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Resumes pathing execution.
+    /// </summary>
+    public void Resume()
+    {
+        _paused = false;
+        OnStateChanged?.Invoke();
+    }
 
     /// <summary>
     /// Sets the goal and starts pathfinding.
@@ -139,6 +173,13 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     /// </summary>
     public void OnTick(Entity entity)
     {
+        if (_paused) return;
+
+        if (_ticksUntilNextCalculation > 0)
+        {
+            _ticksUntilNextCalculation--;
+        }
+
         lock (_pathPlanLock)
         {
             if (_current == null)
@@ -148,6 +189,16 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 {
                     _subscribedEntity.OnServerTeleport -= HandleServerTeleport;
                     _subscribedEntity = null;
+                }
+
+                // Retry if we have a goal but no calculation or path
+                lock (_pathCalcLock)
+                {
+                    if (_inProgress == null && _goal != null && _ticksUntilNextCalculation == 0)
+                    {
+                        var startPos = GetPathStart(entity);
+                        StartPathCalculation(startPos);
+                    }
                 }
                 return;
             }
@@ -340,48 +391,68 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     {
         if (_goal == null || _context == null) return;
 
-        var pathfinder = new AStarPathFinder(_context, _goal, start.X, start.Y, start.Z);
+        var pathfinder = PathFinderFactory(_context, _goal, start.X, start.Y, start.Z);
         _inProgress = pathfinder;
         OnStateChanged?.Invoke();
 
         // Run async
         Task.Run(() =>
         {
-            var (resultType, path) = pathfinder.Calculate(PrimaryTimeoutMs, FailureTimeoutMs);
+            PathCalculationResultType resultType;
+            Path? path;
+            try
+            {
+                (resultType, path) = pathfinder.Calculate(PrimaryTimeoutMs, FailureTimeoutMs);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[PathingBehavior] Exception during path calculation");
+                resultType = PathCalculationResultType.Failure;
+                path = null;
+            }
 
             lock (_pathPlanLock)
             {
-                if (path != null)
+                if (resultType == PathCalculationResultType.Success || resultType == PathCalculationResultType.PartialSuccess)
                 {
-                    OnPathCalculated?.Invoke(path);
-
-                    // Detect stuck state: if path has only 1 position, there are no valid moves
-                    if (path.Positions.Count <= 1)
+                    if (path != null)
                     {
-                        logger.LogWarning("[PathingBehavior] Path has no movements (1 position only). Bot is stuck - no valid moves from current location.");
-                        // Don't create executor - this would just immediately finish and retry
-                        // Let the goal remain so user can diagnose, but don't loop
-                        lock (_pathCalcLock)
+                        _failureCount = 0; // Reset backoff on success
+                        OnPathCalculated?.Invoke(path);
+
+                        // Detect stuck state: if path has only 1 position, there are no valid moves
+                        if (path.Positions.Count <= 1)
                         {
-                            _inProgress = null;
+                            logger.LogWarning("[PathingBehavior] Path has no movements (1 position only). Bot is stuck - no valid moves from current location.");
+                            lock (_pathCalcLock)
+                            {
+                                _inProgress = null;
+                            }
+                            OnStateChanged?.Invoke();
+                            return;
                         }
-                        OnStateChanged?.Invoke();
-                        return;
-                    }
 
-                    var executor = new PathExecutor(loggerFactory.CreateLogger<PathExecutor>(), path, _context);
-                    executor.OnPlaceBlockRequest = OnPlaceBlockRequest;
-                    executor.OnBreakBlockRequest = OnBreakBlockRequest;
+                        var executor = new PathExecutor(loggerFactory.CreateLogger<PathExecutor>(), path, _context);
+                        executor.OnPlaceBlockRequest = OnPlaceBlockRequest;
+                        executor.OnBreakBlockRequest = OnBreakBlockRequest;
 
-                    if (_current == null)
-                    {
-                        _current = executor;
+                        if (_current == null)
+                        {
+                            _current = executor;
+                        }
+                        else if (_next == null)
+                        {
+                            _next = executor;
+                        }
                     }
-                    else if (_next == null)
-                    {
-                        _next = executor;
-                    }
-                    OnStateChanged?.Invoke();
+                }
+                else if (resultType == PathCalculationResultType.Failure || resultType == PathCalculationResultType.Timeout)
+                {
+                    _failureCount++;
+                    // Backoff: 20 ticks (1s), 40, 80, up to 10s (200 ticks)
+                    _ticksUntilNextCalculation = Math.Min(200, 20 * (int)Math.Pow(2, Math.Min(5, _failureCount - 1)));
+                    logger.LogWarning("[PathingBehavior] Path calculation {Result}. Failure count: {Count}. Backoff: {Ticks} ticks", 
+                        resultType, _failureCount, _ticksUntilNextCalculation);
                 }
 
                 lock (_pathCalcLock)

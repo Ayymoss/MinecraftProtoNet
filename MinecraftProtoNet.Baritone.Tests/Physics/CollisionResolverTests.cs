@@ -265,4 +265,75 @@ public class CollisionResolverTests
     }
     
     #endregion
+    
+    #region Complex Shapes (Slabs & Stairs)
+
+    [Fact]
+    public void MoveWithCollisions_WalkingOnSlab_MaintainsHeight()
+    {
+        // Arrange
+        // Bottom slab at (1, 63, 0)
+        var (level, player) = TestWorldBuilder.Create()
+            .WithFloor(62)
+            .WithBlock(1, 63, 0, "minecraft:stone_slab", properties: new() { ["type"] = "bottom" })
+            .WithPlayer(0.5, 63.0, 0.5) // Player standing on floor
+            .BuildWithPlayer();
+        
+        var delta = new Vector3<double>(1.0, 0, 0); // Try to walk onto slab
+        
+        // Act
+        var result = CollisionResolver.MoveWithCollisions(player.GetBoundingBox(), level, delta, wasOnGround: true, isSneaking: false);
+        
+        // Assert
+        // Should have stepped up to 63.5 (bottom slab height is 0.5)
+        result.FinalBoundingBox.MinY.Should().BeApproximately(63.5, 0.001);
+        result.FinalBoundingBox.MinX.Should().BeApproximately(1.2, 0.001); // Center at 1.5 - halfWidth(0.3)
+    }
+
+    [Fact]
+    public void MoveWithCollisions_WalkingUnderUpperSlab_MaintainsHeadroom()
+    {
+        // Arrange
+        // Upper slab at (1, 65, 0) - this leaves 1.5 blocks of space (63 to 65.5)
+        // Wait, player height is 1.8. 1.5 blocks is NOT enough.
+        // Let's use slab at 66.
+        var (level, player) = TestWorldBuilder.Create()
+            .WithFloor(63)
+            .WithBlock(1, 65, 0, "minecraft:stone_slab", properties: new() { ["type"] = "top" })
+            .WithPlayer(0.5, 64.0, 0.5)
+            .BuildWithPlayer();
+        
+        var delta = new Vector3<double>(1.0, 0, 0);
+        
+        // Act
+        // Distance from floor (64) to bottom of top slab (65.5) is 1.5.
+        // Player height is 1.8. Collision should occur.
+        var result = CollisionResolver.MoveWithCollisions(player.GetBoundingBox(), level, delta, wasOnGround: true, isSneaking: false);
+        
+        // Assert
+        result.FinalBoundingBox.MinX.Should().BeLessThan(1.0); // Blocked
+    }
+
+    [Fact]
+    public void MoveWithCollisions_StepUpStairs_Works()
+    {
+        // Arrange
+        var (level, player) = TestWorldBuilder.Create()
+            .WithFloor(63)
+            .WithBlock(1, 64, 0, "minecraft:oak_stairs", properties: new() { ["half"] = "bottom" })
+            .WithPlayer(0.5, 64.0, 0.5)
+            .BuildWithPlayer();
+        
+        var delta = new Vector3<double>(1.0, 0, 0);
+        
+        // Act
+        var result = CollisionResolver.MoveWithCollisions(player.GetBoundingBox(), level, delta, wasOnGround: true, isSneaking: false);
+        
+        // Assert
+        // Should step up half a block (0.5)
+        result.FinalBoundingBox.MinY.Should().BeApproximately(64.5, 0.001);
+        result.FinalBoundingBox.MinX.Should().BeApproximately(1.2, 0.001); // Center at 1.5 - halfWidth(0.3)
+    }
+
+    #endregion
 }

@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Models.Core;
+using MinecraftProtoNet.Models.World.Chunk;
 using MinecraftProtoNet.State;
 
 namespace MinecraftProtoNet.Baritone.Tests.Infrastructure;
@@ -30,9 +31,18 @@ public class TestWorldBuilder
     /// <summary>
     /// Sets a single block.
     /// </summary>
-    public TestWorldBuilder WithBlock(int x, int y, int z, string blockName, bool hasCollision = true)
+    public TestWorldBuilder WithBlock(int x, int y, int z, string blockName, bool hasCollision = true, Dictionary<string, string>? properties = null)
     {
-        _chunkManager.SetBlock(x, y, z, blockName, hasCollision);
+        int id = (blockName.EndsWith("air", StringComparison.OrdinalIgnoreCase)) ? 0 : (blockName.GetHashCode() & 0x7FFF) | 0x8000;
+        var state = new BlockState(id, blockName)
+        {
+            HasCollision = hasCollision
+        };
+        if (properties != null)
+        {
+            foreach (var kvp in properties) state.Properties[kvp.Key] = kvp.Value;
+        }
+        _chunkManager.SetBlock(x, y, z, state);
         return this;
     }
 

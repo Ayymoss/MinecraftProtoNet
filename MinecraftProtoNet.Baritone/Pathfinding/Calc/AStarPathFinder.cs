@@ -11,28 +11,13 @@ using MinecraftProtoNet.Pathfinding;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Calc;
 
-/// <summary>
-/// Result of a path calculation.
-/// </summary>
-public enum PathCalculationResultType
-{
-    /// <summary>Path found that reaches the goal.</summary>
-    Success,
-    /// <summary>Partial path found (best effort).</summary>
-    PartialSuccess,
-    /// <summary>No path could be found.</summary>
-    Failure,
-    /// <summary>Calculation was cancelled.</summary>
-    Cancelled,
-    /// <summary>Calculation timed out.</summary>
-    Timeout
-}
+
 
 /// <summary>
 /// A* pathfinding algorithm implementation.
 /// Based on Baritone's AStarPathFinder.java.
 /// </summary>
-public class AStarPathFinder(CalculationContext context, IGoal goal, int startX, int startY, int startZ)
+public class AStarPathFinder(CalculationContext context, IGoal goal, int startX, int startY, int startZ) : IPathFinder
 {
     private readonly Dictionary<long, PathNode> _nodeMap = new();
     private readonly BinaryHeapOpenSet _openSet = new();

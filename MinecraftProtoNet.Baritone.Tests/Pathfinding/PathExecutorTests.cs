@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MinecraftProtoNet.Baritone.Pathfinding;
 using MinecraftProtoNet.Baritone.Pathfinding.Calc;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement;
@@ -129,5 +130,72 @@ public class PathExecutorTests
 
         // Assert
         Assert.True(skip, "Should detect blocked head and request skip/safe mode");
+    }
+
+    [Fact]
+    public void TestOnTick_PathRecovery_Forward()
+    {
+        // Arrange: Path with 3 nodes. We are at node 0, but entity is actually at node 1.
+        var path = new Path(new List<(int X, int Y, int Z)>
+        {
+            (0, 64, 0), (0, 64, 1), (0, 64, 2)
+        }, _goalMock.Object, 10, true);
+
+        // We need enough movements to skip forward i+3
+        // Actually, let's just make a longer path
+        var longPathPositions = new List<(int, int, int)>();
+        for (int i = 0; i < 10; i++) longPathPositions.Add((0, 64, i));
+        
+        var longPath = new Path(longPathPositions, _goalMock.Object, 10, true);
+
+        SetupBlock(0, 64, 0, "minecraft:air", false);
+        for(int i=0; i<10; i++) SetupBlock(0, 64, i, "minecraft:air", false);
+
+        var executor = new PathExecutor(new NullLogger<PathExecutor>(), longPath, _context);
+        
+        // Move entity to (0, 64, 5) - should skip forward
+        _testEntity.Position = new Vector3<double>(0.5, 64, 5.5);
+
+        // Act
+        executor.OnTick(_testEntity, _level);
+
+        // Assert
+        // After skipping forward, currentMovementIndex should be advanced (i-1 = 4)
+        // Check progress or private field (since it skip forward to i-1)
+        Assert.True(executor.GetProgressPercent() > 0);
+    }
+
+    [Fact]
+    public void TestSprintableAscend_Check()
+    {
+        // Arrange: Traverse South then Ascend South
+        var traverse = new MovementTraverse(0, 64, 0, 0, 1, MoveDirection.TraverseSouth);
+        var ascend = new MovementAscend(0, 64, 1, 0, 2, MoveDirection.AscendSouth);
+        
+        // Floor must be walkable
+        SetupBlock(0, 63, 0, "minecraft:stone", true); // Under source
+        SetupBlock(0, 63, 1, "minecraft:stone", true); // Under transition
+        SetupBlock(0, 64, 2, "minecraft:stone", true); // Under dest of ascend (at Y=64, so block is at Y=64)
+        // Wait, ascend dest is (0, 65, 2). Floor for it is at (0, 64, 2).
+
+        // 2x3 head clearance for traverse
+        for (int y = 0; y < 3; y++)
+        {
+            SetupBlock(0, 64 + y, 0, "minecraft:air", false);
+            SetupBlock(0, 64 + y, 1, "minecraft:air", false);
+        }
+        
+        // Clearance for ascend dest
+        SetupBlock(0, 65, 2, "minecraft:air", false);
+        SetupBlock(0, 66, 2, "minecraft:air", false);
+
+        var executor = new PathExecutor(new NullLogger<PathExecutor>(), 
+            new Path(new List<(int, int, int)> { (0,64,0), (0,64,1), (0,65,2) }, _goalMock.Object, 0, true), _context);
+
+        // Act
+        bool canSprint = executor.IsSprintableAscend(traverse, ascend, _level);
+
+        // Assert
+        Assert.True(canSprint, "Should be safe to sprint ascend with clear path");
     }
 }

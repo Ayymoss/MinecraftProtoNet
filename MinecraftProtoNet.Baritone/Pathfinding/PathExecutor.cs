@@ -774,7 +774,7 @@ public class PathExecutor(ILogger<PathExecutor> logger, Path path, CalculationCo
     /// <param name="next">Next movement (must be MovementAscend)</param>
     /// <param name="level">World level for block checks</param>
     /// <returns>True if safe to sprint into the ascend, false otherwise</returns>
-    private bool IsSprintableAscend(MovementBase current, MovementBase next, Level level)
+    internal bool IsSprintableAscend(MovementBase current, MovementBase next, Level level)
     {
         if (next is not MovementAscend ascend) return false;
         
