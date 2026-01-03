@@ -109,4 +109,121 @@ public class TestWorldBuilder
     /// Gets the chunk manager for advanced setup.
     /// </summary>
     public TestChunkManager ChunkManager => _chunkManager;
+
+    // ===== Terrain Helpers =====
+
+    /// <summary>
+    /// Creates a staircase going in a direction.
+    /// </summary>
+    /// <param name="startX">Starting X coordinate</param>
+    /// <param name="startY">Starting Y coordinate (floor level)</param>
+    /// <param name="startZ">Starting Z coordinate</param>
+    /// <param name="steps">Number of steps</param>
+    /// <param name="dirX">Direction X (-1, 0, or 1)</param>
+    /// <param name="dirZ">Direction Z (-1, 0, or 1)</param>
+    /// <param name="blockName">Block to use for stairs</param>
+    public TestWorldBuilder WithStairs(int startX, int startY, int startZ, int steps, int dirX, int dirZ, string blockName = "minecraft:stone")
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            var x = startX + i * dirX;
+            var y = startY + i + 1;
+            var z = startZ + i * dirZ;
+            _chunkManager.SetBlock(x, y, z, blockName);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a water pool.
+    /// </summary>
+    public TestWorldBuilder WithPool(int x1, int z1, int x2, int z2, int y, int depth = 2)
+    {
+        // Remove floor where pool is
+        for (int x = x1; x <= x2; x++)
+        for (int z = z1; z <= z2; z++)
+        for (int dy = 0; dy < depth; dy++)
+        {
+            var waterState = new BlockState(GetIdFromName("minecraft:water"), "minecraft:water")
+            {
+                HasCollision = false
+            };
+            _chunkManager.SetBlock(x, y - dy, z, waterState);
+        }
+
+        // Pool floor
+        _chunkManager.Fill(x1, y - depth, z1, x2, y - depth, z2, "minecraft:stone");
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a gap (hole) in the floor that can be jumped over.
+    /// </summary>
+    public TestWorldBuilder WithGap(int x, int y, int z, int width, int dirX, int dirZ)
+    {
+        for (int i = 0; i < width; i++)
+        {
+            var gapX = x + i * dirX;
+            var gapZ = z + i * dirZ;
+            _chunkManager.SetBlock(gapX, y, gapZ, "minecraft:air", false);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a ladder column.
+    /// </summary>
+    public TestWorldBuilder WithLadder(int x, int y, int z, int height)
+    {
+        for (int i = 0; i < height; i++)
+        {
+            var ladderState = new BlockState(GetIdFromName("minecraft:ladder"), "minecraft:ladder")
+            {
+                HasCollision = false
+            };
+            _chunkManager.SetBlock(x, y + i, z, ladderState);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a raised platform.
+    /// </summary>
+    public TestWorldBuilder WithPlatform(int x1, int z1, int x2, int z2, int y, string blockName = "minecraft:stone")
+    {
+        _chunkManager.Fill(x1, y, z1, x2, y, z2, blockName);
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a spiral staircase.
+    /// </summary>
+    public TestWorldBuilder WithSpiralStairs(int centerX, int centerZ, int baseY, int floors, string blockName = "minecraft:stone")
+    {
+        int[] dxs = { 1, 0, -1, 0 };
+        int[] dzs = { 0, 1, 0, -1 };
+        int stepsPerFloor = 4;
+
+        for (int floor = 0; floor < floors; floor++)
+        {
+            for (int step = 0; step < stepsPerFloor; step++)
+            {
+                var dir = (floor * stepsPerFloor + step) % 4;
+                var x = centerX + dxs[dir];
+                var z = centerZ + dzs[dir];
+                var y = baseY + floor * stepsPerFloor + step + 1;
+                _chunkManager.SetBlock(x, y, z, blockName);
+            }
+        }
+        return this;
+    }
+
+    private static int GetIdFromName(string name) => name switch
+    {
+        "minecraft:air" => 0,
+        "minecraft:stone" => 1,
+        "minecraft:water" => 5,
+        "minecraft:ladder" => 100,
+        _ => (name.GetHashCode() & 0x7FFF) | 0x8000
+    };
 }
