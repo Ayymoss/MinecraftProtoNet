@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Pathfinding.Calc;
+using Path = MinecraftProtoNet.Pathfinding.Calc.Path;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Calc;
 
@@ -30,10 +31,17 @@ public interface IPathFinder
     /// <param name="primaryTimeoutMs">Timeout for full path calculation</param>
     /// <param name="failureTimeoutMs">Extended timeout when no path found yet</param>
     /// <returns>Path calculation result</returns>
-    (PathCalculationResultType Type, MinecraftProtoNet.Pathfinding.Calc.Path? Path) Calculate(long primaryTimeoutMs, long failureTimeoutMs);
+    (PathCalculationResultType Type, Path? Path) Calculate(long primaryTimeoutMs, long failureTimeoutMs);
 
     /// <summary>
     /// Requests cancellation of the current calculation.
     /// </summary>
     void Cancel();
+
+    /// <summary>
+    /// Gets the best path found so far during calculation (for pause logic).
+    /// Returns null if no valid partial path exists yet.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java:186-188
+    /// </summary>
+    Path? BestPathSoFar();
 }

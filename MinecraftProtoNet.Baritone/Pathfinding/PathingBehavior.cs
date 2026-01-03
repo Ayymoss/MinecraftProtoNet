@@ -63,8 +63,17 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     /// <summary>
     /// Factory for creating pathfinders. Can be replaced for testing.
     /// </summary>
-    public Func<CalculationContext, IGoal, int, int, int, IPathFinder> PathFinderFactory { get; set; } = 
-        (ctx, goal, x, y, z) => new AStarPathFinder(ctx, goal, x, y, z);
+    /// <summary>
+    /// Factory for creating pathfinders. Can be customized to inject favoring or other modifications.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:568-575
+    /// </summary>
+    public Func<CalculationContext, IGoal, int, int, int, Path?, IPathFinder> PathFinderFactory { get; set; } = 
+        (ctx, goal, x, y, z, previous) =>
+        {
+            // Create favoring from previous path (backtrack avoidance)
+            var favoring = previous != null ? new Favoring(previous, ctx) : null;
+            return new AStarPathFinder(ctx, goal, x, y, z, favoring);
+        };
 
     /// <summary>
     /// Callback to get best tool speed.
@@ -127,6 +136,15 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
         _goal = goal;
         _context = new CalculationContext(level);
         
+        // Initialize world border
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java:159
+        // For now, use a very large world border (effectively disabled) if level doesn't provide one
+        // TODO: Get actual world border from level when available
+        _context.WorldBorder = new BetterWorldBorder(
+            double.MinValue / 2, double.MaxValue / 2,  // minX, maxX
+            double.MinValue / 2, double.MaxValue / 2   // minZ, maxZ
+        );
+        
         // Update context based on current entity state
         _context.CanSprint = true; // Could check hunger
         
@@ -144,6 +162,9 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
         
         // Pass tool speed callback
         _context.GetBestToolSpeed = GetBestToolSpeed;
+        
+        // Pass logger for diagnostic output
+        _context.Logger = logger;
 
         var startPos = GetPathStart(entity);
         if (goal.IsInGoal(startPos.X, startPos.Y, startPos.Z))
@@ -191,6 +212,22 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                     _subscribedEntity = null;
                 }
 
+                // Check if we're already at the goal before retrying
+                if (_goal != null)
+                {
+                    var feet = GetFeetPosition(entity);
+                    if (_goal.IsInGoal(feet.X, feet.Y, feet.Z))
+                    {
+                        // Already at goal! Clear everything and mark as complete
+                        logger.LogInformation("[PathingBehavior] Already at goal. Pathfinding complete.");
+                        _goal = null;
+                        entity.ClearMovementInput();
+                        OnPathComplete?.Invoke(true);
+                        OnStateChanged?.Invoke();
+                        return;
+                    }
+                }
+
                 // Retry if we have a goal but no calculation or path
                 lock (_pathCalcLock)
                 {
@@ -225,8 +262,10 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                     if (_goal.IsInGoal(feet.X, feet.Y, feet.Z))
                     {
                         // Reached goal!
+                        logger.LogInformation("[PathingBehavior] Goal reached! Pathfinding complete.");
                         _current = null;
                         _next = null;
+                        _goal = null; // Clear goal to prevent retry loop
                         entity.ClearMovementInput();
                         OnPathComplete?.Invoke(true);
                         OnStateChanged?.Invoke();
@@ -238,6 +277,10 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                 {
                     OnPathComplete?.Invoke(false);
                     
+                    // Clear movement inputs immediately when path fails 
+                    // Baritone: cancel() calls clearKeys()
+                    entity.ClearMovementInput();
+                    
                     // If failed due to teleport loop, cancel entirely - don't auto-retry
                     if (_current.FailedDueToTeleportLoop)
                     {
@@ -245,15 +288,30 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                         _current = null;
                         _next = null;
                         _goal = null;
-                        entity.ClearMovementInput();
                         OnStateChanged?.Invoke();
                         return;
+                    }
+                }
+
+                // Baritone lines 169-179: Validate _next path contains current position
+                // If current path failed mid-execution, we may not be on the planned next path
+                if (_next != null)
+                {
+                    var feet = GetFeetPosition(entity);
+                    var expectedStart = _current.Path.Positions.Last();
+                    
+                    if (!PathContainsPosition(_next.Path, feet) && !PathContainsPosition(_next.Path, expectedStart))
+                    {
+                        logger.LogDebug("[PathingBehavior] Discarding next path as it does not contain current position ({Feet}) or expected start ({Expected})",
+                            feet, expectedStart);
+                        _next = null;
                     }
                 }
 
                 // Try to continue with next segment
                 if (_next != null)
                 {
+                    logger.LogDebug("[PathingBehavior] Continuing on to planned next path");
                     _current = _next;
                     _next = null;
                     _current.OnTick(entity, level);
@@ -391,7 +449,15 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     {
         if (_goal == null || _context == null) return;
 
-        var pathfinder = PathFinderFactory(_context, _goal, start.X, start.Y, start.Z);
+        // Get previous path for backtrack avoidance
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:568-575
+        Path? previousPath = null;
+        if (_current != null)
+        {
+            previousPath = _current.Path;
+        }
+
+        var pathfinder = PathFinderFactory(_context, _goal, start.X, start.Y, start.Z, previousPath);
         _inProgress = pathfinder;
         OnStateChanged?.Invoke();
 
@@ -420,7 +486,30 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                         _failureCount = 0; // Reset backoff on success
                         OnPathCalculated?.Invoke(path);
 
-                        // Detect stuck state: if path has only 1 position, there are no valid moves
+                        // Check if we're already at the goal (path with 1 position that reaches goal)
+                        // If path has 1 position and reaches goal, we're already at the destination
+                        if (path.Positions.Count <= 1 && path.ReachesGoal && _goal != null)
+                        {
+                            var pathPos = path.Positions[0];
+                            if (_goal.IsInGoal(pathPos.X, pathPos.Y, pathPos.Z))
+                            {
+                                // Already at goal! Clear everything and mark as complete
+                                logger.LogInformation("[PathingBehavior] Already at goal (path has 1 position). Pathfinding complete.");
+                                _current = null;
+                                _next = null;
+                                _goal = null;
+                                // Note: entity.ClearMovementInput() will be called in OnTick when _current is null
+                                OnPathComplete?.Invoke(true);
+                                lock (_pathCalcLock)
+                                {
+                                    _inProgress = null;
+                                }
+                                OnStateChanged?.Invoke();
+                                return;
+                            }
+                        }
+
+                        // Detect stuck state: if path has only 1 position and doesn't reach goal, we're stuck
                         if (path.Positions.Count <= 1)
                         {
                             logger.LogWarning("[PathingBehavior] Path has no movements (1 position only). Bot is stuck - no valid moves from current location.");
@@ -435,6 +524,7 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
                         var executor = new PathExecutor(loggerFactory.CreateLogger<PathExecutor>(), path, _context);
                         executor.OnPlaceBlockRequest = OnPlaceBlockRequest;
                         executor.OnBreakBlockRequest = OnBreakBlockRequest;
+                        executor.GetBestPathSoFar = () => _inProgress?.BestPathSoFar();
 
                         if (_current == null)
                         {
@@ -468,30 +558,24 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
     {
         var feet = GetFeetPosition(entity);
 
-        // Check if we can walk on the block below
-        var floor = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);
-        if (floor != null && floor.BlocksMotion)
+        // Scan down up to 4 blocks for solid ground if in air
+        // Reference: Baritone PathingBehavior.java:232
+        if (!entity.IsOnGround)
         {
-            return feet;
-        }
-
-        // If on ground but floor doesn't block motion, we might be on an edge
-        if (entity.IsOnGround)
-        {
-            // Check adjacent blocks for valid standing position
-            for (var dx = -1; dx <= 1; dx++)
+            for (int i = 0; i <= 4; i++)
             {
-                for (var dz = -1; dz <= 1; dz++)
+                int cx = feet.X;
+                int cy = feet.Y - i;
+                int cz = feet.Z;
+                var floor = level.GetBlockAt(cx, cy - 1, cz);
+                if (floor != null && floor.BlocksMotion)
                 {
-                    var checkFloor = level.GetBlockAt(feet.X + dx, feet.Y - 1, feet.Z + dz);
-                    if (checkFloor != null && checkFloor.BlocksMotion)
-                    {
-                        return (feet.X + dx, feet.Y, feet.Z + dz);
-                    }
+                    return (cx, cy, cz);
                 }
             }
         }
 
+        // Default to feet position
         return feet;
     }
 
@@ -500,6 +584,16 @@ public class PathingBehavior(ILogger<PathingBehavior> logger, ILoggerFactory log
         return ((int)Math.Floor(entity.Position.X),
                 (int)Math.Floor(entity.Position.Y),
                 (int)Math.Floor(entity.Position.Z));
+    }
+
+    /// <summary>
+    /// Checks if a path's positions list contains the given position.
+    /// Used for validating next path before switching.
+    /// Reference: Baritone PathingBehavior.java line 169 - positions().contains()
+    /// </summary>
+    private static bool PathContainsPosition(Path path, (int X, int Y, int Z) position)
+    {
+        return path.Positions.Contains(position);
     }
 
     /// <summary>

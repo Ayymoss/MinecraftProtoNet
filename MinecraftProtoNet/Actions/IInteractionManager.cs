@@ -25,6 +25,12 @@ public interface IInteractionManager
     Task<bool> PlaceBlockAsync(Hand hand = Hand.MainHand);
 
     /// <summary>
+    /// Attempts to place the held item as a block at the specified coordinates.
+    /// Makes the entity look at the target position before placing.
+    /// </summary>
+    Task<bool> PlaceBlockAtAsync(int x, int y, int z, Hand hand = Hand.MainHand);
+
+    /// <summary>
     /// Attempts to interact (right-click) with the entity or block the player is looking at.
     /// </summary>
     Task<bool> InteractAsync(Hand hand = Hand.MainHand);

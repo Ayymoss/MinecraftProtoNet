@@ -86,7 +86,7 @@ public class GotoCommand(IPathingService pathingService) : ICommand
         // Wire up events (only once ideally, but for simplicity we do it each time)
         pathingService.OnPathCalculated += path =>
         {
-            Log.Information("[Pathfinding] Path calculated: {Length} positions, reaches goal: {ReachesGoal}", path.Length, path.ReachesGoal);
+            Log.Debug("[Pathfinding] Path calculated: {Length} positions, reaches goal: {ReachesGoal}", path.Length, path.ReachesGoal);
         };
         
         pathingService.OnPathComplete += success =>

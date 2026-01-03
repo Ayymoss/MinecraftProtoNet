@@ -119,7 +119,7 @@ public class Level
         => _chunkManager.AddChunk(chunk);
 
     public bool HasChunk(int chunkX, int chunkZ)
-        => _chunkManager.HasChunk(chunkX, chunkZ);
+        => _chunkManager.HasChunk(chunkX, chunkZ); // TODO: This returns true only. It should probably return false if the chunk is unloaded.
 
     public Chunk? GetChunk(int chunkX, int chunkZ)
         => _chunkManager.GetChunk(chunkX, chunkZ);

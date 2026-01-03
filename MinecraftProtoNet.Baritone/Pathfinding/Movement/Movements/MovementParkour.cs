@@ -18,8 +18,6 @@ public class MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY,
     /// </summary>
     public int JumpDistance { get; } = jumpDistance;
 
-    private int _ticksWithoutProgress;
-
     public override double CalculateCost(CalculationContext context)
     {
         if (!context.AllowParkour)
@@ -104,47 +102,117 @@ public class MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY,
         return Cost;
     }
 
+    /// <summary>
+    /// Update movement state each tick.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java:252-308
+    /// Note: Java Baritone's super.updateState() sets status from WAITING to RUNNING (Movement.java:232-234)
+    /// </summary>
     public override MovementState UpdateState(Entity entity, Level level)
     {
+        // Java Baritone's super.updateState() sets WAITING -> RUNNING (Movement.java:232-234)
+        // Since we don't have a base UpdateState, we handle it here
+        if (State.Status == MovementStatus.Waiting)
+        {
+            State.Status = MovementStatus.Running;
+        }
+
+        // Baritone line 254-256: Return early if not running (after setting Waiting -> Running above)
+        if (State.Status != MovementStatus.Running)
+        {
+            return State;
+        }
+
         var feet = GetFeetPosition(entity);
 
-        // Check if we've arrived
-        if (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z && entity.IsOnGround)
-        {
-            State.Status = MovementStatus.Success;
-            return State;
-        }
-
-        // Check for failure (fell into the gap)
-        if (entity.IsOnGround && feet.Y < Source.Y)
+        // Baritone lines 257-261: Check if fallen below source
+        if (feet.Y < Source.Y)
         {
             State.ClearInputs();
-            State.Status = MovementStatus.Failed;
+            State.Status = MovementStatus.Unreachable;
             return State;
         }
 
-        State.Status = MovementStatus.Running;
+        // Baritone lines 262-264: Sprint if dist >= 4 or ascending
+        bool ascend = Destination.Y > Source.Y;
+        if (JumpDistance >= 4 || ascend)
+        {
+            State.Sprint = true;
+        }
 
-        // Need to sprint for distance
-        State.Sprint = true;
+        // Baritone line 265: Move towards destination
         MoveTowards(entity);
 
-        // Calculate when to jump
-        var dx = Math.Abs(entity.Position.X - (Source.X + 0.5));
-        var dz = Math.Abs(entity.Position.Z - (Source.Z + 0.5));
-        var distFromSource = Math.Max(dx, dz);
-
-        // Jump when near the edge
-        if (entity.IsOnGround && distFromSource > 0.6)
+        // Baritone lines 266-275: Check if reached destination
+        if (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z)
         {
-            State.Jump = true;
+            // Note: Java Baritone checks for vines/ladders, but we skip that for now
+            // Baritone line 273: Check for lilypads (player.y - feet.y < 0.094)
+            if (entity.Position.Y - feet.Y < 0.094)
+            {
+                State.Status = MovementStatus.Success;
+                return State;
+            }
         }
-
-        _ticksWithoutProgress++;
-        if (_ticksWithoutProgress > 80)
+        else if (feet.X != Source.X || feet.Y != Source.Y || feet.Z != Source.Z)
         {
-            State.ClearInputs();
-            State.Status = MovementStatus.Failed;
+            // Baritone lines 277-305: Handle jump logic and overshoot prevention
+            
+            // Check if we're at src.relative(direction) or airborne
+            var srcAdjX = Source.X + Direction.XOffset;
+            var srcAdjZ = Source.Z + Direction.ZOffset;
+            bool atSourceAdjacent = feet.X == srcAdjX && feet.Y == Source.Y && feet.Z == srcAdjZ;
+            bool airborne = entity.Position.Y - Source.Y > 0.0001;
+
+            if (atSourceAdjacent || airborne)
+            {
+                // Baritone lines 288-295: Prevent jumping too late for 2-block gaps (dist == 3)
+                if (JumpDistance == 3 && !ascend)
+                {
+                    double xDiff = (Source.X + 0.5) - entity.Position.X;
+                    double zDiff = (Source.Z + 0.5) - entity.Position.Z;
+                    double distFromStart = Math.Max(Math.Abs(xDiff), Math.Abs(zDiff));
+                    if (distFromStart < 0.7)
+                    {
+                        return State;
+                    }
+                }
+
+                // Baritone line 297: Jump
+                State.Jump = true;
+            }
+            else
+            {
+                // Baritone lines 298-305: Overshoot handling - stop sprinting and move back
+                var destBackX = Destination.X - Direction.XOffset;
+                var destBackZ = Destination.Z - Direction.ZOffset;
+                bool atDestBack = feet.X == destBackX && feet.Y == Destination.Y && feet.Z == destBackZ;
+                
+                if (!atDestBack)
+                {
+                    State.Sprint = false;
+                    var srcBackX = Source.X - Direction.XOffset;
+                    var srcBackZ = Source.Z - Direction.ZOffset;
+                    
+                    if (feet.X == srcBackX && feet.Y == Source.Y && feet.Z == srcBackZ)
+                    {
+                        // Move towards source
+                        var targetX = Source.X + 0.5;
+                        var targetZ = Source.Z + 0.5;
+                        var yaw = MovementHelper.CalculateYaw(entity.Position.X, entity.Position.Z, targetX, targetZ);
+                        State.SetTarget(yaw, 0);
+                        State.MoveForward = true;
+                    }
+                    else
+                    {
+                        // Move towards src.relative(direction, -1)
+                        var targetX = srcBackX + 0.5;
+                        var targetZ = srcBackZ + 0.5;
+                        var yaw = MovementHelper.CalculateYaw(entity.Position.X, entity.Position.Z, targetX, targetZ);
+                        State.SetTarget(yaw, 0);
+                        State.MoveForward = true;
+                    }
+                }
+            }
         }
 
         return State;
@@ -153,7 +221,6 @@ public class MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY,
     public override void Reset()
     {
         base.Reset();
-        _ticksWithoutProgress = 0;
     }
 
     /// <summary>

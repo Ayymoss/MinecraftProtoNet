@@ -18,6 +18,30 @@ public class MovementDiagonal : MovementBase
     {
     }
 
+    /// <summary>
+    /// Returns valid positions for diagonal movement.
+    /// Based on Baritone MovementDiagonal.calculateValidPositions() lines 99-109.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDiagonal.java
+    /// </summary>
+    public override HashSet<(int X, int Y, int Z)> GetValidPositions()
+    {
+        var diagA = (Source.X, Source.Y, Destination.Z);
+        var diagB = (Destination.X, Source.Y, Source.Z);
+        
+        if (Destination.Y < Source.Y) // Descending diagonal
+        {
+            return [Source, (Destination.X, Destination.Y + 1, Destination.Z), diagA, diagB, 
+                    Destination, (diagA.X, diagA.Y - 1, diagA.Item3), (diagB.X, diagB.Y - 1, diagB.Item3)];
+        }
+        if (Destination.Y > Source.Y) // Ascending diagonal
+        {
+            return [Source, (Source.X, Source.Y + 1, Source.Z), diagA, diagB, 
+                    Destination, (diagA.X, diagA.Y + 1, diagA.Item3), (diagB.X, diagB.Y + 1, diagB.Item3)];
+        }
+        // Same level diagonal
+        return [Source, Destination, diagA, diagB];
+    }
+
     public override double CalculateCost(CalculationContext context)
     {
         var destX = Destination.X;
@@ -152,13 +176,38 @@ public class MovementDiagonal : MovementBase
         if (HasReachedDestination(entity))
         {
             State.Status = MovementStatus.Success;
+            State.ClearInputs();
             return State;
         }
+
+        // Clear interaction inputs for the new tick
+        State.ClearInputs();
+        State.BreakBlockTarget = null;
+        State.PlaceBlockTarget = null;
 
         var dy = Destination.Y - Source.Y;
         State.Status = MovementStatus.Running;
         MoveTowards(entity);
-        
+
+        // Clear placement targets
+        State.RightClick = false;
+        State.PlaceBlockTarget = null;
+
+        // Check for bridging
+        var destFloor = level.GetBlockAt(Destination.X, Destination.Y - 1, Destination.Z);
+        if (!MovementHelper.CanWalkOn(destFloor))
+        {
+            State.Sneak = true;
+            State.Sprint = false;
+            State.RightClick = true;
+            State.PlaceBlockTarget = (Destination.X, Destination.Y - 1, Destination.Z);
+        }
+        else
+        {
+            // Normal movement
+            State.Sprint = true;
+        }
+
         // Baritone line 280: Sneak on magma blocks to avoid damage
         var feet = GetFeetPosition(entity);
         var blockBelow = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);

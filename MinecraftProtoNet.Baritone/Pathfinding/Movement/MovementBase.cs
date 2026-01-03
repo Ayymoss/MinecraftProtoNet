@@ -84,15 +84,36 @@ public abstract class MovementBase
     }
 
     /// <summary>
+    /// Returns the list of blocks that the player walks into during this movement.
+    /// Used for tracking intermediate blocks (e.g., corner blocks in diagonal movement).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java:286-291
+    /// </summary>
+    public virtual IEnumerable<(int X, int Y, int Z)> GetBlocksToWalkInto(CalculationContext context)
+    {
+        return Enumerable.Empty<(int X, int Y, int Z)>();
+    }
+
+    /// <summary>
+    /// Returns the set of valid positions for this movement.
+    /// Used for off-path distance calculation and path recovery.
+    /// Based on Baritone's Movement.getValidPositions() (lines 104-110)
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java
+    /// </summary>
+    public virtual HashSet<(int X, int Y, int Z)> GetValidPositions()
+    {
+        // Default implementation returns Source and Destination
+        // Subclasses override for movements with intermediate positions (e.g. diagonal)
+        return [Source, Destination];
+    }
+
+    /// <summary>
     /// Returns whether the given position is valid for this movement.
     /// Used for path recovery after server teleport.
     /// Based on Baritone's Movement.getValidPositions()
     /// </summary>
-    public virtual bool IsValidPosition(int x, int y, int z)
+    public bool IsValidPosition(int x, int y, int z)
     {
-        // A position is valid if it's at the source or destination
-        return (x == Source.X && y == Source.Y && z == Source.Z) ||
-               (x == Destination.X && y == Destination.Y && z == Destination.Z);
+        return GetValidPositions().Contains((x, y, z));
     }
 
     /// <summary>

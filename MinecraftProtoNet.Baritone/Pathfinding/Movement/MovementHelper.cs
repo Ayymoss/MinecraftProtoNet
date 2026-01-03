@@ -115,6 +115,34 @@ public static class MovementHelper
     }
 
     /// <summary>
+    /// Returns whether Frost Walker can be used on this block state.
+    /// Frost Walker allows walking on water by freezing it into frosted ice.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:499-503
+    /// </summary>
+    /// <param name="context">Calculation context with frost walker level</param>
+    /// <param name="state">Block state to check (should be water)</param>
+    /// <returns>True if frost walker can be used (frost walker level > 0 and block is water source)</returns>
+    public static bool CanUseFrostWalker(CalculationContext context, BlockState? state)
+    {
+        if (state == null) return false;
+        if (context.FrostWalker == 0) return false;
+        if (!IsWater(state)) return false;
+        
+        // Baritone checks: state == FrostedIceBlock.meltsInto() && state.getValue(LiquidBlock.LEVEL) == 0
+        // FrostedIceBlock.meltsInto() returns water with level 0 (source block)
+        // Check if this is a water source block (level property should be 0 or absent for source)
+        if (state.Properties.TryGetValue("level", out var levelStr))
+        {
+            if (int.TryParse(levelStr, out var level) && level != 0)
+            {
+                return false; // Not a source block
+            }
+        }
+        
+        return true;
+    }
+
+    /// <summary>
     /// Returns whether this block is air.
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java
     /// </summary>
@@ -258,6 +286,18 @@ public static class MovementHelper
     /// Returns whether this block is honey (slows movement and jump).
     /// </summary>
     public static bool IsHoneyBlock(BlockState? block) => block?.Name.Contains("honey_block", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// Returns whether this block is a lily pad.
+    /// Reference: Baritone MovementPillar.cost() line 103
+    /// </summary>
+    public static bool IsLilyPad(BlockState? block) => block?.Name.Contains("lily_pad", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// Returns whether this block is a carpet.
+    /// Reference: Baritone MovementPillar.cost() line 103
+    /// </summary>
+    public static bool IsCarpet(BlockState? block) => block?.Name.Contains("carpet", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>
     /// Returns whether this block is slippery (ice).
@@ -474,6 +514,15 @@ public static class MovementHelper
     }
 
     /// <summary>
+    /// Returns whether the block at the given position is fully passable.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:fullyPassable(context, x, y, z)
+    /// </summary>
+    public static bool FullyPassable(CalculationContext context, int x, int y, int z)
+    {
+        return FullyPassable(context.GetBlockState(x, y, z));
+    }
+
+    /// <summary>
     /// Returns whether we can place a block against this block.
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:567-587
     /// </summary>
@@ -604,5 +653,269 @@ public static class MovementHelper
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Checks if a door is passable from the player's position.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:325-336
+    /// </summary>
+    public static bool IsDoorPassable(CalculationContext context, int doorX, int doorY, int doorZ, int playerX, int playerY, int playerZ)
+    {
+        if (doorX == playerX && doorY == playerY && doorZ == playerZ)
+        {
+            return false; // Can't pass through if standing on the door
+        }
+
+        var state = context.GetBlockState(doorX, doorY, doorZ);
+        if (state == null || !IsDoor(state))
+        {
+            return true; // Not a door, assume passable
+        }
+
+        return IsHorizontalBlockPassable(context, doorX, doorY, doorZ, state, playerX, playerY, playerZ);
+    }
+
+    /// <summary>
+    /// Checks if a fence gate is passable (open).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:338-349
+    /// </summary>
+    public static bool IsGatePassable(CalculationContext context, int gateX, int gateY, int gateZ, int playerX, int playerY, int playerZ)
+    {
+        if (gateX == playerX && gateY == playerY && gateZ == playerZ)
+        {
+            return false; // Can't pass through if standing on the gate
+        }
+
+        var state = context.GetBlockState(gateX, gateY, gateZ);
+        if (state == null || !IsFenceGate(state))
+        {
+            return true; // Not a gate, assume passable
+        }
+
+        // Check if gate is open (property "open" should be "true")
+        if (state.Properties.TryGetValue("open", out var openStr))
+        {
+            return openStr == "true";
+        }
+
+        return false; // If no open property, assume closed
+    }
+
+    /// <summary>
+    /// Checks if a horizontal block (like a door) is passable based on facing direction and open state.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:351-369
+    /// </summary>
+    public static bool IsHorizontalBlockPassable(CalculationContext context, int blockX, int blockY, int blockZ, BlockState? blockState, int playerX, int playerY, int playerZ)
+    {
+        if (blockState == null) return true;
+        if (blockX == playerX && blockY == playerY && blockZ == playerZ)
+        {
+            return false;
+        }
+
+        // Get facing direction (property "facing": "north", "south", "east", "west")
+        if (!blockState.Properties.TryGetValue("facing", out var facingStr))
+        {
+            return true; // No facing property, assume passable
+        }
+
+        // Get open state (property "open": "true"/"false")
+        if (!blockState.Properties.TryGetValue("open", out var openStr))
+        {
+            return false; // No open property, assume closed
+        }
+
+        bool isOpen = openStr == "true";
+
+        // Determine player's relative position to block
+        int dx = playerX - blockX;
+        int dz = playerZ - blockZ;
+
+        // Determine axis based on facing direction
+        bool facingAxisZ = facingStr == "north" || facingStr == "south";
+        bool playerAxisZ = dz != 0; // Player is north or south of block
+
+        // Block is passable if: (facing axis == player axis) == open
+        // If facing Z-axis and player is on Z-axis: passable when open
+        // If facing X-axis and player is on X-axis: passable when open
+        return (facingAxisZ == playerAxisZ) == isOpen;
+    }
+
+    // ===== Tool Switching =====
+
+    /// <summary>
+    /// Switches to the best tool for mining the given block.
+    /// This is a simplified version - full implementation requires inventory infrastructure.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:635-650
+    /// </summary>
+    /// <param name="block">The block state to mine</param>
+    /// <param name="context">Calculation context with tool speed callback</param>
+    /// <param name="switchToolCallback">Callback to actually switch tool (takes slot index 0-8)</param>
+    /// <param name="getToolSpeedCallback">Callback to get tool speed for a slot (takes slot index, returns speed multiplier)</param>
+    /// <param name="preferSilkTouch">Whether to prefer silk touch tools</param>
+    public static void SwitchToBestToolFor(
+        BlockState block, 
+        CalculationContext context,
+        Action<int>? switchToolCallback,
+        Func<int, float>? getToolSpeedCallback,
+        bool preferSilkTouch = false)
+    {
+        if (switchToolCallback == null || getToolSpeedCallback == null)
+        {
+            return; // No infrastructure available, skip tool switching
+        }
+
+        // Find best slot (0-8 hotbar slots)
+        int bestSlot = 0;
+        float highestSpeed = float.NegativeInfinity;
+
+        for (int slot = 0; slot < 9; slot++)
+        {
+            float speed = getToolSpeedCallback(slot);
+            if (speed > highestSpeed)
+            {
+                highestSpeed = speed;
+                bestSlot = slot;
+            }
+        }
+
+        // Switch to best tool
+        switchToolCallback(bestSlot);
+    }
+
+    /// <summary>
+    /// Switches to the best tool for mining the block at the given position.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:635-636
+    /// </summary>
+    public static void SwitchToBestToolFor(
+        CalculationContext context,
+        int x, int y, int z,
+        Action<int>? switchToolCallback,
+        Func<int, float>? getToolSpeedCallback,
+        bool preferSilkTouch = false)
+    {
+        var block = context.GetBlockState(x, y, z);
+        if (block == null) return;
+        SwitchToBestToolFor(block, context, switchToolCallback, getToolSpeedCallback, preferSilkTouch);
+    }
+
+    // ===== Block Placement =====
+
+    /// <summary>
+    /// Result of attempting to place a block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:799-801
+    /// </summary>
+    public enum PlaceResult
+    {
+        /// <summary>
+        /// Ready to place (looking at correct position, item selected).
+        /// </summary>
+        ReadyToPlace,
+        
+        /// <summary>
+        /// Attempting to place (rotating towards position).
+        /// </summary>
+        Attempting,
+        
+        /// <summary>
+        /// Cannot place (no valid position or no blocks available).
+        /// </summary>
+        NoOption
+    }
+
+    /// <summary>
+    /// Attempts to place a block at the given position.
+    /// Simplified version - requires infrastructure callbacks for full functionality.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:743-797
+    /// </summary>
+    /// <param name="state">Movement state to update with placement actions</param>
+    /// <param name="context">Calculation context</param>
+    /// <param name="placeAtX">X coordinate to place block</param>
+    /// <param name="placeAtY">Y coordinate to place block</param>
+    /// <param name="placeAtZ">Z coordinate to place block</param>
+    /// <param name="playerX">Player X position</param>
+    /// <param name="playerY">Player Y position (feet)</param>
+    /// <param name="playerZ">Player Z position</param>
+    /// <param name="preferDown">Whether to prefer placing from below</param>
+    /// <param name="wouldSneak">Whether player should sneak while placing</param>
+    /// <param name="selectThrowawayCallback">Callback to select throwaway block from inventory (returns success)</param>
+    /// <returns>PlaceResult indicating the placement state</returns>
+    public static PlaceResult AttemptToPlaceABlock(
+        MovementState state,
+        CalculationContext context,
+        int placeAtX, int placeAtY, int placeAtZ,
+        double playerX, double playerY, double playerZ,
+        bool preferDown,
+        bool wouldSneak,
+        Func<bool>? selectThrowawayCallback)
+    {
+        if (selectThrowawayCallback == null || !selectThrowawayCallback())
+        {
+            state.SetStatus(MovementStatus.Unreachable);
+            return PlaceResult.NoOption;
+        }
+
+        // Check if we can place against any adjacent block
+        // Try directions: down, north, south, east, west (HORIZONTALS_BUT_ALSO_DOWN)
+        var directions = new[]
+        {
+            (0, -1, 0), // down
+            (0, 0, -1), // north
+            (0, 0, 1),  // south
+            (1, 0, 0),  // east
+            (-1, 0, 0)  // west
+        };
+
+        bool found = false;
+        int startIndex = preferDown ? 0 : 1; // Start with down if preferDown, else skip it
+        int endIndex = preferDown ? directions.Length : directions.Length;
+
+        for (int i = startIndex; i < endIndex; i++)
+        {
+            var (dx, dy, dz) = directions[i];
+            var againstX = placeAtX + dx;
+            var againstY = placeAtY + dy;
+            var againstZ = placeAtZ + dz;
+
+            if (CanPlaceAgainst(context.GetBlockState(againstX, againstY, againstZ)))
+            {
+                // Calculate rotation to look at the face center
+                double faceX = (placeAtX + againstX + 1.0) * 0.5;
+                double faceY = (placeAtY + againstY + 0.5) * 0.5;
+                double faceZ = (placeAtZ + againstZ + 1.0) * 0.5;
+
+                // Calculate yaw and pitch to look at the face center
+                var (yaw, pitch) = CalculateRotation(
+                    playerX, playerY + 1.6, playerZ, // Approximate head position
+                    faceX, faceY, faceZ
+                );
+
+                state.SetTarget(yaw, pitch, force: true);
+                state.RightClick = true;
+                state.PlaceBlockTarget = (placeAtX, placeAtY, placeAtZ);
+                
+                if (wouldSneak)
+                {
+                    state.Sneak = true;
+                }
+
+                found = true;
+
+                if (!preferDown)
+                {
+                    // If not preferring down, take first valid option
+                    break;
+                }
+                // If preferring down, continue to find the last (preferred) option
+            }
+        }
+
+        if (found)
+        {
+            return wouldSneak && state.Sneak ? PlaceResult.ReadyToPlace : PlaceResult.Attempting;
+        }
+
+        state.SetStatus(MovementStatus.Unreachable);
+        return PlaceResult.NoOption;
     }
 }

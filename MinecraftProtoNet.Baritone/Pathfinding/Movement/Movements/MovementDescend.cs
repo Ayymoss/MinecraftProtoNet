@@ -24,6 +24,16 @@ public class MovementDescend : MovementBase
     {
     }
 
+    /// <summary>
+    /// Returns valid positions for descend movement.
+    /// Based on Baritone MovementDescend.calculateValidPositions() lines 75-77.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDescend.java
+    /// </summary>
+    public override HashSet<(int X, int Y, int Z)> GetValidPositions()
+    {
+        return [Source, (Destination.X, Destination.Y + 1, Destination.Z), Destination];
+    }
+
     public override double CalculateCost(CalculationContext context)
     {
         var destX = Destination.X;

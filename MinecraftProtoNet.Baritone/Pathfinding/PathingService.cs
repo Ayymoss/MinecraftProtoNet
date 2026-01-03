@@ -61,7 +61,7 @@ public class PathingService : IPathingService, IDisposable
             {
                 if (await EquipThrowawayBlock(validBlocks))
                 {
-                    await _interactionManager.PlaceBlockAsync();
+                    await _interactionManager.PlaceBlockAtAsync(x, y, z);
                 }
             });
             return true;

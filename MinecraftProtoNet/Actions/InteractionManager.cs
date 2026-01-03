@@ -83,6 +83,106 @@ public class InteractionManager : IInteractionManager
         return true;
     }
 
+    public async Task<bool> PlaceBlockAtAsync(int x, int y, int z, Hand hand = Hand.MainHand)
+    {
+        if (!_client.State.LocalPlayer.HasEntity) return false;
+        var entity = _client.State.LocalPlayer.Entity;
+
+        if (entity.HeldItem.ItemId is null) return false;
+
+        var level = _client.State.Level;
+
+        // Find an adjacent block to place against (HORIZONTALS_BUT_ALSO_DOWN)
+        // Try directions: down, north, south, east, west
+        var directions = new[]
+        {
+            (dx: 0, dy: -1, dz: 0, face: BlockFace.Top),    // down
+            (dx: 0, dy: 0, dz: -1, face: BlockFace.South),  // north
+            (dx: 0, dy: 0, dz: 1, face: BlockFace.North),   // south
+            (dx: 1, dy: 0, dz: 0, face: BlockFace.West),    // east
+            (dx: -1, dy: 0, dz: 0, face: BlockFace.East)    // west
+        };
+
+        foreach (var (dx, dy, dz, face) in directions)
+        {
+            var againstX = x + dx;
+            var againstY = y + dy;
+            var againstZ = z + dz;
+
+            var againstBlock = level.GetBlockAt(againstX, againstY, againstZ);
+            
+            // Check if we can place against this block
+            // CanPlaceAgainst: needs a solid face (has collision) or is glass
+            bool canPlaceAgainst = againstBlock != null && 
+                (againstBlock.HasCollision || againstBlock.Name.Contains("glass", StringComparison.OrdinalIgnoreCase));
+            
+            if (canPlaceAgainst)
+            {
+                // Calculate rotation to look at the face center
+                var faceCenterX = (x + againstX + 1.0) * 0.5;
+                var faceCenterY = (y + againstY + 0.5) * 0.5;
+                var faceCenterZ = (z + againstZ + 1.0) * 0.5;
+
+                // Calculate yaw and pitch to look at target
+                var deltaX = faceCenterX - entity.Position.X;
+                var deltaY = faceCenterY - (entity.Position.Y + 1.6); // Head position
+                var deltaZ = faceCenterZ - entity.Position.Z;
+                
+                var yaw = (float)(Math.Atan2(-deltaX, deltaZ) * (180.0 / Math.PI));
+                var horizontalDist = Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
+                var pitch = (float)(-Math.Atan2(deltaY, horizontalDist) * (180.0 / Math.PI));
+
+                // Update entity rotation
+                entity.YawPitch = new Vector2<float>(yaw, pitch);
+
+                // Send rotation packet
+                await _client.SendPacketAsync(new MovePlayerRotationPacket
+                {
+                    Yaw = yaw,
+                    Pitch = pitch,
+                    Flags = MovementFlags.None
+                });
+
+                // Calculate cursor position (within the adjacent block we're placing against)
+                // This is typically the center of the face we're clicking on
+                var cursorX = 0.5f;
+                var cursorY = 0.5f;
+                var cursorZ = 0.5f;
+
+                // Adjust cursor based on face direction
+                switch (face)
+                {
+                    case BlockFace.Bottom: cursorY = 1.0f; break;
+                    case BlockFace.Top: cursorY = 0.0f; break;
+                    case BlockFace.North: cursorZ = 1.0f; break;
+                    case BlockFace.South: cursorZ = 0.0f; break;
+                    case BlockFace.West: cursorX = 1.0f; break;
+                    case BlockFace.East: cursorX = 0.0f; break;
+                }
+
+                _logger.LogInformation("Placing block at ({X}, {Y}, {Z}) facing {Face} (against block at ({AgainstX}, {AgainstY}, {AgainstZ}))",
+                    x, y, z, face, againstX, againstY, againstZ);
+
+                // Send placement packet
+                await _client.SendPacketAsync(new UseItemOnPacket
+                {
+                    Hand = hand,
+                    Position = new Vector3<double>(againstX, againstY, againstZ), // Block we're placing against
+                    BlockFace = face,
+                    Cursor = new Vector3<float>(cursorX, cursorY, cursorZ),
+                    InsideBlock = false,
+                    Sequence = entity.IncrementSequence()
+                });
+
+                await _client.SendPacketAsync(new SwingPacket { Hand = hand });
+                return true;
+            }
+        }
+
+        _logger.LogWarning("Cannot place block at ({X}, {Y}, {Z}) - no valid adjacent block to place against", x, y, z);
+        return false;
+    }
+
     public async Task<bool> InteractAsync(Hand hand = Hand.MainHand)
     {
         if (!_client.State.LocalPlayer.HasEntity) return false;

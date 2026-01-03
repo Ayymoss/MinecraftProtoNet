@@ -51,6 +51,43 @@ public static class CollisionResolver
             };
         }
 
+        // Apply sneak edge prevention if on ground
+        // Based on Minecraft's Entity.move() lines ~1000
+        if (wasOnGround && isSneaking)
+        {
+            double stepHeight = DefaultStepHeight;
+            double d0 = desiredDelta.X;
+            double d1 = desiredDelta.Z;
+
+            while (d0 != 0.0 && !HasAnyCollision(currentBox.Offset(d0, -stepHeight, 0.0), level))
+            {
+                if (d0 < 0.05 && d0 >= -0.05) d0 = 0.0;
+                else if (d0 > 0.0) d0 -= 0.05;
+                else d0 += 0.05;
+            }
+
+            while (d1 != 0.0 && !HasAnyCollision(currentBox.Offset(0.0, -stepHeight, d1), level))
+            {
+                if (d1 < 0.05 && d1 >= -0.05) d1 = 0.0;
+                else if (d1 > 0.0) d1 -= 0.05;
+                else d1 += 0.05;
+            }
+
+            while (d0 != 0.0 && d1 != 0.0 && !HasAnyCollision(currentBox.Offset(d0, -stepHeight, d1), level))
+            {
+                if (d0 < 0.05 && d0 >= -0.05) d0 = 0.0;
+                else if (d0 > 0.0) d0 -= 0.05;
+                else d0 += 0.05;
+                
+                if (d1 < 0.05 && d1 >= -0.05) d1 = 0.0;
+                else if (d1 > 0.0) d1 -= 0.05;
+                else d1 += 0.05;
+            }
+
+            desiredDelta = new Vector3<double>(d0, desiredDelta.Y, d1);
+            originalDelta = desiredDelta;
+        }
+
         // Get potential collider shapes for the entire movement path (directional expansion)
         var expandedBox = currentBox.ExpandTowards(desiredDelta.X, desiredDelta.Y, desiredDelta.Z).Expand(Epsilon);
 

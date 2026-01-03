@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.State;
 using MinecraftProtoNet.Baritone.Pathfinding.Calc;
 using MinecraftProtoNet.Pathfinding;
@@ -14,6 +15,11 @@ public class CalculationContext(Level level)
     /// The level/world to pathfind in.
     /// </summary>
     public Level Level { get; } = level;
+
+    /// <summary>
+    /// Optional logger for diagnostic output from movements.
+    /// </summary>
+    public ILogger? Logger { get; set; }
 
     /// <summary>
     /// Whether sprinting is allowed.
@@ -34,6 +40,18 @@ public class CalculationContext(Level level)
     /// Whether parkour jumps are allowed.
     /// </summary>
     public bool AllowParkour { get; set; } = true;
+
+    /// <summary>
+    /// Whether ascending parkour (landing 1 block higher) is allowed.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public bool AllowParkourAscend { get; set; } = true;
+
+    /// <summary>
+    /// Whether parkour with block placement is allowed.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public bool AllowParkourPlace { get; set; } = true;
 
     /// <summary>
     /// Whether diagonal ascending is allowed.
@@ -76,19 +94,54 @@ public class CalculationContext(Level level)
     public bool AssumeWalkOnWater { get; set; } = false;
 
     /// <summary>
+    /// Frost Walker enchantment level (0 = none, 1-2 = level).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java:115-127
+    /// </summary>
+    public int FrostWalker { get; set; } = 0;
+
+    /// <summary>
+    /// Minimum fall height before considering a fall valid (in blocks).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public int MinFallHeight { get; set; } = 3;
+
+    /// <summary>
+    /// Penalty for walking on water (one block).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public double WalkOnWaterOnePenalty { get; set; } = 0.0;
+
+    /// <summary>
+    /// Water walk speed multiplier.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public double WaterWalkSpeed { get; set; } = ActionCosts.WalkOneInWaterCost;
+
+    /// <summary>
+    /// Whether falling into lava is allowed.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java
+    /// </summary>
+    public bool AllowFallIntoLava { get; set; } = false;
+
+    /// <summary>
     /// Additional cost penalty for breaking blocks.
     /// </summary>
-    public double BreakBlockAdditionalCost { get; set; } = 0;
+    public double BreakBlockAdditionalCost { get; set; } = 2.0;
 
     /// <summary>
     /// Additional cost penalty for placing blocks.
     /// </summary>
-    public double PlaceBlockCost { get; set; } = 0;
+    public double PlaceBlockCost { get; set; } = 20.0;
 
     /// <summary>
     /// Penalty for jumping (encourages flat paths).
     /// </summary>
     public double JumpPenalty { get; set; } = 2.0;
+
+    /// <summary>
+    /// Multiplier for the A* heuristic (3.563 for Baritone).
+    /// </summary>
+    public double CostHeuristic { get; set; } = 3.563;
 
     /// <summary>
     /// Minimum Y level in the world.
@@ -148,4 +201,17 @@ public class CalculationContext(Level level)
     /// Callback to get the best tool speed against a block.
     /// </summary>
     public Func<Models.World.Chunk.BlockState, float>? GetBestToolSpeed { get; set; }
+
+    /// <summary>
+    /// Cost multiplier for backtracking (avoiding previous path positions).
+    /// Default 0.5 means backtracking costs 50% more.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java:82
+    /// </summary>
+    public double BacktrackCostFavoringCoefficient { get; set; } = 0.5;
+
+    /// <summary>
+    /// World border checker for validating movements.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/CalculationContext.java:85
+    /// </summary>
+    public BetterWorldBorder? WorldBorder { get; set; }
 }

@@ -55,7 +55,8 @@ public class GoalBlock : IGoal
         double straight = Math.Abs(x - z);
         double diagonal = Math.Min(x, z);
         
-        double horizontal = (diagonal * Math.Sqrt(2) + straight) * ActionCosts.WalkOneBlockCost;
+        // Baritone uses costHeuristic (3.563) for horizontal distance
+        double horizontal = (diagonal * Math.Sqrt(2) + straight) * 3.563;
 
         return horizontal + vertical;
     }
