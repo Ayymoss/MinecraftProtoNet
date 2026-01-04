@@ -1,9 +1,9 @@
-using MinecraftProtoNet.NBT.Tags;
-using MinecraftProtoNet.NBT.Tags.Abstract;
-using MinecraftProtoNet.NBT.Tags.Primitive;
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.NBT.Tags.Abstract;
+using MinecraftProtoNet.Core.NBT.Tags.Primitive;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 /// <summary>
 /// Helper for extracting and formatting item text from NBT components.

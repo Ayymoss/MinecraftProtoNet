@@ -1,10 +1,9 @@
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.State.Base;
-using MinecraftProtoNet.Actions;
+using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 public interface IMinecraftClient : IPacketSender
 {

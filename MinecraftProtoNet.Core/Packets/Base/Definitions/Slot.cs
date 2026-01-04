@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Utilities;
 using Serilog;
 
-namespace MinecraftProtoNet.Packets.Base.Definitions;
+namespace MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 public class Slot
 {
@@ -169,6 +169,80 @@ public class Slot
             Log.Warning("[Slot] Unknown component type {TypeId} - unable to parse", typeId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets the damage value of this item, or 0 if not damageable or not present.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java:366-368
+    /// </summary>
+    public int GetDamageValue()
+    {
+        if (ComponentsToAdd == null) return 0;
+        foreach (var component in ComponentsToAdd)
+        {
+            if (component.Type == ComponentType.Damage && component.Data is int damage)
+            {
+                return damage;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Gets the maximum damage value of this item, or 0 if not damageable or not present.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java:374-376
+    /// </summary>
+    public int GetMaxDamage()
+    {
+        if (ComponentsToAdd == null) return 0;
+        foreach (var component in ComponentsToAdd)
+        {
+            if (component.Type == ComponentType.MaxDamage && component.Data is int maxDamage)
+            {
+                return maxDamage;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Checks if this item is damageable (has MaxDamage component).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java:358-360
+    /// </summary>
+    public bool IsDamageable()
+    {
+        if (ComponentsToAdd == null) return false;
+        bool hasMaxDamage = false;
+        bool hasUnbreakable = false;
+        bool hasDamage = false;
+        
+        foreach (var component in ComponentsToAdd)
+        {
+            if (component.Type == ComponentType.MaxDamage)
+            {
+                hasMaxDamage = true;
+            }
+            if (component.Type == ComponentType.Unbreakable)
+            {
+                hasUnbreakable = true;
+            }
+            if (component.Type == ComponentType.Damage)
+            {
+                hasDamage = true;
+            }
+        }
+        
+        return hasMaxDamage && !hasUnbreakable && hasDamage;
+    }
+
+    /// <summary>
+    /// Gets the remaining durability (maxDamage - damageValue).
+    /// </summary>
+    public int GetRemainingDurability()
+    {
+        int maxDamage = GetMaxDamage();
+        if (maxDamage == 0) return 0;
+        return maxDamage - GetDamageValue();
     }
 
     public override string ToString()

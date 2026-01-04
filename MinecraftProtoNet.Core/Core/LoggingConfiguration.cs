@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Serilog;
-using Serilog.Extensions.Logging;
 
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 /// <summary>
 /// Configures Serilog as the logging provider with console and file sinks.

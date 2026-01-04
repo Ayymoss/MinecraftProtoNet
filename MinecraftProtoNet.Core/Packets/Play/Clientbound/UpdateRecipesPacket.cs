@@ -1,11 +1,11 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.SlotDisplay.Base;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.SlotDisplay.Base;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 [Packet(0x84, ProtocolState.Play)]
 public class UpdateRecipesPacket : IClientboundPacket

@@ -2,17 +2,16 @@ using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.Utilities;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
 
-using MinecraftProtoNet.Core.Abstractions;
-
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 public sealed class Connection : IPacketSender, IDisposable
 {

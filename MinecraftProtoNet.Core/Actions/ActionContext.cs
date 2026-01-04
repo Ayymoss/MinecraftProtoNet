@@ -1,13 +1,12 @@
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.State.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Utilities;
 using Serilog;
 
-namespace MinecraftProtoNet.Actions;
+namespace MinecraftProtoNet.Core.Actions;
 
 /// <summary>
 /// Default implementation of IActionContext providing access to client state and common operations.

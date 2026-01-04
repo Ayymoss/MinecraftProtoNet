@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Physics;
+namespace MinecraftProtoNet.Core.Physics;
 
 /// <summary>
 /// Physics constants matching Minecraft Java 26.1.

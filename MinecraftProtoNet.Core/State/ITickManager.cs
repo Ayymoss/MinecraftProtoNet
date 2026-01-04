@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Interface for managing tick timing and world time.

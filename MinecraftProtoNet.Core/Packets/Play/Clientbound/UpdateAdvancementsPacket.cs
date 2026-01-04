@@ -1,9 +1,9 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 /// <summary>
 /// Updates advancement data. This is a complex packet with advancement trees.

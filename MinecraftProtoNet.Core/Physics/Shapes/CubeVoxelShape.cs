@@ -1,7 +1,4 @@
-using System;
-using MinecraftProtoNet.Physics;
-
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public sealed class CubeVoxelShape : VoxelShape
 {

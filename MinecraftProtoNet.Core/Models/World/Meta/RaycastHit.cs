@@ -1,8 +1,8 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 
-namespace MinecraftProtoNet.Models.World.Meta;
+namespace MinecraftProtoNet.Core.Models.World.Meta;
 
 public class RaycastHit
 {

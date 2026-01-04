@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Physics;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public abstract class VoxelShape
 {

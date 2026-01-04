@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Models.Core;
 using System.Collections.Concurrent;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Represents a tracked world entity (mobs, villagers, NPCs, items, etc. - NOT players).

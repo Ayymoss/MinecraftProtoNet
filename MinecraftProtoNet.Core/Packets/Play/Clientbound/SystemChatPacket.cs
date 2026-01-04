@@ -1,10 +1,10 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.NBT.Tags;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 [Packet(0x78, ProtocolState.Play)]
 public class SystemChatPacket : IClientboundPacket

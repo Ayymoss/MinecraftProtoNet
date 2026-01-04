@@ -1,10 +1,9 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Status.Serverbound;
+namespace MinecraftProtoNet.Core.Packets.Status.Serverbound;
 
 [Packet(0x01, ProtocolState.Status)]
 public class PingRequestPacket : IServerboundPacket

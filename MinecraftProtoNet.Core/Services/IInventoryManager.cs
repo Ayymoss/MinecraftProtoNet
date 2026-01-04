@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public interface IInventoryManager
 {

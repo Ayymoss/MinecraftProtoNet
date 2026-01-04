@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// Provides access to static game data files for blocks, biomes, and items.

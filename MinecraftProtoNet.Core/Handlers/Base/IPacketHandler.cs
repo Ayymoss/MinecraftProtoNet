@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
 
-namespace MinecraftProtoNet.Handlers.Base;
+namespace MinecraftProtoNet.Core.Handlers.Base;
 
 public interface IPacketHandler
 {

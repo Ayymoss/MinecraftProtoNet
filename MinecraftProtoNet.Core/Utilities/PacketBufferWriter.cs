@@ -2,9 +2,9 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.Contracts;
 using System.Text;
-using MinecraftProtoNet.Models.Core;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 public ref struct PacketBufferWriter
 {

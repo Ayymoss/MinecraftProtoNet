@@ -1,4 +1,4 @@
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 namespace Bot.Webcore.Services;
 

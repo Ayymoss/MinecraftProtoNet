@@ -1,16 +1,16 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Configuration.Clientbound;
-using MinecraftProtoNet.Packets.Configuration.Serverbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State.Base;
-using SelectKnownPacksPacket = MinecraftProtoNet.Packets.Configuration.Clientbound.SelectKnownPacksPacket;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Configuration.Clientbound;
+using MinecraftProtoNet.Core.Packets.Configuration.Serverbound;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State.Base;
+using SelectKnownPacksPacket = MinecraftProtoNet.Core.Packets.Configuration.Clientbound.SelectKnownPacksPacket;
 
-namespace MinecraftProtoNet.Handlers;
+namespace MinecraftProtoNet.Core.Handlers;
 
 /// <summary>
 /// Handles configuration phase packets including registry data, keep-alive, and state transitions.

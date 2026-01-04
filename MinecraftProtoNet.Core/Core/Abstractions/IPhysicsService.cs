@@ -1,7 +1,6 @@
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Core.Abstractions;
+namespace MinecraftProtoNet.Core.Core.Abstractions;
 
 /// <summary>
 /// Service for handling entity physics simulation.

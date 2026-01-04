@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 /// <summary>
 /// Represents the type of inventory click action.

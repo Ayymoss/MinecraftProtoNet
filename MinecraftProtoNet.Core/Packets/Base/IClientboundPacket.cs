@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Base;
+namespace MinecraftProtoNet.Core.Packets.Base;
 
 public interface IClientboundPacket : IPacket
 {

@@ -1,8 +1,7 @@
 using System.Collections.Concurrent;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Manages player and entity state using thread-safe concurrent collections.

@@ -1,11 +1,9 @@
-using System.Numerics;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 /// <summary>
 /// Sent to teleport an entity to a new position.

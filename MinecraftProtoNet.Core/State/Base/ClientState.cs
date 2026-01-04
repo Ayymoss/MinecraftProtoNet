@@ -1,11 +1,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using MinecraftProtoNet.Models.Json;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.NBT.Tags;
-using BlockState = MinecraftProtoNet.Models.World.Chunk.BlockState;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.NBT.Tags;
+using BlockState = MinecraftProtoNet.Core.Models.World.Chunk.BlockState;
 
-namespace MinecraftProtoNet.State.Base;
+namespace MinecraftProtoNet.Core.State.Base;
 
 /// <summary>
 /// Stores server-provided configuration settings.

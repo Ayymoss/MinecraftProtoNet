@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core.Core;
 
-namespace MinecraftProtoNet.Attributes;
+namespace MinecraftProtoNet.Core.Attributes;
 
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class PacketAttribute(int id, ProtocolState state, bool silent = false) : Attribute

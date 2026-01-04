@@ -1,7 +1,6 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Core.Enums;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 /// <summary>
 /// Command to right-click (interact with) the entity being looked at.

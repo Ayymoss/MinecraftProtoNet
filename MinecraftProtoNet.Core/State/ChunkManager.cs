@@ -1,15 +1,13 @@
 using System.Collections.Concurrent;
-using System.Linq;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.Physics;
-using MinecraftProtoNet.Physics.Shapes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.Physics;
+using MinecraftProtoNet.Core.Physics.Shapes;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Manages chunk and block state.

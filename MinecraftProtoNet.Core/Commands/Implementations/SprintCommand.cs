@@ -1,6 +1,4 @@
-using MinecraftProtoNet.Actions;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("sprint", Description = "Toggle sprinting")]
 public class SprintCommand : ICommand

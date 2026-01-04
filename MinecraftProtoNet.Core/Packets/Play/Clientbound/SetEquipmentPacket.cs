@@ -1,12 +1,12 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Player;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Player;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 // TODO: Implement this packet
 [Packet(0x65, ProtocolState.Play)]

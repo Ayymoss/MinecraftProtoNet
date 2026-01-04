@@ -1,9 +1,9 @@
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 public static class ClientManagerHelpers
 {

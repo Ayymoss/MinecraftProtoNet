@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Packets.Base.Definitions;
+namespace MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 public class SoundEvent
 {

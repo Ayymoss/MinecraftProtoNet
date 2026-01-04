@@ -1,9 +1,8 @@
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Packets.Base;
-using Spectre.Console;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Packets.Base;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public class PacketService : IPacketService
 {

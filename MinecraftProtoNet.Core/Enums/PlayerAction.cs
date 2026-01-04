@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 public enum PlayerAction
 {

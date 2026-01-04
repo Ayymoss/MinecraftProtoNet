@@ -1,6 +1,4 @@
-using MinecraftProtoNet.Actions;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("say", Description = "Send a signed chat message")]
 public class SayCommand : ICommand

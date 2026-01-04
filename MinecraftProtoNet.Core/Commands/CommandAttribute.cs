@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Commands;
+namespace MinecraftProtoNet.Core.Commands;
 
 /// <summary>
 /// Attribute for marking and configuring command classes for auto-registration.

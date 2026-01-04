@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 /// <summary>
 /// Represents the type of a raycast hit result.

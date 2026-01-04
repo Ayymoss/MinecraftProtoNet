@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("pos", Description = "Display sender's position")]
 public class PosCommand : ICommand

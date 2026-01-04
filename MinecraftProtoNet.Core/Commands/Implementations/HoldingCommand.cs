@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("holding", Description = "Display held item")]
 public class HoldingCommand : ICommand

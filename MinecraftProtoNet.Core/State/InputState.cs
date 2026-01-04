@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Models.Input;
+using MinecraftProtoNet.Core.Models.Input;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Manages the input state for an entity (player).

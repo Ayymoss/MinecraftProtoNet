@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Base.Definitions;
+namespace MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 /// <summary>
 /// Represents an item cost for merchant trading.

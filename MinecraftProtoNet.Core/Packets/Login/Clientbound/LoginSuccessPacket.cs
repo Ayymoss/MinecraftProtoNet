@@ -1,10 +1,10 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Models.Player;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Models.Player;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Login.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Login.Clientbound;
 
 [Packet(0x02, ProtocolState.Login)]
 public class LoginSuccessPacket : IClientboundPacket

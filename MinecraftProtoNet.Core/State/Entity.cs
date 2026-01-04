@@ -1,12 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Physics;
-using MinecraftProtoNet.Physics.Shapes;
-using InputModel = MinecraftProtoNet.Models.Input.Input;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Physics;
+using MinecraftProtoNet.Core.Physics.Shapes;
+using InputModel = MinecraftProtoNet.Core.Models.Input.Input;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Represents an entity in the game world.
@@ -141,6 +141,38 @@ public class Entity
     /// Used to detect sneak state changes for packet sending.
     /// </summary>
     public bool WasSneaking { get; set; }
+
+    // ===== Position Packet Tracking =====
+
+    /// <summary>
+    /// Last position sent to server. Used for position packet delta calculation.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:120-122
+    /// </summary>
+    public Vector3<double> LastSentPosition { get; set; } = new();
+
+    /// <summary>
+    /// Last rotation (yaw/pitch) sent to server. Used for rotation packet delta calculation.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:123-124
+    /// </summary>
+    public Vector2<float> LastSentYawPitch { get; set; } = new();
+
+    /// <summary>
+    /// Counter for periodic position updates. Increments each tick, sends position every 20 ticks if no movement.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:129
+    /// </summary>
+    public int PositionReminder { get; set; }
+
+    /// <summary>
+    /// Last onGround flag sent to server. Used to detect status changes.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:281
+    /// </summary>
+    public bool LastSentOnGround { get; set; }
+
+    /// <summary>
+    /// Last horizontalCollision flag sent to server. Used to detect status changes.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:282
+    /// </summary>
+    public bool LastSentHorizontalCollision { get; set; }
 
     // ===== Input State =====
     public InputState InputState { get; } = new();

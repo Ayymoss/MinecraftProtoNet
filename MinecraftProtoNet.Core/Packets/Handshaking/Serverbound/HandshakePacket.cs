@@ -1,10 +1,9 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Handshaking.Serverbound;
+namespace MinecraftProtoNet.Core.Packets.Handshaking.Serverbound;
 
 [Packet(0x00, ProtocolState.Handshaking)]
 public class HandshakePacket : IServerboundPacket

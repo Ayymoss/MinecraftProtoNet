@@ -1,7 +1,7 @@
-using MinecraftProtoNet.State.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 public class Chunk(int x, int z)
 {

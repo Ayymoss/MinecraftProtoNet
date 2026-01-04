@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 /// <summary>
 /// Entity type IDs for Minecraft 1.21.x / Protocol 775.

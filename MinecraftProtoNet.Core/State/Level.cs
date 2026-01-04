@@ -1,12 +1,11 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.Physics.Shapes;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.Physics.Shapes;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Represents the game world level, delegating to specialized managers.

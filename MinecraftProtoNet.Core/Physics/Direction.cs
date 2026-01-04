@@ -1,8 +1,7 @@
-using System;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.Physics;
+namespace MinecraftProtoNet.Core.Physics;
 
 public static class Direction
 {

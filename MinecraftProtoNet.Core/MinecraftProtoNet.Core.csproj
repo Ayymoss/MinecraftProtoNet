@@ -4,7 +4,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <RootNamespace>MinecraftProtoNet</RootNamespace>
+        <RootNamespace>MinecraftProtoNet.Core</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
@@ -21,8 +21,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" />
-        <ProjectReference Include="..\MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" />
+        <ProjectReference Include="..\MinecraftProtoNet.Core.Auth\MinecraftProtoNet.Core.Auth.csproj" />
+        <ProjectReference Include="..\MinecraftProtoNet.Core.NBT\MinecraftProtoNet.Core.NBT.csproj" />
     </ItemGroup>
 
     <ItemGroup>

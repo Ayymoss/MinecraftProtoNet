@@ -1,17 +1,17 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Auth.Authenticators;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Configuration.Clientbound;
-using MinecraftProtoNet.Packets.Login.Clientbound;
-using MinecraftProtoNet.Packets.Login.Serverbound;
-using MinecraftProtoNet.Services;
-using HelloPacket = MinecraftProtoNet.Packets.Login.Clientbound.HelloPacket;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Auth.Authenticators;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Configuration.Clientbound;
+using MinecraftProtoNet.Core.Packets.Login.Clientbound;
+using MinecraftProtoNet.Core.Packets.Login.Serverbound;
+using MinecraftProtoNet.Core.Services;
+using HelloPacket = MinecraftProtoNet.Core.Packets.Login.Clientbound.HelloPacket;
 
-namespace MinecraftProtoNet.Handlers;
+namespace MinecraftProtoNet.Core.Handlers;
 
 [HandlesPacket(typeof(DisconnectPacket))]
 [HandlesPacket(typeof(HelloPacket))]

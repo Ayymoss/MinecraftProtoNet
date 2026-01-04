@@ -1,15 +1,11 @@
-using System.Buffers.Binary;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Cryptography;
-using System.Text;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Services;
 using System.Diagnostics.CodeAnalysis;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Play.Serverbound;
+namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
 [Packet(0x08, ProtocolState.Play)]
 public class ChatPacket : IServerboundPacket

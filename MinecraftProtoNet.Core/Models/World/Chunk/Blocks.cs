@@ -1,6 +1,6 @@
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
 /// Provides block constants matching Java's net.minecraft.world.level.block.Blocks.

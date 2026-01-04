@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Base;
 
-namespace MinecraftProtoNet.Core.Abstractions;
+namespace MinecraftProtoNet.Core.Core.Abstractions;
 
 /// <summary>
 /// Minimal interface for sending packets to the server.

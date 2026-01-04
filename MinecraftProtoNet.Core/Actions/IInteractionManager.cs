@@ -1,8 +1,8 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Actions;
+namespace MinecraftProtoNet.Core.Actions;
 
 /// <summary>
 /// Manages player interactions with the world (digging, placing, interacting).

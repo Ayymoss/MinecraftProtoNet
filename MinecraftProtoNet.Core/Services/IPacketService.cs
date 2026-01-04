@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public interface IPacketService
 {

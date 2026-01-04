@@ -1,8 +1,8 @@
-using System;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core; // For Vector3<T> if needed, logic uses ints
+using MinecraftProtoNet.Core.Enums;
 
-namespace MinecraftProtoNet.Physics.Shapes;
+// For Vector3<T> if needed, logic uses ints
+
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public abstract class DiscreteVoxelShape
 {

@@ -1,23 +1,20 @@
 ﻿using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Auth;
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Commands;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Handshaking.Serverbound;
-using MinecraftProtoNet.Packets.Login.Serverbound;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Packets.Status.Serverbound;
-using MinecraftProtoNet.State.Base;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.Auth;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Handshaking.Serverbound;
+using MinecraftProtoNet.Core.Packets.Login.Serverbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Packets.Status.Serverbound;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 public class MinecraftClient : IMinecraftClient
 {

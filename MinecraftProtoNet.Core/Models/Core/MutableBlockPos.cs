@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Core.Enums;
 
-namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Core.Models.Core;
 
 /// <summary>
 /// Mutable block position for efficient position updates without allocation.

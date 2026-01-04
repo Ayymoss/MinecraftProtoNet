@@ -1,6 +1,4 @@
-using MinecraftProtoNet.Actions;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("slot", Description = "Change or display held slot")]
 public class SlotCommand : ICommand

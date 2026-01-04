@@ -103,7 +103,7 @@
 @code {
     private bool _connecting;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Bot.OnStateChanged += OnBotStateChanged;
     }

@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 /// <summary>
 /// Menu types from Minecraft's registry, determining the UI layout for containers.

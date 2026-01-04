@@ -1,10 +1,10 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.NBT.Tags;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Configuration.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Configuration.Clientbound;
 
 [Packet(0x07, ProtocolState.Configuration)]
 public class RegistryDataPacket : IClientboundPacket

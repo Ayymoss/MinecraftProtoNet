@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("ping", Description = "Send a ping request to the server")]
 public class PingCommand : ICommand

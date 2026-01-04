@@ -1,9 +1,9 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Login.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Login.Clientbound;
 
 [Packet(0x03, ProtocolState.Login)]
 public class LoginCompressionPacket : IClientboundPacket

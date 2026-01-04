@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Represents dimension type properties including vertical bounds.
@@ -8,6 +8,11 @@ namespace MinecraftProtoNet.State;
 /// </summary>
 public class DimensionType
 {
+    /// <summary>
+    /// Dimension identifier/name (e.g., "minecraft:overworld", "minecraft:the_nether", "minecraft:the_end").
+    /// </summary>
+    public string Name { get; set; } = "minecraft:overworld";
+
     /// <summary>
     /// Minimum Y coordinate for this dimension (typically -64 for 1.18+).
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/dimension/DimensionType.java

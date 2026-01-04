@@ -1,7 +1,6 @@
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Interface for managing player and entity state.

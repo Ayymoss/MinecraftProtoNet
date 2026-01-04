@@ -1,3 +1,3 @@
-namespace MinecraftProtoNet.Packets.Base;
+namespace MinecraftProtoNet.Core.Packets.Base;
 
 public interface IPacket;

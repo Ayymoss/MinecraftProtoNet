@@ -1,6 +1,4 @@
-using MinecraftProtoNet.Actions;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("sneak", Description = "Toggle sneaking")]
 public class SneakCommand : ICommand

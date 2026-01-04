@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 /// <summary>
 /// Protocol-level constants for Minecraft 1.21.x (Protocol 775).

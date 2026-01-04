@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 
-namespace MinecraftProtoNet.Handlers.Meta;
+namespace MinecraftProtoNet.Core.Handlers.Meta;
 
 /// <summary>
 /// Helper for determining PathType from BlockState.

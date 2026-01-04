@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Physics.Shapes;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Physics.Shapes;
 
-namespace MinecraftProtoNet.Physics;
+namespace MinecraftProtoNet.Core.Physics;
 
 /// <summary>
 /// Result of a collision resolution.

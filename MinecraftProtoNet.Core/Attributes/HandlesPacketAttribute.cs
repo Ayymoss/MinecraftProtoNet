@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Attributes;
+namespace MinecraftProtoNet.Core.Attributes;
 
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
 public class HandlesPacketAttribute(Type packetType) : Attribute

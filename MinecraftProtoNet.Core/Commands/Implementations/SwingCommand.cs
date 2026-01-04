@@ -1,7 +1,6 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Core.Enums;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("swing", Description = "Swing hand")]
 public class SwingCommand : ICommand

@@ -1,13 +1,12 @@
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.NBT.Tags;
-using MinecraftProtoNet.Packets.Base;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.Packets.Base;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public static class PacketHelper
 {

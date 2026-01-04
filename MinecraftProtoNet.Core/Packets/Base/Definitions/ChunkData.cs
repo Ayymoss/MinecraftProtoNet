@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.NBT.Tags;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.NBT.Tags;
 
-namespace MinecraftProtoNet.Packets.Base.Definitions;
+namespace MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 public class ChunkData(NbtTag heightmaps, byte[] data, ChunkBlockEntityInfo[] blockEntities)
 {

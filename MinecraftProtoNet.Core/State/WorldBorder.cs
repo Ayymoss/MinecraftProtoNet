@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Represents the world border with bounds checking.

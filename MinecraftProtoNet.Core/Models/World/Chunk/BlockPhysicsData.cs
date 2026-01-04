@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
 /// Registry of block physics data matching Mojang's Block.Properties.

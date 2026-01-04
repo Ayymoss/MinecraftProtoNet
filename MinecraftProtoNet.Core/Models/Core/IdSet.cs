@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Core.Models.Core;
 
 public class IdSet
 {

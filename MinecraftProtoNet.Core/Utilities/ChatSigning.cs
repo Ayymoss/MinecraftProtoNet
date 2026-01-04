@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using Serilog;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 public static class ChatSigning
 {

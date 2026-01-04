@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Manages entity inventory state including held items and block placement sequences.

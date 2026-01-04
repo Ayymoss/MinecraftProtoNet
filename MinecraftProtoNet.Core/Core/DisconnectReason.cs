@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 /// <summary>
 /// Reasons for disconnection from the server.

@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
 /// Represents a block state with properties aligned to Mojang's BlockBehaviour.BlockStateBase.
@@ -107,6 +107,13 @@ public class BlockState
     /// Whether this block is nearly impossible to break (e.g. Bedrock).
     /// </summary>
     public bool IsExhaustinglyDifficultToBreak => DestroySpeed < 0;
+
+    /// <summary>
+    /// Whether this block requires the correct tool to drop items when broken.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY - BlockBehaviour.Properties.requiresCorrectToolForDrops()
+    /// Most blocks don't require a specific tool, but some (like ores) do.
+    /// </summary>
+    public bool RequiresCorrectToolForDrops { get; set; } = false;
 
     // ===== Constructor =====
 

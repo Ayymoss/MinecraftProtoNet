@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Actions;
+using MinecraftProtoNet.Core.Actions;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("lookingat", Description = "Display block being looked at")]
 public class LookingAtCommand : ICommand

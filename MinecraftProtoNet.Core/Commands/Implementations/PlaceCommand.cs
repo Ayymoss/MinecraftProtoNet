@@ -1,6 +1,4 @@
-using MinecraftProtoNet.Actions;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("place", Description = "Place a block")]
 public class PlaceCommand : ICommand

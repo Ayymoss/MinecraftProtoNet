@@ -1,9 +1,9 @@
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Actions;
+namespace MinecraftProtoNet.Core.Actions;
 
 /// <summary>
 /// Provides the context required for executing actions.

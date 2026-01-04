@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Player;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Player;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 public class Player
 {

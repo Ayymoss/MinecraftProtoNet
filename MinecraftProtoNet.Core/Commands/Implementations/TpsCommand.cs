@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Actions;
+using MinecraftProtoNet.Core.Actions;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("tps", Description = "Display server TPS and tick interval")]
 public class TpsCommand : ICommand

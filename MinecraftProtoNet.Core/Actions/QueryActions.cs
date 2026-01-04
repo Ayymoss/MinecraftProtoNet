@@ -1,10 +1,9 @@
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
-namespace MinecraftProtoNet.Actions;
+namespace MinecraftProtoNet.Core.Actions;
 
 /// <summary>
 /// Query actions for retrieving game state information.

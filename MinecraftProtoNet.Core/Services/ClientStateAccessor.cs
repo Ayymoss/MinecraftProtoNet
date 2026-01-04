@@ -1,7 +1,7 @@
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// Provides access to the current client state via DI.

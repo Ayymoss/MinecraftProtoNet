@@ -1,15 +1,14 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Play.Clientbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Play.Clientbound;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Handlers.Play;
+namespace MinecraftProtoNet.Core.Handlers.Play;
 
 /// <summary>
 /// Handles container/menu related packets (open screen, close, merchant offers).

@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 
-namespace MinecraftProtoNet.Data;
+namespace MinecraftProtoNet.Core.Data;
 
 /// <summary>
 /// Provides data about tools, their tiers, and effectiveness against blocks.

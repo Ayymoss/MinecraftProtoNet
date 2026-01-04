@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
-namespace MinecraftProtoNet.State;
+namespace MinecraftProtoNet.Core.State;
 
 /// <summary>
 /// Tracks the state of an open container/menu (chest, villager, crafting table, etc.).

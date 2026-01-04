@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
 /// Represents chunk coordinates (chunk X and Z).

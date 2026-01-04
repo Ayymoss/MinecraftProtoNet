@@ -1,10 +1,8 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// Interface for container/menu interaction operations.

@@ -1,6 +1,6 @@
-using MinecraftProtoNet.NBT.Tags;
+using MinecraftProtoNet.Core.NBT.Tags;
 
-namespace MinecraftProtoNet.Models.World.Meta;
+namespace MinecraftProtoNet.Core.Models.World.Meta;
 
 public class ChunkBlockEntityInfo(byte x, short y, byte z, int type, NbtTag nbt)
 {

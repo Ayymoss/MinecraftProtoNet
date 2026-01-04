@@ -1,12 +1,11 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// Manages the main game loop that drives physics ticks at the server's tick rate.
@@ -18,6 +17,16 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 
     public bool IsRunning => _gameLoopThread?.IsAlive ?? false;
     public event Action<Entity>? PhysicsTick;
+    
+    /// <summary>
+    /// Event fired before each physics tick. External systems (e.g., Baritone) can subscribe to this.
+    /// </summary>
+    public event Action<IMinecraftClient>? PreTick;
+    
+    /// <summary>
+    /// Event fired after each physics tick. External systems (e.g., Baritone) can subscribe to this.
+    /// </summary>
+    public event Action<IMinecraftClient>? PostTick;
 
     public void Start(IMinecraftClient client)
     {
@@ -43,8 +52,14 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 
                     try
                     {
+                        // Invoke pre-tick hook for external systems (e.g., Baritone)
+                        PreTick?.Invoke(client);
+                        
                         await client.PhysicsTickAsync(entity => PhysicsTick?.Invoke(entity));
                         client.State.Level.IncrementClientTickCounter();
+                        
+                        // Invoke post-tick hook for external systems (e.g., Baritone)
+                        PostTick?.Invoke(client);
                     }
                     catch (Exception ex)
                     {

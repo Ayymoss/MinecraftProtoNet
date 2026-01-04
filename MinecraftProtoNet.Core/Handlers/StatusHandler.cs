@@ -1,14 +1,14 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Status.Clientbound;
-using MinecraftProtoNet.Packets.Status.Serverbound;
-using MinecraftProtoNet.Services;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Status.Clientbound;
+using MinecraftProtoNet.Core.Packets.Status.Serverbound;
+using MinecraftProtoNet.Core.Services;
 
-namespace MinecraftProtoNet.Handlers;
+namespace MinecraftProtoNet.Core.Handlers;
 
 [HandlesPacket(typeof(StatusResponsePacket))]
 [HandlesPacket(typeof(PongResponsePacket))]

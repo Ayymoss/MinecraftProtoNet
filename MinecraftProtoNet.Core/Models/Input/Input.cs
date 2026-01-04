@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.Input;
+namespace MinecraftProtoNet.Core.Models.Input;
 
 /// <summary>
 /// Represents player input state for a single tick.

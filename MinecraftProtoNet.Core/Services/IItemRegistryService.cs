@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public interface IItemRegistryService
 {

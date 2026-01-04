@@ -1,20 +1,15 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.NBT;
-using MinecraftProtoNet.NBT.Tags.Primitive;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Play.Clientbound;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
-using KeepAlivePacket = MinecraftProtoNet.Packets.Play.Clientbound.KeepAlivePacket;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Play.Clientbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Services;
 
-namespace MinecraftProtoNet.Handlers;
+namespace MinecraftProtoNet.Core.Handlers;
 
 [HandlesPacket(typeof(LoginPacket))]
 [HandlesPacket(typeof(PlayerPositionPacket))]

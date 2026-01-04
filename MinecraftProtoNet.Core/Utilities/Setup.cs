@@ -1,15 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Commands;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Handlers;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Handlers;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 /// <summary>
 /// Extension methods for registering Minecraft client services with dependency injection.
@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         // Game services
         services.AddSingleton<IClientStateAccessor, ClientStateAccessor>();
         services.AddSingleton<IGameLoop, GameLoop>();
+        services.AddSingleton<IPhysicsService, PhysicsService>();
 
         // Data loading
         services.AddSingleton<IRegistryDataLoader, RegistryDataLoader>();

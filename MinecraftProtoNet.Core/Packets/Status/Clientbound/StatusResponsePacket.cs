@@ -1,9 +1,9 @@
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Packets.Status.Clientbound;
+namespace MinecraftProtoNet.Core.Packets.Status.Clientbound;
 
 [Packet(0x00, ProtocolState.Status)]
 public class StatusResponsePacket : IClientboundPacket

@@ -1,9 +1,7 @@
-using System;
-using System.Collections.Generic;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 /// <summary>
 /// Axis Aligned Bounding Box.

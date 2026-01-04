@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 /// <summary>
 /// Represents the result of an interaction (block placement, entity interaction, etc.).

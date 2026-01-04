@@ -1,7 +1,4 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Physics;
-
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public class SliceShape : VoxelShape
 {

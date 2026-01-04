@@ -1,7 +1,7 @@
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
-namespace MinecraftProtoNet.Models.Player;
+namespace MinecraftProtoNet.Core.Models.Player;
 
 public class Equipment
 {

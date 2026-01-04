@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Commands;
+namespace MinecraftProtoNet.Core.Commands;
 
 /// <summary>
 /// Interface for chat-triggered commands.

@@ -2,13 +2,13 @@ using System.Buffers.Binary;
 using System.Collections;
 using System.Diagnostics.Contracts;
 using System.Text;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.NBT;
-using MinecraftProtoNet.NBT.Tags;
-using MinecraftProtoNet.NBT.Tags.Abstract;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.NBT;
+using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.NBT.Tags.Abstract;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
 {

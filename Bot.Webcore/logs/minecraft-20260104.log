@@ -1,0 +1,416 @@
+[2026-01-04 18:18:49.549] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: BaritoneCommand
+[2026-01-04 18:18:49.644] [INF] [Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager] User profile is available. Using 'C:\Users\Amos\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+[2026-01-04 18:18:49.704] [DBG] [Microsoft.Extensions.Hosting.Internal.Host] Hosting starting
+[2026-01-04 18:18:49.935] [INF] [Microsoft.Hosting.Lifetime] Now listening on: http://localhost:5107
+[2026-01-04 18:18:49.939] [INF] [Microsoft.Hosting.Lifetime] Application started. Press Ctrl+C to shut down.
+[2026-01-04 18:18:49.941] [INF] [Microsoft.Hosting.Lifetime] Hosting environment: Development
+[2026-01-04 18:18:49.943] [INF] [Microsoft.Hosting.Lifetime] Content root path: C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore
+[2026-01-04 18:18:49.945] [DBG] [Microsoft.Extensions.Hosting.Internal.Host] Hosting started
+[2026-01-04 18:18:50.159] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/ - null null
+[2026-01-04 18:18:50.195] [WRN] [Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware] Failed to determine the https port for redirect.
+[2026-01-04 18:18:50.201] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint '/ (/)'
+[2026-01-04 18:18:50.319] [INF] [PacketRegistry] Packet Registry initialized: Found 96 clientbound packets and 12 handlers
+[2026-01-04 18:18:50.331] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: AttackCommand
+[2026-01-04 18:18:50.334] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: CmdCommand
+[2026-01-04 18:18:50.337] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: DropCommand
+[2026-01-04 18:18:50.340] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: ForwardCommand
+[2026-01-04 18:18:50.342] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: GetBlockCommand
+[2026-01-04 18:18:50.346] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: HoldingCommand
+[2026-01-04 18:18:50.348] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: InteractCommand
+[2026-01-04 18:18:50.351] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: JumpCommand
+[2026-01-04 18:18:50.353] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: LookAtCommand
+[2026-01-04 18:18:50.356] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: LookingAtCommand
+[2026-01-04 18:18:50.358] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PingCommand
+[2026-01-04 18:18:50.361] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PlaceCommand
+[2026-01-04 18:18:50.363] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PlaceItCommand
+[2026-01-04 18:18:50.365] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PosCommand
+[2026-01-04 18:18:50.367] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SayCommand
+[2026-01-04 18:18:50.370] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SlotCommand
+[2026-01-04 18:18:50.373] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SneakCommand
+[2026-01-04 18:18:50.376] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SprintCommand
+[2026-01-04 18:18:50.378] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: StateCommand
+[2026-01-04 18:18:50.381] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SwingCommand
+[2026-01-04 18:18:50.383] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: TpsCommand
+[2026-01-04 18:18:50.483] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint '/ (/)'
+[2026-01-04 18:18:50.489] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/ - 200 null text/html; charset=utf-8 338.3652ms
+[2026-01-04 18:18:50.565] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/Bot.Webcore.qdqdv1zlus.styles.css - null null
+[2026-01-04 18:18:50.565] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/Components/Layout/ReconnectModal.13ja33weya.razor.js - null null
+[2026-01-04 18:18:50.565] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/app.4kywy7iv6g.css - null null
+[2026-01-04 18:18:50.575] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.565] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_framework/blazor.web.wmp8iwak4q.js - null null
+[2026-01-04 18:18:50.577] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.581] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.588] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.619] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] The file _framework/blazor.web.wmp8iwak4q.js was not modified
+[2026-01-04 18:18:50.623] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.625] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'Components/Layout/ReconnectModal.13ja33weya.razor.js'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\gvan5fzs7k-{0}-13ja33weya-13ja33weya.gz'
+[2026-01-04 18:18:50.625] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'app.4kywy7iv6g.css'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\m4jwetc4ef-{0}-4kywy7iv6g-4kywy7iv6g.gz'
+[2026-01-04 18:18:50.628] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/_framework/blazor.web.wmp8iwak4q.js - 304 null text/javascript 94.0189ms
+[2026-01-04 18:18:50.628] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'Bot.Webcore.qdqdv1zlus.styles.css'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\82o6a55obm-{0}-qdqdv1zlus-qdqdv1zlus.gz'
+[2026-01-04 18:18:50.631] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.638] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.648] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.650] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/Components/Layout/ReconnectModal.13ja33weya.razor.js - 200 2397 text/javascript 117.2632ms
+[2026-01-04 18:18:50.654] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/app.4kywy7iv6g.css - 200 2496 text/css 122.953ms
+[2026-01-04 18:18:50.655] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/Bot.Webcore.qdqdv1zlus.styles.css - 200 4973 text/css 124.954ms
+[2026-01-04 18:18:50.742] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_blazor/initializers - null null
+[2026-01-04 18:18:50.748] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.755] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.757] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/_blazor/initializers - 200 null application/json; charset=utf-8 15.1338ms
+[2026-01-04 18:18:50.791] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 POST http://localhost:5107/_blazor/negotiate?negotiateVersion=1 - null 0
+[2026-01-04 18:18:50.797] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.797] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/favicon.ico - null null
+[2026-01-04 18:18:50.810] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.812] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint '/not-found (/not-found)'
+[2026-01-04 18:18:50.813] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 POST http://localhost:5107/_blazor/negotiate?negotiateVersion=1 - 200 316 application/json 22.3574ms
+[2026-01-04 18:18:50.821] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint '/not-found (/not-found)'
+[2026-01-04 18:18:50.821] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_blazor?id=atUNmnWXNxJcB31hda5vAg - null null
+[2026-01-04 18:18:50.825] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/favicon.ico - 404 null text/html; charset=utf-8 27.8894ms
+[2026-01-04 18:18:50.832] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:18:50.840] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5107/favicon.ico, Response status code: 404
+[2026-01-04 18:22:20.087] [DBG] [MinecraftProtoNet.Core.MinecraftClient] Switching protocol state: "Handshaking"
+[2026-01-04 18:22:41.233] [ERR] [MinecraftProtoNet.Core.Connection] Failed to connect to 10.10.1.20:25565
+System.Net.Sockets.SocketException (10060): A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.TcpClient.CompleteConnectAsync(ValueTask task)
+   at MinecraftProtoNet.Core.Connection.ConnectAsync(String host, Int32 port, CancellationToken cancellationToken) in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet.Core\Core\Connection.cs:line 54
+[2026-01-04 18:22:41.323] [WRN] [Microsoft.AspNetCore.Components.Server.Circuits.RemoteRenderer] Unhandled exception rendering component: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+System.Net.Sockets.SocketException (10060): A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.TcpClient.CompleteConnectAsync(ValueTask task)
+   at MinecraftProtoNet.Core.Connection.ConnectAsync(String host, Int32 port, CancellationToken cancellationToken) in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet.Core\Core\Connection.cs:line 54
+   at MinecraftProtoNet.Core.MinecraftClient.ConnectAsync(String host, Int32 port, Boolean isSnapshot) in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet.Core\Core\MinecraftClient.cs:line 107
+   at Bot.Webcore.Services.BotService.ConnectAsync() in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\Services\BotService.cs:line 124
+   at Bot.Webcore.Components.Pages.Home.Connect() in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\Components\Pages\Home.razor:line 125
+   at Microsoft.AspNetCore.Components.ComponentBase.CallStateHasChangedOnAsyncCompletion(Task task)
+   at Microsoft.AspNetCore.Components.RenderTree.Renderer.GetErrorHandledTask(Task taskToHandle, ComponentState owningComponentState)
+[2026-01-04 18:22:41.337] [ERR] [Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost] Unhandled exception in circuit 'dGdWptjYOqNWD5jaYUUuSsiE0TRiplp-P-gf2kVKJGw'.
+System.Net.Sockets.SocketException (10060): A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.TcpClient.CompleteConnectAsync(ValueTask task)
+   at MinecraftProtoNet.Core.Connection.ConnectAsync(String host, Int32 port, CancellationToken cancellationToken) in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet.Core\Core\Connection.cs:line 54
+   at MinecraftProtoNet.Core.MinecraftClient.ConnectAsync(String host, Int32 port, Boolean isSnapshot) in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet.Core\Core\MinecraftClient.cs:line 107
+   at Bot.Webcore.Services.BotService.ConnectAsync() in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\Services\BotService.cs:line 124
+   at Bot.Webcore.Components.Pages.Home.Connect() in C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\Components\Pages\Home.razor:line 125
+   at Microsoft.AspNetCore.Components.ComponentBase.CallStateHasChangedOnAsyncCompletion(Task task)
+   at Microsoft.AspNetCore.Components.RenderTree.Renderer.GetErrorHandledTask(Task taskToHandle, ComponentState owningComponentState)
+[2026-01-04 18:22:41.355] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:22:41.358] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/_blazor?id=atUNmnWXNxJcB31hda5vAg - 101 null null 230537.1571ms
+[2026-01-04 18:26:21.526] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: BaritoneCommand
+[2026-01-04 18:26:21.605] [INF] [Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager] User profile is available. Using 'C:\Users\Amos\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+[2026-01-04 18:26:21.646] [DBG] [Microsoft.Extensions.Hosting.Internal.Host] Hosting starting
+[2026-01-04 18:26:21.810] [INF] [Microsoft.Hosting.Lifetime] Now listening on: http://localhost:5107
+[2026-01-04 18:26:21.813] [INF] [Microsoft.Hosting.Lifetime] Application started. Press Ctrl+C to shut down.
+[2026-01-04 18:26:21.815] [INF] [Microsoft.Hosting.Lifetime] Hosting environment: Development
+[2026-01-04 18:26:21.817] [INF] [Microsoft.Hosting.Lifetime] Content root path: C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore
+[2026-01-04 18:26:21.819] [DBG] [Microsoft.Extensions.Hosting.Internal.Host] Hosting started
+[2026-01-04 18:26:22.100] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/ - null null
+[2026-01-04 18:26:22.146] [WRN] [Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware] Failed to determine the https port for redirect.
+[2026-01-04 18:26:22.149] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint '/ (/)'
+[2026-01-04 18:26:22.253] [INF] [PacketRegistry] Packet Registry initialized: Found 96 clientbound packets and 12 handlers
+[2026-01-04 18:26:22.259] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: AttackCommand
+[2026-01-04 18:26:22.261] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: CmdCommand
+[2026-01-04 18:26:22.263] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: DropCommand
+[2026-01-04 18:26:22.266] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: ForwardCommand
+[2026-01-04 18:26:22.269] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: GetBlockCommand
+[2026-01-04 18:26:22.271] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: HoldingCommand
+[2026-01-04 18:26:22.273] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: InteractCommand
+[2026-01-04 18:26:22.275] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: JumpCommand
+[2026-01-04 18:26:22.279] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: LookAtCommand
+[2026-01-04 18:26:22.281] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: LookingAtCommand
+[2026-01-04 18:26:22.284] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PingCommand
+[2026-01-04 18:26:22.286] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PlaceCommand
+[2026-01-04 18:26:22.288] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PlaceItCommand
+[2026-01-04 18:26:22.290] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: PosCommand
+[2026-01-04 18:26:22.292] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SayCommand
+[2026-01-04 18:26:22.295] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SlotCommand
+[2026-01-04 18:26:22.297] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SneakCommand
+[2026-01-04 18:26:22.299] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SprintCommand
+[2026-01-04 18:26:22.301] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: StateCommand
+[2026-01-04 18:26:22.303] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: SwingCommand
+[2026-01-04 18:26:22.305] [DBG] [MinecraftProtoNet.Commands.CommandRegistry] Registered command: TpsCommand
+[2026-01-04 18:26:22.381] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint '/ (/)'
+[2026-01-04 18:26:22.387] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/ - 200 null text/html; charset=utf-8 292.7259ms
+[2026-01-04 18:26:22.432] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/app.4kywy7iv6g.css - null null
+[2026-01-04 18:26:22.432] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/Bot.Webcore.qdqdv1zlus.styles.css - null null
+[2026-01-04 18:26:22.435] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/Components/Layout/ReconnectModal.13ja33weya.razor.js - null null
+[2026-01-04 18:26:22.465] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_framework/blazor.web.wmp8iwak4q.js - null null
+[2026-01-04 18:26:22.473] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.475] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.482] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.485] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.497] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] The file _framework/blazor.web.wmp8iwak4q.js was not modified
+[2026-01-04 18:26:22.501] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.503] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/_framework/blazor.web.wmp8iwak4q.js - 304 null text/javascript 38.9964ms
+[2026-01-04 18:26:22.544] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'Bot.Webcore.qdqdv1zlus.styles.css'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\82o6a55obm-{0}-qdqdv1zlus-qdqdv1zlus.gz'
+[2026-01-04 18:26:22.544] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'Components/Layout/ReconnectModal.13ja33weya.razor.js'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\gvan5fzs7k-{0}-13ja33weya-13ja33weya.gz'
+[2026-01-04 18:26:22.545] [INF] [Microsoft.AspNetCore.StaticAssets.StaticAssetsInvoker] Sending file. Request path: 'app.4kywy7iv6g.css'. Physical path: 'C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Bot.Webcore\obj\Debug\net10.0\compressed\m4jwetc4ef-{0}-4kywy7iv6g-4kywy7iv6g.gz'
+[2026-01-04 18:26:22.547] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.549] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.550] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.552] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/Bot.Webcore.qdqdv1zlus.styles.css - 200 4973 text/css 120.27ms
+[2026-01-04 18:26:22.554] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/Components/Layout/ReconnectModal.13ja33weya.razor.js - 200 2397 text/javascript 118.5848ms
+[2026-01-04 18:26:22.555] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/app.4kywy7iv6g.css - 200 2496 text/css 124.4959ms
+[2026-01-04 18:26:22.691] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_blazor/initializers - null null
+[2026-01-04 18:26:22.696] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.702] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.705] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 GET http://localhost:5107/_blazor/initializers - 200 null application/json; charset=utf-8 13.6668ms
+[2026-01-04 18:26:22.733] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 POST http://localhost:5107/_blazor/negotiate?negotiateVersion=1 - null 0
+[2026-01-04 18:26:22.738] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.749] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:22.751] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request finished HTTP/1.1 POST http://localhost:5107/_blazor/negotiate?negotiateVersion=1 - 200 316 application/json 18.9445ms
+[2026-01-04 18:26:22.760] [INF] [Microsoft.AspNetCore.Hosting.Diagnostics] Request starting HTTP/1.1 GET http://localhost:5107/_blazor?id=UEec5VArNNmv6nTRVatQlA - null null
+[2026-01-04 18:26:22.764] [INF] [Microsoft.AspNetCore.Routing.EndpointMiddleware] Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+[2026-01-04 18:26:25.459] [DBG] [MinecraftProtoNet.Core.MinecraftClient] Switching protocol state: "Handshaking"
+[2026-01-04 18:26:25.465] [INF] [MinecraftProtoNet.Core.Connection] Connected to 10.10.1.20:25565
+[2026-01-04 18:26:25.571] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Handshaking : Handshake (0x00)] -> ProtocolVersion: 1073742111, ServerAddress: "10.10.1.20", ServerPort: 25565, NextState: 2
+[2026-01-04 18:26:25.573] [DBG] [MinecraftProtoNet.Core.MinecraftClient] Switching protocol state: "Login"
+[2026-01-04 18:26:25.577] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Login : Hello (0x00)] -> Username: "JeffMaxxing", Uuid: 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0
+[2026-01-04 18:26:25.633] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Login : Hello (0x01)] -> ServerId: "", PublicKey: [Binary:162 bytes], VerifyToken: [Binary:4 bytes], ShouldAuthenticate: True
+[2026-01-04 18:26:25.637] [INF] [MinecraftProtoNet.Handlers.LoginHandler] Received HelloPacket. Initiating encryption...
+[2026-01-04 18:26:25.640] [INF] [MinecraftProtoNet.Handlers.LoginHandler] Server requires authentication. Contacting Mojang session server...
+[2026-01-04 18:26:25.961] [INF] [MinecraftProtoNet.Handlers.LoginHandler] Mojang authentication successful
+[2026-01-04 18:26:26.070] [DBG] [MinecraftProtoNet.Handlers.LoginHandler] Shared Secret (16 bytes): 213DEA79122B91E855FA67E0D7627EB4
+[2026-01-04 18:26:26.071] [DBG] [MinecraftProtoNet.Handlers.LoginHandler] Encrypted Shared Secret (128 bytes)
+[2026-01-04 18:26:26.073] [DBG] [MinecraftProtoNet.Handlers.LoginHandler] Encrypted Verify Token (128 bytes)
+[2026-01-04 18:26:26.077] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Login : Key (0x01)] -> SharedSecret: [Binary:128 bytes], VerifyToken: [Binary:128 bytes]
+[2026-01-04 18:26:26.079] [INF] [MinecraftProtoNet.Handlers.LoginHandler] Sent KeyPacket. Enabling AES encryption...
+[2026-01-04 18:26:26.094] [INF] [MinecraftProtoNet.Core.Connection] AES/CFB8 encryption enabled (using BouncyCastle)
+[2026-01-04 18:26:26.095] [INF] [MinecraftProtoNet.Handlers.LoginHandler] Encryption enabled for subsequent packets
+[2026-01-04 18:26:26.302] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Login : Login Success (0x02)] -> UUID: 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0, Username: "JeffMaxxing", Properties: [MinecraftProtoNet.Models.Player.Property]
+[2026-01-04 18:26:26.304] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Login : Login Acknowledged (0x03)] -> 
+[2026-01-04 18:26:26.308] [DBG] [MinecraftProtoNet.Handlers.LoginHandler] Switching protocol state: "Configuration"
+[2026-01-04 18:26:26.311] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Custom Payload (0x01)] -> Channel: "minecraft:brand", Data: [Binary:8 bytes]
+[2026-01-04 18:26:26.314] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Update Enabled Features (0x0C)] -> FeatureFlags: ["minecraft:vanilla"]
+[2026-01-04 18:26:26.316] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Select Known Packs (0x0E)] -> KnownPacks: [MinecraftProtoNet.Packets.Configuration.Clientbound.SelectKnownPacksPacket+Packs]
+[2026-01-04 18:26:26.320] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Configuration : Select Known Packs (0x07)] -> KnownPacks: []
+[2026-01-04 18:26:26.367] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:worldgen/biome", Tags: [[minecraft:badlands, NbtTag: <NULL> (Compound)], [minecraft:bamboo_jungle, NbtTag: <NULL> (Compound)], [minecraft:basalt_deltas, NbtTag: <NULL> (Compound)], [minecraft:beach, NbtTag: <NULL> (Compound)], [minecraft:birch_forest, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.371] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:chat_type", Tags: [[minecraft:chat, NbtTag: <NULL> (Compound)], [minecraft:emote_command, NbtTag: <NULL> (Compound)], [minecraft:msg_command_incoming, NbtTag: <NULL> (Compound)], [minecraft:msg_command_outgoing, NbtTag: <NULL> (Compound)], [minecraft:say_command, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.376] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:trim_pattern", Tags: [[minecraft:bolt, NbtTag: <NULL> (Compound)], [minecraft:coast, NbtTag: <NULL> (Compound)], [minecraft:dune, NbtTag: <NULL> (Compound)], [minecraft:eye, NbtTag: <NULL> (Compound)], [minecraft:flow, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.379] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:trim_material", Tags: [[minecraft:amethyst, NbtTag: <NULL> (Compound)], [minecraft:copper, NbtTag: <NULL> (Compound)], [minecraft:diamond, NbtTag: <NULL> (Compound)], [minecraft:emerald, NbtTag: <NULL> (Compound)], [minecraft:gold, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.382] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:wolf_variant", Tags: [[minecraft:ashen, NbtTag: <NULL> (Compound)], [minecraft:black, NbtTag: <NULL> (Compound)], [minecraft:chestnut, NbtTag: <NULL> (Compound)], [minecraft:pale, NbtTag: <NULL> (Compound)], [minecraft:rusty, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.386] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:wolf_sound_variant", Tags: [[minecraft:angry, NbtTag: <NULL> (Compound)], [minecraft:big, NbtTag: <NULL> (Compound)], [minecraft:classic, NbtTag: <NULL> (Compound)], [minecraft:cute, NbtTag: <NULL> (Compound)], [minecraft:grumpy, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.388] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:pig_variant", Tags: [[minecraft:cold, NbtTag: <NULL> (Compound)], [minecraft:temperate, NbtTag: <NULL> (Compound)], [minecraft:warm, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.390] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:frog_variant", Tags: [[minecraft:cold, NbtTag: <NULL> (Compound)], [minecraft:temperate, NbtTag: <NULL> (Compound)], [minecraft:warm, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.393] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:cat_variant", Tags: [[minecraft:all_black, NbtTag: <NULL> (Compound)], [minecraft:black, NbtTag: <NULL> (Compound)], [minecraft:british_shorthair, NbtTag: <NULL> (Compound)], [minecraft:calico, NbtTag: <NULL> (Compound)], [minecraft:jellie, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.395] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:cow_variant", Tags: [[minecraft:cold, NbtTag: <NULL> (Compound)], [minecraft:temperate, NbtTag: <NULL> (Compound)], [minecraft:warm, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.397] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:chicken_variant", Tags: [[minecraft:cold, NbtTag: <NULL> (Compound)], [minecraft:temperate, NbtTag: <NULL> (Compound)], [minecraft:warm, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.399] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:zombie_nautilus_variant", Tags: [[minecraft:temperate, NbtTag: <NULL> (Compound)], [minecraft:warm, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.410] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:painting_variant", Tags: [[minecraft:alban, NbtTag: <NULL> (Compound)], [minecraft:aztec, NbtTag: <NULL> (Compound)], [minecraft:aztec2, NbtTag: <NULL> (Compound)], [minecraft:backyard, NbtTag: <NULL> (Compound)], [minecraft:baroque, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.414] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:dimension_type", Tags: [[minecraft:overworld, NbtTag: <NULL> (Compound)], [minecraft:overworld_caves, NbtTag: <NULL> (Compound)], [minecraft:the_end, NbtTag: <NULL> (Compound)], [minecraft:the_nether, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.420] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:damage_type", Tags: [[minecraft:arrow, NbtTag: <NULL> (Compound)], [minecraft:bad_respawn_point, NbtTag: <NULL> (Compound)], [minecraft:cactus, NbtTag: <NULL> (Compound)], [minecraft:campfire, NbtTag: <NULL> (Compound)], [minecraft:cramming, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.426] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:banner_pattern", Tags: [[minecraft:base, NbtTag: <NULL> (Compound)], [minecraft:border, NbtTag: <NULL> (Compound)], [minecraft:bricks, NbtTag: <NULL> (Compound)], [minecraft:circle, NbtTag: <NULL> (Compound)], [minecraft:creeper, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.445] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:enchantment", Tags: [[minecraft:aqua_affinity, NbtTag: <NULL> (Compound)], [minecraft:bane_of_arthropods, NbtTag: <NULL> (Compound)], [minecraft:binding_curse, NbtTag: <NULL> (Compound)], [minecraft:blast_protection, NbtTag: <NULL> (Compound)], [minecraft:breach, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.448] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:jukebox_song", Tags: [[minecraft:11, NbtTag: <NULL> (Compound)], [minecraft:13, NbtTag: <NULL> (Compound)], [minecraft:5, NbtTag: <NULL> (Compound)], [minecraft:blocks, NbtTag: <NULL> (Compound)], [minecraft:cat, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.451] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:instrument", Tags: [[minecraft:admire_goat_horn, NbtTag: <NULL> (Compound)], [minecraft:call_goat_horn, NbtTag: <NULL> (Compound)], [minecraft:dream_goat_horn, NbtTag: <NULL> (Compound)], [minecraft:feel_goat_horn, NbtTag: <NULL> (Compound)], [minecraft:ponder_goat_horn, NbtTag: <NULL> (Compound)], ...]
+[2026-01-04 18:26:26.453] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:test_environment", Tags: [[minecraft:default, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.455] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:test_instance", Tags: [[minecraft:always_pass, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.458] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:dialog", Tags: [[minecraft:custom_options, NbtTag: <NULL> (Compound)], [minecraft:quick_actions, NbtTag: <NULL> (Compound)], [minecraft:server_links, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.461] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Registry Data (0x07)] -> RegistryId: "minecraft:timeline", Tags: [[minecraft:day, NbtTag: <NULL> (Compound)], [minecraft:early_game, NbtTag: <NULL> (Compound)], [minecraft:moon, NbtTag: <NULL> (Compound)], [minecraft:villager_schedule, NbtTag: <NULL> (Compound)]]
+[2026-01-04 18:26:26.479] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Update Tags (0x0D)] -> Tags: [[minecraft:instrument, MinecraftProtoNet.Packets.Configuration.Clientbound.UpdateTagsPacket+Tag[]], [minecraft:block, MinecraftProtoNet.Packets.Configuration.Clientbound.UpdateTagsPacket+Tag[]], [minecraft:game_event, MinecraftProtoNet.Packets.Configuration.Clientbound.UpdateTagsPacket+Tag[]], [minecraft:worldgen/biome, MinecraftProtoNet.Packets.Configuration.Clientbound.UpdateTagsPacket+Tag[]], [minecraft:timeline, MinecraftProtoNet.Packets.Configuration.Clientbound.UpdateTagsPacket+Tag[]], ...]
+[2026-01-04 18:26:26.481] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Configuration : Finish Configuration (0x03)] -> 
+[2026-01-04 18:26:26.484] [DBG] [MinecraftProtoNet.Handlers.ConfigurationHandler] Finishing configuration phase...
+[2026-01-04 18:26:26.705] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Configuration : Client Information (0x00)] -> Locale: "en_US", ViewDistance: 10, ChatMode: 0, ChatColors: True, DisplayedSkinParts: 127, MainHand: 1, EnableTextFiltering: False, AllowServerListings: True, ParticleStatus: 0
+[2026-01-04 18:26:26.708] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Configuration : Finish Configuration (0x03)] -> 
+[2026-01-04 18:26:26.710] [DBG] [MinecraftProtoNet.Handlers.ConfigurationHandler] Protocol state changed to "Play"
+[2026-01-04 18:26:26.713] [DBG] [MinecraftProtoNet.Core.MinecraftClient] Sending ChatSessionUpdatePacket. SessionId: "5780e974-50a2-4974-b75a-d3dc4278d93e"
+[2026-01-04 18:26:26.717] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Play : Chat Session Update (0x09)] -> SessionId: 5780e974-50a2-4974-b75a-d3dc4278d93e, ExpiresAt: 1767610075394, PublicKey: [Binary:294 bytes], KeySignature: [Binary:512 bytes]
+[2026-01-04 18:26:26.721] [DBG] [MinecraftProtoNet.Core.MinecraftClient] Sent ChatSessionUpdatePacket
+[2026-01-04 18:26:26.841] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Login (0x30)] -> EntityId: 471, IsHardcore: False, DimensionNames: ["minecraft:overworld", "minecraft:the_end", "minecraft:the_nether"], MaxPlayers: 20, ViewDistance: 10, SimulationDistance: 10, ReducedDebugInfo: False, EnableRespawnScreen: True, DoLimitedCrafting: False, DimensionType: 0, DimensionName: "minecraft:overworld", HashedSeed: -855516628192786784, GameMode: 0, PreviousGameMode: -1, IsDebug: False, IsFlat: False, HasDeathLocation: True, DeathDimensionName: "minecraft:overworld", DeathLocation: (-1.0000, 68.0000, -17.0000), PortalCooldown: 0, SeaLevel: 63, EnforcesSecureChat: True
+[2026-01-04 18:26:26.846] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Play : Chat Session Update (0x09)] -> SessionId: 5780e974-50a2-4974-b75a-d3dc4278d93e, ExpiresAt: 1767610075394, PublicKey: [Binary:294 bytes], KeySignature: [Binary:512 bytes]
+[2026-01-04 18:26:26.852] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Change Difficulty (0x0A)] -> Difficulty: Easy, DifficultyLocked: False
+[2026-01-04 18:26:26.856] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Abilities (0x3F)] -> Flag: None, FlyingSpeed: 0.05, FieldOfViewerModifier: 0.1
+[2026-01-04 18:26:26.860] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Held Slot (0x68)] -> HeldSlot: 0
+[2026-01-04 18:26:26.866] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Update Recipes (0x84)] -> Recipes: []
+[2026-01-04 18:26:26.871] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Commands (0x10)] -> RootIndex: 0, NodeCount: 26
+[2026-01-04 18:26:26.876] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Recipe Book Settings (0x4B)] -> CraftingOpen: False, CraftingFiltering: False, FurnaceOpen: False, FurnaceFiltering: False, BlastFurnaceOpen: False, BlastFurnaceFiltering: False, SmokerOpen: False, SmokerFiltering: False
+[2026-01-04 18:26:26.887] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Recipe Book Add (0x49)] -> Replace: False, EntryCount: 0
+[2026-01-04 18:26:26.892] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Position (0x47)] -> TeleportId: 1, Position: (13.4799, 100.0000, -18.4495), Velocity: (0.0000, 0.0000, 0.0000), YawPitch: (-158.40714, 88.6521), Flags: None
+[2026-01-04 18:26:26.895] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Play : Accept Teleportation (0x00)] -> TeleportId: 1
+[2026-01-04 18:26:26.898] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Play : Player Loaded (0x2B)] -> 
+[2026-01-04 18:26:26.936] [DBG] [MinecraftProtoNet.Handlers.PlayHandler] Applied teleport: TeleportId=1, Position=(13.4799, 100.0000, -18.4495), Velocity=(0.0000, 0.0000, 0.0000), Flags="None"
+[2026-01-04 18:26:26.937] [INF] [MinecraftProtoNet.Services.GameLoop] Game loop started
+[2026-01-04 18:26:26.941] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Server Data (0x55)] -> Motd: [NBT:String], Icon: [Binary:0 bytes]
+[2026-01-04 18:26:26.947] [DBG] [MinecraftProtoNet.Handlers.Play.TimeAndWorldHandler] Server MOTD: NbtTag: <NULL> (String)
+[2026-01-04 18:26:26.955] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:8 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c]
+[2026-01-04 18:26:26.962] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:8 bytes], PlayerInfos: [6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:26:26.971] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Initialize Border (0x2A)] -> X: 0, Z: 0, OldDiameter: 59999968, NewDiameter: 59999968, Speed: 0, PortalTeleportBoundary: 29999984, WarningBlocks: 5, WarningTime: 15
+[2026-01-04 18:26:26.978] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Default Spawn Position (0x60)] -> Location: (5,092,773.0000, 609.0000, -18,459,081.0000), Angle: 2.8833383E+23
+[2026-01-04 18:26:26.980] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Game Event (0x26)] -> Event: StartWaitingForLevelChunks, Value: 0
+[2026-01-04 18:26:26.984] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Ticking State (0x7E)] -> TickRate: 20, IsFrozen: False
+[2026-01-04 18:26:26.986] [DBG] [MinecraftProtoNet.Handlers.Play.TimeAndWorldHandler] Ticking state: TickRate=20, Frozen=false
+[2026-01-04 18:26:26.989] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Ticking Step (0x7F)] -> TickSteps: 0
+[2026-01-04 18:26:26.991] [DBG] [MinecraftProtoNet.Handlers.Play.TimeAndWorldHandler] Ticking step: Steps=0
+[2026-01-04 18:26:26.993] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Chunk Cache Center (0x5D)] -> ChunkX: 0, ChunkZ: -2
+[2026-01-04 18:26:26.997] [DBG] [MinecraftProtoNet.Handlers.Play.ChunkHandler] Chunk cache center: 0, -2
+[2026-01-04 18:26:27.003] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Container Set Content (0x12)] -> WindowId: 0, StateId: 1, SlotData: [0 <NULL> <NULL> <NULL>, 0 <NULL> <NULL> <NULL>, 0 <NULL> <NULL> <NULL>, 0 <NULL> <NULL> <NULL>, 0 <NULL> <NULL> <NULL>, ...], CarriedItem: 0 <NULL> <NULL> <NULL>
+[2026-01-04 18:26:27.009] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:26:27.043] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Update Advancements (0x81)] -> Reset: True, ShowAdvancements: True, AddedCount: 171, RemovedCount: 0, ProgressCount: 171
+[2026-01-04 18:26:27.046] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 20, Food: 20, FoodSaturation: 5
+[2026-01-04 18:26:27.051] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Experience (0x66)] -> ExperienceBar: 0, Level: 0, TotalExperience: 0
+[2026-01-04 18:26:30.569] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 476, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:31.870] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 470, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:31.873] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Passengers (0x6A)] -> VehicleEntityId: 469, PassengerEntityIds: [470]
+[2026-01-04 18:26:31.876] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Passengers (0x6A)] -> VehicleEntityId: 469, PassengerEntityIds: [470]
+[2026-01-04 18:26:32.312] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:32.683] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:33.458] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:34.026] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:34.403] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:34.977] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:35.347] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:35.745] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:36.166] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 486, Equipment: [MainHand: 1 932 0 0]
+[2026-01-04 18:26:36.169] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 486, Equipment: [MainHand: 1 932 0 0]
+[2026-01-04 18:26:36.372] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:36.862] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:37.282] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:26:37.482] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:37.783] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:37.786] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:37.789] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 491, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:37.791] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 491, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:37.793] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:37.799] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:38.058] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Combat Enter (0x42)] -> 
+[2026-01-04 18:26:38.060] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 471, SourceTypeId: 34, SourceCauseId: 55, SourceDirectId: 55, SourcePosition: null
+[2026-01-04 18:26:38.063] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Hurt Animation (0x29)] -> EntityId: 471, Yaw: 212.32121
+[2026-01-04 18:26:38.066] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Animate (0x02)] -> EntityId: 54, Animation: SwingMainArm
+[2026-01-04 18:26:38.068] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:38.070] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 19, Food: 20, FoodSaturation: 4
+[2026-01-04 18:26:38.495] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 19.666666, Food: 20, FoodSaturation: 4
+[2026-01-04 18:26:38.558] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:38.604] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 501, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:38.607] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 501, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:38.994] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 20, Food: 20, FoodSaturation: 3
+[2026-01-04 18:26:39.057] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:39.554] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 470, SourceTypeId: 22, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:26:39.962] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Section Blocks Update (0x53)] -> SectionPosition: (0.0000, 5.0000, -1.0000), Blocks: [20050557, 45486189, 20087405, 18989405, 19017821, ...]
+[2026-01-04 18:26:40.553] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Passengers (0x6A)] -> VehicleEntityId: 469, PassengerEntityIds: []
+[2026-01-04 18:26:40.946] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 518, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:40.948] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 519, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:40.950] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 518, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:40.952] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 519, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:46.951] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 531, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:46.954] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 531, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:51.346] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 537, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:51.349] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 537, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:53.760] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Combat End (0x41)] -> DurationInTicks: 315
+[2026-01-04 18:26:54.779] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Position (0x47)] -> TeleportId: 2, Position: (13.6858, 93.0000, -19.1859), Velocity: (0.0000, 0.0000, 0.0000), YawPitch: (56.233948, 33.476715), Flags: None
+[2026-01-04 18:26:54.782] [DBG] [MinecraftProtoNet.Core.Connection] [->SERVER] [Play : Accept Teleportation (0x00)] -> TeleportId: 2
+[2026-01-04 18:26:54.784] [DBG] [MinecraftProtoNet.Handlers.PlayHandler] Applied teleport: TeleportId=2, Position=(13.6858, 93.0000, -19.1859), Velocity=(0.0000, 0.0000, 0.0000), Flags="None"
+[2026-01-04 18:26:54.800] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 465, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.802] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 458, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.804] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 359, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.806] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 426, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.809] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 416, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.811] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 387, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.814] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 456, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.817] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 455, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.819] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 390, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.821] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 472, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.824] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 457, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.827] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 474, Equipment: [MainHand: 1 1299 0 0]
+[2026-01-04 18:26:54.830] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 427, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:54.833] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 417, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:26:57.149] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Combat Enter (0x42)] -> 
+[2026-01-04 18:26:57.152] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 471, SourceTypeId: 34, SourceCauseId: 55, SourceDirectId: 55, SourcePosition: null
+[2026-01-04 18:26:57.154] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Hurt Animation (0x29)] -> EntityId: 471, Yaw: -0.016180068
+[2026-01-04 18:26:57.156] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Animate (0x02)] -> EntityId: 54, Animation: SwingMainArm
+[2026-01-04 18:26:57.159] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 19, Food: 20, FoodSaturation: 3
+[2026-01-04 18:26:57.604] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 19.5, Food: 20, FoodSaturation: 3
+[2026-01-04 18:26:58.100] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 19.833334, Food: 20, FoodSaturation: 2
+[2026-01-04 18:26:58.596] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Health (0x67)] -> Health: 20, Food: 20, FoodSaturation: 1
+[2026-01-04 18:27:01.295] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 549, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:01.298] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 549, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:05.345] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 552, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:05.347] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 552, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:05.350] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:27:07.645] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 555, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:07.648] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 555, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:08.947] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Section Blocks Update (0x53)] -> SectionPosition: (0.0000, 5.0000, -1.0000), Blocks: [20087421, 45490285, 20124269, 19026269, 19054685, ...]
+[2026-01-04 18:27:12.746] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Combat End (0x41)] -> DurationInTicks: 313
+[2026-01-04 18:27:12.996] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 559, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:12.999] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 559, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:26.396] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 596, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:26.398] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 596, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:29.798] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 602, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:29.800] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 602, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.546] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 604, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.549] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 604, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.597] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 605, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.601] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 606, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.604] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 605, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:30.608] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 606, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:35.395] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:27:35.795] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 613, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:35.798] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 613, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:38.146] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 615, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:38.149] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 616, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:38.152] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 615, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:38.155] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 616, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:45.696] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 627, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:45.699] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 627, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:45.950] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Section Blocks Update (0x53)] -> SectionPosition: (0.0000, 5.0000, -1.0000), Blocks: [20124285, 45494381, 20161133, 19063133, 19091549, ...]
+[2026-01-04 18:27:55.160] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 644, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:55.162] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 645, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:55.164] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 644, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:55.166] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 645, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:56.809] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 646, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:27:56.812] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 646, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:01.594] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 658, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:01.598] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 658, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:03.100] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 649, SourceTypeId: 20, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:28:03.895] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 649, SourceTypeId: 20, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:28:04.394] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 649, SourceTypeId: 20, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:28:04.909] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Damage Event (0x19)] -> EntityId: 649, SourceTypeId: 20, SourceCauseId: 0, SourceDirectId: 0, SourcePosition: null
+[2026-01-04 18:28:05.453] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:28:07.310] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 673, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:07.314] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 673, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:09.598] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 676, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:09.601] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 676, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:13.853] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 685, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:13.856] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 685, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:20.662] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Block Update (0x08)] -> Position: (-20.0000, 69.0000, 69.0000), BlockId: 123
+[2026-01-04 18:28:26.546] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 716, Equipment: [OffHand: 1 1332 0 0]
+[2026-01-04 18:28:26.549] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 716, Equipment: [OffHand: 1 1332 0 0]
+[2026-01-04 18:28:32.846] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 728, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:32.849] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 728, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:35.498] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:28:37.997] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 746, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:38.000] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 747, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:38.001] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 746, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:38.003] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 747, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:40.961] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Section Blocks Update (0x53)] -> SectionPosition: (0.0000, 5.0000, -1.0000), Blocks: [20161149, 45498477, 20197997, 19099997, 19128413, ...]
+[2026-01-04 18:28:45.146] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 761, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:45.148] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 761, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:46.451] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Block Update (0x08)] -> Position: (-20.0000, 69.0000, 69.0000), BlockId: 0
+[2026-01-04 18:28:46.607] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 764, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:46.610] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 764, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:56.447] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 783, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:56.449] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 784, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:56.451] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 783, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:28:56.453] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 784, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:05.558] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Player Info Update (0x45)] -> Actions: [Binary:1 bytes], PlayerInfos: [9ac1880f-26ac-4469-9e58-c3fe04d6a54c, 6f29c8b4-f0e7-40a3-a432-0ce0b97cebf0]
+[2026-01-04 18:29:07.148] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 806, Equipment: [MainHand: 1 1331 0 0]
+[2026-01-04 18:29:07.150] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 806, Equipment: [MainHand: 1 1331 0 0]
+[2026-01-04 18:29:14.505] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 820, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:14.508] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 821, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:14.512] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 820, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:14.514] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 821, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:17.512] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 828, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:17.515] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 828, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:18.260] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Block Update (0x08)] -> Position: (54.0000, -20.0000, -58.0000), BlockId: 6682
+[2026-01-04 18:29:22.255] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Block Update (0x08)] -> Position: (85.0000, 63.0000, 14.0000), BlockId: 123
+[2026-01-04 18:29:23.350] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 842, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:23.353] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 842, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:28.560] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 848, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:28.563] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 848, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:31.109] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Block Update (0x08)] -> Position: (54.0000, -20.0000, -58.0000), BlockId: 6683
+[2026-01-04 18:29:31.951] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 859, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:31.954] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 860, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:31.957] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 859, Equipment: [MainHand: 1 894 0 0]
+[2026-01-04 18:29:31.959] [DBG] [MinecraftProtoNet.Core.MinecraftClient] [->CLIENT] [Play : Set Equipment (0x65)] -> EntityId: 860, Equipment: [MainHand: 1 894 0 0]

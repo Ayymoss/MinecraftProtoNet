@@ -1,6 +1,4 @@
-using System;
-
-namespace MinecraftProtoNet.Physics;
+namespace MinecraftProtoNet.Core.Physics;
 
 public abstract class AxisCycle
 {

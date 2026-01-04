@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 
-namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Core.Models.Core;
 
 public class Vector3<TNumber> : IFormattable where TNumber : INumber<TNumber>
 {

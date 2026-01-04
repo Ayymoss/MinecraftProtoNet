@@ -1,13 +1,12 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.State;
-using ClickContainerMode = MinecraftProtoNet.Packets.Play.Serverbound.ClickContainerMode;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.State;
 
-namespace MinecraftProtoNet.Actions;
+namespace MinecraftProtoNet.Core.Actions;
 
 public class InteractionManager : IInteractionManager
 {

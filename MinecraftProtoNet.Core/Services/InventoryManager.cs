@@ -1,13 +1,12 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.Data;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Packets.Base.Definitions;
-using MinecraftProtoNet.Packets.Play.Serverbound;
-using MinecraftProtoNet.State.Base;
-using Serilog;
+using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.Data;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 public class InventoryManager(
     IPacketSender packetSender,

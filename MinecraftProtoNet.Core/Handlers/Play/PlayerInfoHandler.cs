@@ -1,12 +1,11 @@
-using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Play.Clientbound;
-using MinecraftProtoNet.Services;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Play.Clientbound;
+using MinecraftProtoNet.Core.Services;
 
-namespace MinecraftProtoNet.Handlers.Play;
+namespace MinecraftProtoNet.Core.Handlers.Play;
 
 /// <summary>
 /// Handles player info and tab list packets.

@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 public interface IPalette
 {

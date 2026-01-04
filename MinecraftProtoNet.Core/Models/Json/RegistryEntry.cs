@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace MinecraftProtoNet.Models.Json;
+namespace MinecraftProtoNet.Core.Models.Json;
 
 public class RegistryEntry
 {

@@ -1,15 +1,15 @@
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Attributes;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Handlers.Base;
-using MinecraftProtoNet.NBT;
-using MinecraftProtoNet.NBT.Tags.Primitive;
-using MinecraftProtoNet.Packets.Base;
-using MinecraftProtoNet.Packets.Play.Clientbound;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.Utilities;
+using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Handlers.Base;
+using MinecraftProtoNet.Core.NBT;
+using MinecraftProtoNet.Core.NBT.Tags.Primitive;
+using MinecraftProtoNet.Core.Packets.Base;
+using MinecraftProtoNet.Core.Packets.Play.Clientbound;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.Utilities;
 
-namespace MinecraftProtoNet.Handlers.Play;
+namespace MinecraftProtoNet.Core.Handlers.Play;
 
 /// <summary>
 /// Handles chat-related packets.

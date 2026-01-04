@@ -1,8 +1,8 @@
 using System.Numerics;
 using Humanizer;
-using MinecraftProtoNet.Models.Core;
+using MinecraftProtoNet.Core.Models.Core;
 
-namespace MinecraftProtoNet.Utilities;
+namespace MinecraftProtoNet.Core.Utilities;
 
 public static class BufferExtensions
 {

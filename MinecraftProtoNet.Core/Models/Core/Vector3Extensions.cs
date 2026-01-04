@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Enums;
+using MinecraftProtoNet.Core.Enums;
 
-namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Core.Models.Core;
 
 /// <summary>
 /// Extension methods for Vector3&lt;int&gt; to provide BlockPos-like immutable operations.

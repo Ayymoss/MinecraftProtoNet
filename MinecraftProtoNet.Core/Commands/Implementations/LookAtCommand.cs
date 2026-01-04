@@ -1,7 +1,4 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Enums;
-
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("lookat", Description = "Look at coordinates")]
 public class LookAtCommand : ICommand

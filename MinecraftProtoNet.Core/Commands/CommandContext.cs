@@ -1,11 +1,10 @@
-using MinecraftProtoNet.Actions;
-using MinecraftProtoNet.Auth.Dtos;
-using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Core.Abstractions;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 
-namespace MinecraftProtoNet.Commands;
+namespace MinecraftProtoNet.Core.Commands;
 
 /// <summary>
 /// Context for command execution, extending ActionContext with command-specific data.

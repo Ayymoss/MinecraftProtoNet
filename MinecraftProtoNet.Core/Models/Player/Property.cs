@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.Player;
+namespace MinecraftProtoNet.Core.Models.Player;
 
 public class Property
 {

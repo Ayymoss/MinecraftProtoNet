@@ -1,8 +1,6 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public static class MathHelpers
 {

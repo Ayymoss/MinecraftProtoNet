@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Handlers.Meta;
+namespace MinecraftProtoNet.Core.Handlers.Meta;
 
 /// <summary>
 /// Categorization of block types for pathfinding.

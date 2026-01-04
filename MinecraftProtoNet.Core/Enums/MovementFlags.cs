@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Enums;
+namespace MinecraftProtoNet.Core.Enums;
 
 [Flags]
 public enum MovementFlags

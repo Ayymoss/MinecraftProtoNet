@@ -1,11 +1,6 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Physics;
 
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public static class Shapes
 {

@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Models.World.Meta;
-using MinecraftProtoNet.Physics.Shapes;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Physics.Shapes;
 
-namespace MinecraftProtoNet.Physics;
+namespace MinecraftProtoNet.Core.Physics;
 
 public interface IBlockShapeRegistry
 {

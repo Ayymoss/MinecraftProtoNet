@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Models.World.Chunk;
+namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 public class Biome(int id, string name)
 {

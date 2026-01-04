@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Actions;
+using MinecraftProtoNet.Core.Actions;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("getblock", Description = "Get block at coordinates")]
 public class GetBlockCommand : ICommand

@@ -1,8 +1,8 @@
-using System;
-using MinecraftProtoNet.Physics; // For AxisExtensions (implied)
-using MinecraftProtoNet.Enums; // For Axis if needed, or Physics.Axis depending on namespace
+// For AxisExtensions (implied)
 
-namespace MinecraftProtoNet.Physics.Shapes;
+// For Axis if needed, or Physics.Axis depending on namespace
+
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public sealed class SubShape : DiscreteVoxelShape
 {

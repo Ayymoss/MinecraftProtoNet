@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
-namespace MinecraftProtoNet.Models.Core;
+namespace MinecraftProtoNet.Core.Models.Core;
 
 public class Vector2<TNumber> where TNumber : INumber<TNumber>
 {

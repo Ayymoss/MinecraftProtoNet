@@ -1,8 +1,8 @@
 using System.Text.Json;
-using MinecraftProtoNet.Models.Json;
-using BlockState = MinecraftProtoNet.Models.World.Chunk.BlockState;
+using MinecraftProtoNet.Core.Models.Json;
+using BlockState = MinecraftProtoNet.Core.Models.World.Chunk.BlockState;
 
-namespace MinecraftProtoNet.Services;
+namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// Loads static game data from JSON files in the StaticFiles directory.

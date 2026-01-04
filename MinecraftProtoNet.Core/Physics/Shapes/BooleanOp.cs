@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Physics.Shapes;
+namespace MinecraftProtoNet.Core.Physics.Shapes;
 
 public delegate bool BooleanOp(bool first, bool second);
 

@@ -1,9 +1,9 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Core;
+using MinecraftProtoNet.Core.Core;
 
-namespace MinecraftProtoNet.Commands;
+namespace MinecraftProtoNet.Core.Commands;
 
 /// <summary>
 /// Registry for command discovery, registration, and execution.

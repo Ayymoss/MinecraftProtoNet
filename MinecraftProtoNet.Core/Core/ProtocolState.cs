@@ -1,4 +1,4 @@
-namespace MinecraftProtoNet.Core;
+namespace MinecraftProtoNet.Core.Core;
 
 public enum ProtocolState
 {

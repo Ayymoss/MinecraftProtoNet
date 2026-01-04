@@ -1,6 +1,6 @@
-using MinecraftProtoNet.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-namespace MinecraftProtoNet.Commands.Implementations;
+namespace MinecraftProtoNet.Core.Commands.Implementations;
 
 [Command("cmd", Description = "Execute a server command")]
 public class CmdCommand : ICommand
