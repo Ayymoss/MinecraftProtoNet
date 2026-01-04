@@ -7,7 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" />
     <ProjectReference Include="..\MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" />
-    <ProjectReference Include="..\MinecraftProtoNet\MinecraftProtoNet.csproj" />
+    <ProjectReference Include="..\MinecraftProtoNet.Core\MinecraftProtoNet.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

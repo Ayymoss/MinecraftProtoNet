@@ -115,10 +115,10 @@ public static class AuthenticationFlow
         Log.Logger = new LoggerConfiguration()
 #if DEBUG
             .MinimumLevel.Information()
-            .MinimumLevel.Override("MinecraftProtoNet.Auth", LogEventLevel.Debug)
+            .MinimumLevel.Override("MinecraftProtoNet.Core.Auth", LogEventLevel.Debug)
 #else
             .MinimumLevel.Warning()
-            .MinimumLevel.Override("MinecraftProtoNet.Auth", LogEventLevel.Information)
+            .MinimumLevel.Override("MinecraftProtoNet.Core.Auth", LogEventLevel.Information)
 #endif
             .Enrich.FromLogContext()
             .Enrich.With<ShortSourceContextEnricher>()

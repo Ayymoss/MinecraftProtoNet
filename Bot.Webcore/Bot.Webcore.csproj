@@ -12,8 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\MinecraftProtoNet\MinecraftProtoNet.csproj" />
-        <ProjectReference Include="..\MinecraftProtoNet.Baritone\MinecraftProtoNet.Baritone.csproj" />
+        <ProjectReference Include="..\MinecraftProtoNet.Core\MinecraftProtoNet.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>

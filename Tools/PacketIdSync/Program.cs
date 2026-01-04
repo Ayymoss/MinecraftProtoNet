@@ -1,8 +1,8 @@
 using PacketIdSync;
 
 // Default paths (relative to solution root)
-const string defaultProtocolFile = @"C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\Tools\PacketIdSync\bin\Debug\net10.0\Protocol\GameProtocols.java";
-const string defaultPacketsDir = @"C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet\MinecraftProtoNet\Packets\Play";
+const string defaultProtocolFile = @"C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet.Core\Tools\PacketIdSync\bin\Debug\net10.0\Protocol\GameProtocols.java";
+const string defaultPacketsDir = @"C:\Users\Amos\RiderProjects\_Work\MinecraftProtoNet.Core\MinecraftProtoNet.Core.Core\Packets\Play";
 
 // Parse command line arguments
 var protocolFile = args.Length > 0 ? args[0] : defaultProtocolFile;
@@ -36,7 +36,7 @@ if (!File.Exists(protocolFile))
     Console.WriteLine();
     Console.WriteLine("Arguments:");
     Console.WriteLine("  protocol-file  Path to GameProtocols.java (default: Protocol/GameProtocols.java)");
-    Console.WriteLine("  packets-dir    Path to C# packets directory (default: MinecraftProtoNet/Packets/Play)");
+    Console.WriteLine("  packets-dir    Path to C# packets directory (default: MinecraftProtoNet.Core/Packets/Play)");
     Console.WriteLine("  --dry-run, -n  Preview changes without writing files");
     Console.ResetColor();
     return 1;

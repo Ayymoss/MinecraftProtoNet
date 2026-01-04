@@ -3,8 +3,8 @@ using Bot.Webcore.Services;
 using MinecraftProtoNet.Services;
 using MinecraftProtoNet.State;
 using MinecraftProtoNet.Utilities;
-using MinecraftProtoNet.Baritone.Infrastructure;
-using MinecraftProtoNet.Baritone.Pathfinding;
+//using MinecraftProtoNet.Core.Baritone.Infrastructure;
+//using MinecraftProtoNet.Core.Baritone.Pathfinding;
 using MinecraftProtoNet.Commands;
 
 namespace Bot.Webcore;
@@ -23,7 +23,7 @@ public class Program
         builder.Services.AddMinecraftClient();
         
         // Add Baritone pathfinding and physics
-        builder.Services.AddBaritone();
+        //builder.Services.AddBaritone();
         
         // Add BotService as singleton for UI state
         builder.Services.AddSingleton<BotService>();
@@ -41,8 +41,8 @@ public class Program
         EntityInventory.SetRegistryService(registryService);
         
         // Register Baritone commands
-        var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
-        commandRegistry.AutoRegisterCommands(app.Services, typeof(PathingService).Assembly);
+        //var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
+        //commandRegistry.AutoRegisterCommands(app.Services, typeof(PathingService).Assembly);
 
         // Configure the HTTP request pipeline
         if (!app.Environment.IsDevelopment())

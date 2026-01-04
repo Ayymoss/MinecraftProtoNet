@@ -7,8 +7,8 @@
   </Folder>
   <Project Path="Bot.Webcore/Bot.Webcore.csproj" />
   <Project Path="MinecraftProtoNet.Auth\MinecraftProtoNet.Auth.csproj" />
-  <Project Path="MinecraftProtoNet.Baritone.Tests/MinecraftProtoNet.Baritone.Tests.csproj" />
   <Project Path="MinecraftProtoNet.Baritone/MinecraftProtoNet.Baritone.csproj" />
+  <Project Path="MinecraftProtoNet.Core/MinecraftProtoNet.Core.csproj" />
   <Project Path="MinecraftProtoNet.NBT\MinecraftProtoNet.NBT.csproj" />
-  <Project Path="MinecraftProtoNet\MinecraftProtoNet.csproj" />
+  <Project Path="MinecraftProtoNet.Tests/MinecraftProtoNet.Tests.csproj" />
 </Solution>
