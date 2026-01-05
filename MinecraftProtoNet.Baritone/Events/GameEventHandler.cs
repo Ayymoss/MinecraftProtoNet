@@ -17,11 +17,13 @@
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/event/GameEventHandler.java
  */
 
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Event.Events;
 using MinecraftProtoNet.Baritone.Api.Event.Events.Type;
 using MinecraftProtoNet.Baritone.Api.Event.Listener;
 using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.Core;
 
 namespace MinecraftProtoNet.Baritone.Events;
 
@@ -83,7 +85,14 @@ public class GameEventHandler : IEventBus
     {
         foreach (var listener in _listeners)
         {
-            listener.OnPlayerUpdate(evt);
+            try
+            {
+                listener.OnPlayerUpdate(evt);
+            }
+            catch (Exception ex)
+            {
+                LogDirect($"Error in listener.OnPlayerUpdate: {ex.Message}");
+            }
         }
     }
 
@@ -232,9 +241,28 @@ public class GameEventHandler : IEventBus
 
     public void LogDirect(string message)
     {
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/Helper.java:235-237
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/GameEventHandler.java:235
-        // Log to console or appropriate logging system
-        Console.WriteLine($"[Baritone] {message}");
+        // Use the logger setting configured in Settings, which should be hooked to ILogger
+        try
+        {
+            BaritoneAPI.GetSettings().Logger.Value(message);
+        }
+        catch (Exception ex)
+        {
+            // Fallback to console if logger setting fails
+            Console.WriteLine($"[Baritone] {message}");
+            // Also try to log the error using the logging infrastructure
+            try
+            {
+                var logger = LoggingConfiguration.CreateLogger<GameEventHandler>();
+                logger.LogError(ex, "Failed to log Baritone message via Settings.Logger: {Message}", message);
+            }
+            catch
+            {
+                // If logging infrastructure is not available, just use console
+            }
+        }
     }
 
     public void LogNotification(string message, bool logToChat)

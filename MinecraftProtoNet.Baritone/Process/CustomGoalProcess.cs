@@ -72,12 +72,19 @@ public class CustomGoalProcess : BaritoneProcessHelper, ICustomGoalProcess
 
     public override PathingCommand OnTick(bool calcFailed, bool isSafeToCancel)
     {
+        // Only log state changes, not every tick
+        if (_state != State.Executing || calcFailed)
+        {
+            LogDirect($"CustomGoalProcess.OnTick: state={_state}, goal={_goal}, calcFailed={calcFailed}");
+        }
         switch (_state)
         {
             case State.GoalSet:
+                LogDirect("CustomGoalProcess: Returning CancelAndSetGoal");
                 return new PathingCommand(_goal, PathingCommandType.CancelAndSetGoal);
             
             case State.PathRequested:
+                LogDirect("CustomGoalProcess: Returning ForceRevalidateGoalAndPath");
                 var ret = new PathingCommand(_goal, PathingCommandType.ForceRevalidateGoalAndPath);
                 _state = State.Executing;
                 return ret;

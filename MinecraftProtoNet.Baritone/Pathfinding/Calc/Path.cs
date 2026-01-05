@@ -89,16 +89,28 @@ internal class Path : IPath
         {
             throw new InvalidOperationException("Path must not be empty");
         }
+        
+        // Always log path assembly to diagnose pathfinding issues
+        var pathStr = string.Join(" -> ", _path.Select(p => $"({p.X},{p.Y},{p.Z})"));
+        _context.GetBaritone().GetGameEventHandler().LogDirect($"Assembling path (length={_path.Count}): {pathStr}");
+        
         for (int i = 0; i < _path.Count - 1; i++)
         {
             double cost = _nodes[i + 1].Cost - _nodes[i].Cost;
             IMovement? move = RunBackwards(_path[i], _path[i + 1], cost);
             if (move == null)
             {
+                // Always log movement creation failures
+                _context.GetBaritone().GetGameEventHandler().LogDirect($"Failed to create movement from {_path[i]} to {_path[i + 1]}");
                 return true;
             }
             else
             {
+                // Log if movement destination doesn't match expected
+                if (!move.GetDest().Equals(_path[i + 1]))
+                {
+                    _context.GetBaritone().GetGameEventHandler().LogDirect($"WARNING: Created movement: {_path[i]} -> {move.GetDest()} (expected: {_path[i + 1]})");
+                }
                 _movements.Add(move);
             }
         }
@@ -110,14 +122,18 @@ internal class Path : IPath
         foreach (var moves in Moves.Values)
         {
             IMovement move = moves.Apply0(_context, src);
-            if (move.GetDest().Equals(dest))
+            var moveDest = move.GetDest();
+            if (moveDest.Equals(dest))
             {
                 // have to calculate the cost at calculation time so we can accurately judge whether a cost increase happened between cached calculation and real execution
                 // however, taking into account possible favoring that could skew the node cost, we really want the stricter limit of the two
                 // so we take the minimum of the path node cost difference, and the calculated cost
-                if (move is MovementImpl movement)
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/calc/Path.java:133-136
+                if (move is Movement.Movement movementImpl)
                 {
-                    movement.Override(Math.Min(move.GetCost(), cost));
+                    // Calculate the cost using the context (this will calculate it if not already done)
+                    double calculatedCost = movementImpl.GetCost(_context);
+                    movementImpl.Override(Math.Min(calculatedCost, cost));
                 }
                 return move;
             }

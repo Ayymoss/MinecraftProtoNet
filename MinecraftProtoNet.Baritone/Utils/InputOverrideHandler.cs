@@ -34,6 +34,7 @@ namespace MinecraftProtoNet.Baritone.Utils;
 public class InputOverrideHandler : Behavior, IInputOverrideHandler
 {
     private readonly Dictionary<Input, bool> _forcedInputs = new();
+    private int _tickCounter = 0;
 
     public InputOverrideHandler(IBaritone baritone) : base(baritone)
     {
@@ -52,6 +53,21 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
     public void ClearAllKeys()
     {
         _forcedInputs.Clear();
+        
+        // CRITICAL: Immediately clear input state on entity to stop movement
+        // This ensures inputs are cleared even if OnTick() has already run this tick
+        var player = Ctx.Player() as Entity;
+        if (player != null)
+        {
+            var inputState = player.InputState;
+            inputState.SetForward(false);
+            inputState.SetBackward(false);
+            inputState.SetLeft(false);
+            inputState.SetRight(false);
+            inputState.SetJump(false);
+            inputState.SetSneak(false);
+            inputState.SetSprint(false);
+        }
     }
 
     /// <summary>
@@ -81,14 +97,33 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
             {
                 var inputState = player.InputState;
                 
+                // Get input states before updating
+                var forward = IsInputForcedDown(Input.MoveForward);
+                var backward = IsInputForcedDown(Input.MoveBack);
+                var left = IsInputForcedDown(Input.MoveLeft);
+                var right = IsInputForcedDown(Input.MoveRight);
+                var jump = IsInputForcedDown(Input.Jump);
+                var sneak = IsInputForcedDown(Input.Sneak);
+                var sprint = IsInputForcedDown(Input.Sprint);
+                
                 // Update movement inputs
-                inputState.SetForward(IsInputForcedDown(Input.MoveForward));
-                inputState.SetBackward(IsInputForcedDown(Input.MoveBack));
-                inputState.SetLeft(IsInputForcedDown(Input.MoveLeft));
-                inputState.SetRight(IsInputForcedDown(Input.MoveRight));
-                inputState.SetJump(IsInputForcedDown(Input.Jump));
-                inputState.SetSneak(IsInputForcedDown(Input.Sneak));
-                inputState.SetSprint(IsInputForcedDown(Input.Sprint));
+                inputState.SetForward(forward);
+                inputState.SetBackward(backward);
+                inputState.SetLeft(left);
+                inputState.SetRight(right);
+                inputState.SetJump(jump);
+                inputState.SetSneak(sneak);
+                inputState.SetSprint(sprint);
+                
+                // Reduced logging - only log every 100 ticks
+                _tickCounter++;
+                if (_tickCounter % 100 == 0)
+                {
+                    var pos = Ctx.PlayerFeet();
+                    var rot = Ctx.PlayerRotations();
+                    Baritone.GetGameEventHandler().LogDirect(
+                        $"Input: pos={pos}, rot={rot?.GetYaw():F1}°, inputs=[F:{forward} B:{backward} L:{left} R:{right}]");
+                }
             }
         }
     }

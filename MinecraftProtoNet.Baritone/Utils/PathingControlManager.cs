@@ -137,29 +137,67 @@ public class PathingControlManager : IPathingControlManager
         
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/PathingControlManager.java:90-92
         // Handle command types and process control changes
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/PathingControlManager.java:101-125
+        // Check if control changed and cancel if needed
+        if (_inControlThisTick != _inControlLastTick 
+            && _command.CommandType != PathingCommandType.RequestPause 
+            && _inControlLastTick != null 
+            && !_inControlLastTick.IsTemporary())
+        {
+            // If control has changed from a real process to another real process, and the new process wants to do something
+            pathingBehavior.CancelSegmentIfSafe();
+        }
+        
+        // Debug logging - only log occasionally to reduce spam (every 20 ticks = ~1 second)
+        var currentPath = pathingBehavior.GetCurrent()?.GetPath();
+        var tickCount = currentPath?.Length() ?? 0;
+        if (tickCount % 20 == 0 || _command.CommandType != PathingCommandType.SetGoalAndPath)
+        {
+            _baritone.GetGameEventHandler().LogDirect($"PathingControlManager.PreTick: Processing {_command.CommandType} from {_inControlThisTick?.DisplayName() ?? "unknown"}, goal={_command.Goal}");
+        }
+        
         switch (_command.CommandType)
         {
+            case PathingCommandType.SetGoalAndPause:
+                pathingBehavior.SecretInternalSetGoalAndPath(_command);
+                goto case PathingCommandType.RequestPause; // Fall through to request pause
+            case PathingCommandType.RequestPause:
+                pathingBehavior.RequestPause();
+                break;
             case PathingCommandType.CancelAndSetGoal:
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/PathingControlManager.java:107-110
                 pathingBehavior.SecretInternalSetGoal(_command.Goal!); // Goal can be null, method handles it
                 pathingBehavior.CancelSegmentIfSafe();
                 break;
-            case PathingCommandType.SetGoalAndPath:
-                pathingBehavior.SecretInternalSetGoal(_command.Goal!); // Goal can be null, method handles it
-                break;
             case PathingCommandType.ForceRevalidateGoalAndPath:
-                pathingBehavior.SecretInternalSetGoal(_command.Goal!); // Goal can be null, method handles it
-                pathingBehavior.ForceRevalidateGoalAndPath();
-                break;
             case PathingCommandType.RevalidateGoalAndPath:
-                pathingBehavior.SecretInternalSetGoal(_command.Goal!); // Goal can be null, method handles it
-                pathingBehavior.RevalidateGoalAndPath();
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/PathingControlManager.java:111-116
+                // Only start pathfinding if not already pathing
+                var isPathing = pathingBehavior.IsPathing();
+                var inProgress = pathingBehavior.GetInProgress();
+                _baritone.GetGameEventHandler().LogDirect($"PathingControlManager: ForceRevalidateGoalAndPath - isPathing={isPathing}, inProgress={inProgress != null}");
+                if (!isPathing && inProgress == null)
+                {
+                    _baritone.GetGameEventHandler().LogDirect("PathingControlManager: Starting pathfinding via SecretInternalSetGoalAndPath");
+                    pathingBehavior.SecretInternalSetGoalAndPath(_command);
+                }
+                else
+                {
+                    _baritone.GetGameEventHandler().LogDirect("PathingControlManager: Skipping pathfinding start (already pathing or in progress)");
+                }
                 break;
-            case PathingCommandType.RequestPause:
-                pathingBehavior.RequestPause();
+            case PathingCommandType.SetGoalAndPath:
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/PathingControlManager.java:117-122
+                if (_command.Goal != null)
+                {
+                    pathingBehavior.SecretInternalSetGoalAndPath(_command);
+                }
                 break;
             case PathingCommandType.Defer:
                 // Defer means wait for next tick
                 break;
+            default:
+                throw new InvalidOperationException($"Unexpected command type {_command.CommandType}");
         }
     }
 

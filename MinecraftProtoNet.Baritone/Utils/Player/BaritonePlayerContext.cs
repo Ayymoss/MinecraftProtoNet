@@ -61,7 +61,10 @@ public class BaritonePlayerContext : IPlayerContext
     public Vector3<double>? PlayerHead()
     {
         var player = _mc.State.LocalPlayer?.Entity;
-        return player?.Position;
+        if (player == null) return null;
+        // Return eye position (head), not feet position
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/IPlayerContext.java:47
+        return player.EyePosition;
     }
 
     public Vector3<double>? PlayerMotion()

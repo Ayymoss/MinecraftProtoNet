@@ -241,7 +241,7 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             {
                 state.SetInput(Input.Sprint, true);
             }
-            MovementHelper.MoveTowards(Ctx, state, PositionsToBreak[0]);
+            MovementHelper.MoveTowards(Ctx, state, Dest);
             return state;
         }
         else
@@ -253,7 +253,7 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             // Handle place result
             if (placeResult == MovementHelper.PlaceResult.ReadyToPlace || placeResult == MovementHelper.PlaceResult.Attempting)
             {
-                MovementHelper.MoveTowards(Ctx, state, PositionsToBreak[0]);
+                MovementHelper.MoveTowards(Ctx, state, Dest);
             }
             return state;
         }

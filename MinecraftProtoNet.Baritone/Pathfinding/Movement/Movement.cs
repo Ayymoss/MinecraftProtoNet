@@ -39,6 +39,8 @@ public abstract class Movement : IMovement
         BlockFace.North, BlockFace.South, BlockFace.East, BlockFace.West, BlockFace.Bottom
     };
 
+    private static int _movementTickCounter = 0;
+
     protected readonly IBaritone Baritone;
     protected readonly IPlayerContext Ctx;
 
@@ -183,11 +185,14 @@ public abstract class Movement : IMovement
         }
         
         Baritone.GetInputOverrideHandler().ClearAllKeys();
-        foreach (var (input, forced) in _currentState.GetInputStates())
+        var inputStates = _currentState.GetInputStates().ToList();
+        foreach (var kvp in inputStates)
         {
-            Baritone.GetInputOverrideHandler().SetInputForceState(input, forced);
+            Baritone.GetInputOverrideHandler().SetInputForceState(kvp.Key, kvp.Value);
         }
         _currentState.GetInputStates().Clear();
+        
+        // Reduced logging - removed verbose movement logging
 
         // If the current status indicates a completed movement
         if (_currentState.GetStatus().IsComplete())

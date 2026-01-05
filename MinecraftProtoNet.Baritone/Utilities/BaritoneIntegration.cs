@@ -43,6 +43,7 @@ public static class BaritoneIntegration
     /// <param name="logger">Optional logger for error reporting</param>
     public static void HookToGameLoop(IGameLoop gameLoop, ILogger? logger = null)
     {
+        logger?.LogWarning("BaritoneIntegration.HookToGameLoop: Setting up tick event handlers");
         // Hook PRE tick events
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinMinecraft.java:65-91
         gameLoop.PreTick += client =>
@@ -65,6 +66,14 @@ public static class BaritoneIntegration
                             var tickType = ctx.Player() != null && ctx.World() != null
                                 ? TickEvent.TickEventType.In
                                 : TickEvent.TickEventType.Out;
+                            
+                            // Fire PlayerUpdateEvent PRE before tick (allows LookBehavior to set rotations)
+                            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinClientPlayerEntity.java:73
+                            if (tickType == TickEvent.TickEventType.In)
+                            {
+                                baritone.GetGameEventHandler().OnPlayerUpdate(
+                                    new Api.Event.Events.PlayerUpdateEvent(EventState.Pre));
+                            }
                             
                             baritone.GetGameEventHandler().OnTick(tickProvider(EventState.Pre, tickType));
                         }
@@ -111,6 +120,14 @@ public static class BaritoneIntegration
                             : TickEvent.TickEventType.Out;
                         
                         baritone.GetGameEventHandler().OnPostTick(tickProvider(EventState.Post, tickType));
+                        
+                        // Fire PlayerUpdateEvent POST after tick (allows LookBehavior to restore rotations if needed)
+                        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinMinecraft.java:125
+                        if (tickType == TickEvent.TickEventType.In)
+                        {
+                            baritone.GetGameEventHandler().OnPlayerUpdate(
+                                new Api.Event.Events.PlayerUpdateEvent(EventState.Post));
+                        }
                     }
                     catch (Exception ex)
                     {

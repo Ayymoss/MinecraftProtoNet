@@ -18,11 +18,14 @@
  */
 
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Command;
 using MinecraftProtoNet.Baritone.Api.Command.Argument;
 using MinecraftProtoNet.Baritone.Api.Command.Manager;
 using MinecraftProtoNet.Baritone.Command.Argument;
+using MinecraftProtoNet.Baritone.Command.Defaults;
+using MinecraftProtoNet.Core.Core;
 
 namespace MinecraftProtoNet.Baritone.Command.Manager;
 
@@ -38,8 +41,13 @@ public class CommandManager : ICommandManager
     public CommandManager(IBaritone baritone)
     {
         _baritone = baritone;
-        // TODO: Register default commands
-        // DefaultCommands.createAll(baritone).forEach(this.registry::register);
+        // Register default commands
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/command/defaults/DefaultCommands.java:30-78
+        var commands = DefaultCommands.CreateAll(baritone);
+        foreach (var command in commands)
+        {
+            Register(command);
+        }
     }
 
     public IBaritone GetBaritone() => _baritone;
@@ -65,6 +73,11 @@ public class CommandManager : ICommandManager
         var command = GetCommand(expanded.Label);
         if (command == null)
         {
+            // Command not found - log and inform user
+            var logger = LoggingConfiguration.CreateLogger<CommandManager>();
+            logger.LogWarning("Baritone command '{Command}' not found. Available commands: {Commands}", 
+                expanded.Label, string.Join(", ", _commands.Keys));
+            _baritone.GetGameEventHandler().LogDirect($"Command '{expanded.Label}' not found. Use 'help' to see available commands.");
             return;
         }
 
@@ -78,9 +91,14 @@ public class CommandManager : ICommandManager
         catch (Exception e)
         {
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/command/manager/CommandManager.java:77-79
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/Helper.java:239-244
             // Handle command exceptions
             // In Java, this uses CommandException.handle(command, args.getArgs())
-            // For now, log the exception
+            // Log the full exception with stack trace to the logging infrastructure
+            var logger = LoggingConfiguration.CreateLogger<CommandManager>();
+            logger.LogError(e, "Baritone command exception executing '{Command}': {Message}", expanded.Label, e.Message);
+            
+            // Also log via LogDirect (which will use the configured logger)
             _baritone.GetGameEventHandler().LogDirect($"Command exception: {e.Message}");
         }
     }

@@ -135,6 +135,28 @@ public static class Moves
     // Initialize movement types with their specific implementations
     static Moves()
     {
+        // Downward movement
+        Downward.Apply0Func = (ctx, src) => new Movements.MovementDownward(ctx.GetBaritone(), src, src.Below());
+        Downward.CostFunc = (ctx, x, y, z) => Movements.MovementDownward.Cost(ctx, x, y, z);
+        Downward.ApplyFunc = (ctx, x, y, z, res) =>
+        {
+            res.X = x;
+            res.Y = y - 1;
+            res.Z = z;
+            res.Cost = Movements.MovementDownward.Cost(ctx, x, y, z);
+        };
+
+        // Pillar movement
+        Pillar.Apply0Func = (ctx, src) => new Movements.MovementPillar(ctx.GetBaritone(), src, src.Above());
+        Pillar.CostFunc = (ctx, x, y, z) => Movements.MovementPillar.Cost(ctx, x, y, z);
+        Pillar.ApplyFunc = (ctx, x, y, z, res) =>
+        {
+            res.X = x;
+            res.Y = y + 1;
+            res.Z = z;
+            res.Cost = Movements.MovementPillar.Cost(ctx, x, y, z);
+        };
+
         // Traverse movements
         TraverseNorth.Apply0Func = (ctx, src) => new Movements.MovementTraverse(ctx.GetBaritone(), src, src.North());
         TraverseNorth.CostFunc = (ctx, x, y, z) => Movements.MovementTraverse.Cost(ctx, x, y, z, x, z - 1);
@@ -282,6 +304,63 @@ public static class Moves
         };
         DescendWest.ApplyFunc = (ctx, x, y, z, res) => Movements.MovementDescend.Cost(ctx, x, y, z, x - 1, z, res);
 
+        // Diagonal movements
+        DiagonalNortheast.Apply0Func = (ctx, src) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, src.X, src.Y, src.Z, src.X + 1, src.Z - 1, res);
+            return new Movements.MovementDiagonal(ctx.GetBaritone(), src, BlockFace.North, BlockFace.East, res.Y - src.Y);
+        };
+        DiagonalNortheast.CostFunc = (ctx, x, y, z) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, x, y, z, x + 1, z - 1, res);
+            return res.Cost;
+        };
+        DiagonalNortheast.ApplyFunc = (ctx, x, y, z, res) => Movements.MovementDiagonal.Cost(ctx, x, y, z, x + 1, z - 1, res);
+
+        DiagonalNorthwest.Apply0Func = (ctx, src) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, src.X, src.Y, src.Z, src.X - 1, src.Z - 1, res);
+            return new Movements.MovementDiagonal(ctx.GetBaritone(), src, BlockFace.North, BlockFace.West, res.Y - src.Y);
+        };
+        DiagonalNorthwest.CostFunc = (ctx, x, y, z) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, x, y, z, x - 1, z - 1, res);
+            return res.Cost;
+        };
+        DiagonalNorthwest.ApplyFunc = (ctx, x, y, z, res) => Movements.MovementDiagonal.Cost(ctx, x, y, z, x - 1, z - 1, res);
+
+        DiagonalSoutheast.Apply0Func = (ctx, src) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, src.X, src.Y, src.Z, src.X + 1, src.Z + 1, res);
+            return new Movements.MovementDiagonal(ctx.GetBaritone(), src, BlockFace.South, BlockFace.East, res.Y - src.Y);
+        };
+        DiagonalSoutheast.CostFunc = (ctx, x, y, z) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, x, y, z, x + 1, z + 1, res);
+            return res.Cost;
+        };
+        DiagonalSoutheast.ApplyFunc = (ctx, x, y, z, res) => Movements.MovementDiagonal.Cost(ctx, x, y, z, x + 1, z + 1, res);
+
+        DiagonalSouthwest.Apply0Func = (ctx, src) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, src.X, src.Y, src.Z, src.X - 1, src.Z + 1, res);
+            return new Movements.MovementDiagonal(ctx.GetBaritone(), src, BlockFace.South, BlockFace.West, res.Y - src.Y);
+        };
+        DiagonalSouthwest.CostFunc = (ctx, x, y, z) =>
+        {
+            var res = new MutableMoveResult();
+            Movements.MovementDiagonal.Cost(ctx, x, y, z, x - 1, z + 1, res);
+            return res.Cost;
+        };
+        DiagonalSouthwest.ApplyFunc = (ctx, x, y, z, res) => Movements.MovementDiagonal.Cost(ctx, x, y, z, x - 1, z + 1, res);
+
         // Parkour movements
         ParkourNorth.Apply0Func = (ctx, src) => Movements.MovementParkour.Cost(ctx, src, BlockFace.North);
         ParkourNorth.ApplyFunc = (ctx, x, y, z, res) =>
@@ -327,7 +406,5 @@ public static class Moves
             res.Cost = tempRes.Cost;
         };
 
-        // Note: Downward, Pillar, Diagonal movements are already implemented in MovementDownward, MovementPillar, MovementDiagonal
-        // They are registered in the Moves class initialization above
     }
 }

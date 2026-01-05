@@ -52,6 +52,35 @@ public class LookBehavior : Behavior, ILookBehavior
     public void UpdateTarget(Rotation rotation, bool blockInteract)
     {
         _target = new Target(rotation, Target.Resolve(Ctx, blockInteract));
+        
+        // CRITICAL FIX: Apply rotation immediately instead of waiting for OnPlayerUpdate(PRE)
+        // This ensures the rotation is set before physics tick uses it
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:89-95
+        var player = Ctx.Player() as Entity;
+        if (player != null && _target.Mode != Target.TargetMode.None)
+        {
+            var actual = _processor.PeekRotation(_target.Rotation);
+            var oldYawPitch = player.YawPitch;
+            player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
+            
+            // CRITICAL: If rotation changed significantly, ensure packet will be sent
+            // Force LastSentYawPitch to be different so SendPositionAsync detects the change
+            // This ensures rotation packets are sent immediately when rotation changes
+            var deltaYaw = Math.Abs(actual.GetYaw() - player.LastSentYawPitch.X);
+            var deltaPitch = Math.Abs(actual.GetPitch() - player.LastSentYawPitch.Y);
+            if (deltaYaw > 0.1f || deltaPitch > 0.1f)
+            {
+                // Rotation changed significantly - packet will be sent by SendPositionAsync
+                // No need to modify LastSentYawPitch here, it will be updated after packet is sent
+            }
+            
+            // Reduced logging - only log significant rotation changes
+            if (Math.Abs(oldYawPitch.X - actual.GetYaw()) > 5.0f || Math.Abs(oldYawPitch.Y - actual.GetPitch()) > 5.0f)
+            {
+                Baritone.GetGameEventHandler().LogDirect(
+                    $"LookBehavior: rotation {oldYawPitch.X:F1}°→{actual.GetYaw():F1}°");
+            }
+        }
     }
 
     public IAimProcessor GetAimProcessor() => _processor;
@@ -64,6 +93,8 @@ public class LookBehavior : Behavior, ILookBehavior
         }
     }
 
+    private static int _playerUpdateCounter = 0;
+    
     public override void OnPlayerUpdate(PlayerUpdateEvent evt)
     {
         if (_target == null)
@@ -76,6 +107,7 @@ public class LookBehavior : Behavior, ILookBehavior
             case Api.Event.Events.Type.EventState.Pre:
                 if (_target.Mode == Target.TargetMode.None)
                 {
+                    Baritone.GetGameEventHandler().LogDirect("LookBehavior.OnPlayerUpdate(PRE): Target mode is None, skipping");
                     return;
                 }
 
@@ -84,7 +116,17 @@ public class LookBehavior : Behavior, ILookBehavior
                 {
                     _prevRotation = new Rotation(player.YawPitch.X, player.YawPitch.Y);
                     var actual = _processor.PeekRotation(_target.Rotation);
+                    var oldYawPitch = player.YawPitch;
                     player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
+                    
+                    // Always log rotation changes
+                    Baritone.GetGameEventHandler().LogDirect(
+                        $"LookBehavior.OnPlayerUpdate(PRE): old=({oldYawPitch.X:F2}, {oldYawPitch.Y:F2}), " +
+                        $"new=({actual.GetYaw():F2}, {actual.GetPitch():F2}), target=({_target.Rotation.GetYaw():F2}, {_target.Rotation.GetPitch():F2}), mode={_target.Mode}");
+                }
+                else
+                {
+                    Baritone.GetGameEventHandler().LogDirect("LookBehavior.OnPlayerUpdate(PRE): Player is null");
                 }
                 break;
 

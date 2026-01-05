@@ -28,13 +28,13 @@ namespace MinecraftProtoNet.Baritone.Settings;
 /// </summary>
 public sealed class Settings
 {
-    // A map of lowercase setting field names to their respective setting
-    public readonly IReadOnlyDictionary<string, Setting<object>> ByLowerName;
+    // A map of lowercase setting field names to their respective setting (stored as object to avoid type casting issues)
+    public readonly IReadOnlyDictionary<string, object> ByLowerName;
 
-    // A list of all settings
-    public readonly IReadOnlyList<Setting<object>> AllSettings;
+    // A list of all settings (stored as object to avoid type casting issues)
+    public readonly IReadOnlyList<object> AllSettings;
 
-    public readonly IReadOnlyDictionary<Setting<object>, Type> SettingTypes;
+    public readonly IReadOnlyDictionary<object, Type> SettingTypes;
 
     // ========== BASIC PERMISSIONS ==========
 
@@ -816,6 +816,19 @@ public sealed class Settings
     /// </summary>
     public readonly Setting<bool> VerboseCommandExceptions = new(false);
 
+    /// <summary>
+    /// The function that is called when Baritone will log to chat/console.
+    /// This function can be overridden to redirect logging to a custom logger.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/Settings.java:1277-1284
+    /// </summary>
+    [JavaOnly]
+    public readonly Setting<Action<string>> Logger = new((message) =>
+    {
+        // Default implementation: log to console
+        // This will be overridden by dependency injection to use ILogger
+        Console.WriteLine($"[Baritone] {message}");
+    });
+
     // ========== ITEMS ==========
 
     /// <summary>
@@ -1382,32 +1395,43 @@ public sealed class Settings
     public Settings()
     {
         var fields = GetType().GetFields(BindingFlags.Public | BindingFlags.Instance);
-        var tmpByName = new Dictionary<string, Setting<object>>(StringComparer.OrdinalIgnoreCase);
-        var tmpAll = new List<Setting<object>>();
-        var tmpSettingTypes = new Dictionary<Setting<object>, Type>();
+        var tmpByName = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var tmpAll = new List<object>();
+        var tmpSettingTypes = new Dictionary<object, Type>();
 
         foreach (var field in fields)
         {
             if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(Setting<>))
             {
-                var setting = (Setting<object>)field.GetValue(this)!;
+                // Get the setting instance as object (can't directly cast Setting<T> to Setting<object>)
+                var settingObj = field.GetValue(this);
+                if (settingObj == null)
+                {
+                    continue;
+                }
+
                 var name = field.Name;
-                setting.SetName(name);
+                
+                // Use reflection to call SetName and SetJavaOnly methods
+                var setterMethod = field.FieldType.GetMethod("SetName", BindingFlags.NonPublic | BindingFlags.Instance);
+                setterMethod?.Invoke(settingObj, new object[] { name });
                 
                 var isJavaOnly = field.GetCustomAttribute<JavaOnlyAttribute>() != null;
-                setting.SetJavaOnly(isJavaOnly);
+                var javaOnlySetterMethod = field.FieldType.GetMethod("SetJavaOnly", BindingFlags.NonPublic | BindingFlags.Instance);
+                javaOnlySetterMethod?.Invoke(settingObj, new object[] { isJavaOnly });
 
+                var genericArgs = field.FieldType.GetGenericArguments();
+                var valueType = genericArgs[0];
+                
                 var lowerName = name.ToLowerInvariant();
                 if (tmpByName.ContainsKey(lowerName))
                 {
                     throw new InvalidOperationException($"Duplicate setting name: {name}");
                 }
 
-                tmpByName[lowerName] = setting;
-                tmpAll.Add(setting);
-
-                var genericArgs = field.FieldType.GetGenericArguments();
-                tmpSettingTypes[setting] = genericArgs[0];
+                tmpByName[lowerName] = settingObj;
+                tmpAll.Add(settingObj);
+                tmpSettingTypes[settingObj] = valueType;
             }
         }
 

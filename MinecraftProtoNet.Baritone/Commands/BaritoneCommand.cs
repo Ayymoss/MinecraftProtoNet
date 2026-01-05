@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Core;
 
 namespace MinecraftProtoNet.Baritone.Commands;
 
@@ -27,6 +29,8 @@ public class BaritoneCommand : ICommand
             
             // Get or create Baritone instance for this client
             var baritone = provider.CreateBaritone(ctx.Client);
+            var logger = LoggingConfiguration.CreateLogger<BaritoneCommand>();
+            logger.LogDebug($"BaritoneCommand: Created/retrieved Baritone instance. Total instances: {provider.GetAllBaritones().Count}");
             
             // Join remaining arguments into command string
             var commandString = ctx.GetRemainingArgsAsString(0);
@@ -39,6 +43,12 @@ public class BaritoneCommand : ICommand
         }
         catch (Exception ex)
         {
+            // Log the full exception with stack trace to the logging infrastructure
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/Helper.java:239-244
+            var logger = LoggingConfiguration.CreateLogger<BaritoneCommand>();
+            logger.LogError(ex, "Baritone command error: {Message}", ex.Message);
+            
+            // Also send a user-friendly message to chat
             await ctx.SendChatAsync($"Baritone command error: {ex.Message}");
         }
     }

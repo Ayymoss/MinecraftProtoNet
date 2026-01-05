@@ -16,7 +16,7 @@ namespace MinecraftProtoNet.Core.Services;
 public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 {
     private readonly ILogger<PhysicsService> _logger = logger;
-    
+
     // Terminal velocity in blocks/tick (Minecraft's max fall speed)
     private const double TerminalVelocity = -3.92;
     private const double PositionUpdateThreshold = 2.0E-4;
@@ -33,7 +33,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
         // Update fluid state
         UpdateFluidState(entity, level);
-        
+
         // CRITICAL: Verify IsOnGround is correct by checking if there's actually a block below
         // This fixes the case where a block is broken but IsOnGround is still true
         if (entity.IsOnGround)
@@ -53,6 +53,27 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                         entity.Velocity.Z);
                 }
             }
+        }
+
+        // TODO: REMOVE
+        var tick = level.ClientTickCounter;
+        if (tick % 20 == 0)
+        {
+            var state = new
+            {
+                entity.Forward,
+                entity.Backward,
+                entity.Left,
+                entity.Right,
+                entity.IsJumping,
+                entity.IsSprinting,
+                entity.Velocity,
+                entity.Position,
+                entity.YawPitch,
+                entity.IsOnGround,
+            };
+
+            _logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
         }
 
         // Handle jump input BEFORE travel (matches Java: jump happens before travel)
@@ -97,20 +118,20 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         var blockPos = entity.BlockPosition();
         var aabb = entity.GetBoundingBox();
-        
+
         entity.IsInWater = false;
         entity.IsInLava = false;
         entity.FluidHeight = 0.0;
-        
+
         var minX = (int)Math.Floor(aabb.MinX);
         var maxX = (int)Math.Floor(aabb.MaxX);
         var minY = (int)Math.Floor(aabb.MinY);
         var maxY = (int)Math.Floor(aabb.MinY + 0.001);
         var minZ = (int)Math.Floor(aabb.MinZ);
         var maxZ = (int)Math.Floor(aabb.MaxZ);
-        
+
         double maxFluidHeight = double.NegativeInfinity;
-        
+
         for (int x = minX; x <= maxX; x++)
         {
             for (int y = minY; y <= maxY; y++)
@@ -119,17 +140,18 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 {
                     var blockState = level.GetBlockAt(x, y, z);
                     if (blockState == null) continue;
-                    
+
                     if (blockState.Name.Contains("water", StringComparison.OrdinalIgnoreCase))
                     {
                         entity.IsInWater = true;
                         // Calculate fluid height from level property (0-8, where 8 is full)
                         double fluidHeight = 1.0;
-                        if (blockState.Properties.TryGetValue("level", out var levelStr) && 
+                        if (blockState.Properties.TryGetValue("level", out var levelStr) &&
                             int.TryParse(levelStr, out var levelInt))
                         {
                             fluidHeight = levelInt == 0 ? 1.0 : (levelInt / 8.0);
                         }
+
                         double blockFluidHeight = y + fluidHeight;
                         maxFluidHeight = Math.Max(maxFluidHeight, blockFluidHeight);
                     }
@@ -137,18 +159,19 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                     {
                         entity.IsInLava = true;
                         double fluidHeight = 1.0;
-                        if (blockState.Properties.TryGetValue("level", out var levelStr) && 
+                        if (blockState.Properties.TryGetValue("level", out var levelStr) &&
                             int.TryParse(levelStr, out var levelInt))
                         {
                             fluidHeight = levelInt == 0 ? 1.0 : (levelInt / 8.0);
                         }
+
                         double blockFluidHeight = y + fluidHeight;
                         maxFluidHeight = Math.Max(maxFluidHeight, blockFluidHeight);
                     }
                 }
             }
         }
-        
+
         if (maxFluidHeight > double.NegativeInfinity)
         {
             entity.FluidHeight = Math.Max(0.0, maxFluidHeight - aabb.MinY);
@@ -163,7 +186,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         var boundingBox = entity.GetBoundingBox();
         var pushableEntities = level.GetPushableEntities(entity, boundingBox).ToList();
-        
+
         if (pushableEntities.Count == 0)
         {
             return;
@@ -185,10 +208,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Calculate horizontal distance vector
         double xa = pushed.Position.X - pusher.Position.X;
         double za = pushed.Position.Z - pusher.Position.Z;
-        
+
         // Use max of absolute values for distance calculation (Mth.absMax equivalent)
         double dd = Math.Max(Math.Abs(xa), Math.Abs(za));
-        
+
         // Minimum distance threshold (0.009999999776482582)
         const double minDistance = 0.009999999776482582;
         if (dd < minDistance)
@@ -200,7 +223,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         dd = Math.Sqrt(xa * xa + za * za);
         xa /= dd;
         za /= dd;
-        
+
         // Calculate push strength (inverse distance, clamped to max 1.0)
         double pow = 1.0 / dd;
         if (pow > 1.0)
@@ -211,7 +234,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Apply push strength
         xa *= pow;
         za *= pow;
-        
+
         // Push strength constant: 0.05000000074505806 blocks/tick
         const double pushStrength = PhysicsConstants.EntityPushStrength;
         xa *= pushStrength;
@@ -248,34 +271,34 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Get block friction from block below (only if on ground)
         var blockPosBelow = GetBlockPosBelowThatAffectsMyMovement(entity, level);
         var blockStateBelow = level.GetBlockAt(blockPosBelow.X, blockPosBelow.Y, blockPosBelow.Z);
-        float blockFriction = entity.IsOnGround && blockStateBelow != null 
-            ? blockStateBelow.Friction 
+        float blockFriction = entity.IsOnGround && blockStateBelow != null
+            ? blockStateBelow.Friction
             : 1.0f;
         float friction = blockFriction * PhysicsConstants.AirDrag;
-        
+
         // Debug: Track velocity when falling (only log when falling and not on ground to avoid spam)
         bool isFalling = !entity.IsOnGround && entity.Velocity.Y < 0;
         double velocityYBefore = entity.Velocity.Y;
-        
+
         // Handle input-based movement with friction
         // This calls move() internally and returns the movement vector that was applied
         var movement = HandleRelativeFrictionAndCalculateMovement(entity, level, input, blockFriction);
         double movementY = movement.Y;
-        
+
         // Apply gravity to the Y component (for next tick)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2320
         double movementYAfterGravity = movementY - PhysicsConstants.DefaultGravity;
-        
+
         // Apply friction multipliers to set velocity for next tick
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2326-2327
         float verticalFriction = 0.98f; // Not FlyingAnimal, so use 0.98
         double velocityYAfterFriction = movementYAfterGravity * verticalFriction;
-        
+
         entity.Velocity = new Vector3<double>(
             movement.X * friction,
             velocityYAfterFriction,
             movement.Z * friction);
-        
+
         // Clamp to terminal velocity (happens after friction is applied)
         if (entity.Velocity.Y < TerminalVelocity)
         {
@@ -284,7 +307,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 TerminalVelocity,
                 entity.Velocity.Z);
         }
-        
+
         // Debug logging: Only log when falling and velocity changed significantly (avoid spam)
         if (isFalling && Math.Abs(entity.Velocity.Y - velocityYBefore) > 0.001)
         {
@@ -308,7 +331,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         bool isFalling = entity.Velocity.Y <= 0.0;
         double oldY = entity.Position.Y;
         double baseGravity = PhysicsConstants.DefaultGravity;
-        
+
         if (entity.IsInWater)
         {
             TravelInWater(entity, level, input, baseGravity, isFalling, oldY);
@@ -327,34 +350,34 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         float slowDown = entity.IsSprinting ? 0.9f : PhysicsConstants.WaterSlowdown;
         float speed = PhysicsConstants.WaterAcceleration;
-        
+
         // Move relative to input (adds input to velocity)
         MoveRelative(entity, speed, input);
-        
+
         // Apply movement with collision
         Move(entity, level, entity.Velocity);
-        
+
         // Get velocity after move() (may have been modified by collisions)
         var ladderMovement = entity.Velocity;
-        
+
         // Handle ladder collision boost
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2365-2367
         if (entity.HorizontalCollision && IsOnClimbable(entity, level))
         {
             ladderMovement = new Vector3<double>(ladderMovement.X, 0.2, ladderMovement.Z);
         }
-        
+
         // Apply water slowdown multipliers
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2369
         ladderMovement = new Vector3<double>(
             ladderMovement.X * slowDown,
             ladderMovement.Y * 0.8,
             ladderMovement.Z * slowDown);
-        
+
         // Apply fluid falling adjustment and set velocity for next tick
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2370
         entity.Velocity = GetFluidFallingAdjustedMovement(entity, baseGravity, isFalling, ladderMovement);
-        
+
         // Jump out of fluid if hitting horizontal obstacle
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2392-2396
         JumpOutOfFluid(entity, level, oldY);
@@ -368,10 +391,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         // Move relative to input
         MoveRelative(entity, PhysicsConstants.WaterAcceleration, input);
-        
+
         // Apply movement with collision
         Move(entity, level, entity.Velocity);
-        
+
         // Apply lava slowdown based on fluid height
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2377-2383
         const double fluidJumpThreshold = 0.4;
@@ -391,7 +414,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.Velocity.Y * 0.5,
                 entity.Velocity.Z * 0.5);
         }
-        
+
         // Apply additional gravity
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2385-2387
         if (baseGravity != 0.0)
@@ -401,7 +424,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.Velocity.Y - baseGravity / 4.0,
                 entity.Velocity.Z);
         }
-        
+
         // Jump out of fluid if hitting horizontal obstacle
         JumpOutOfFluid(entity, level, oldY);
     }
@@ -411,39 +434,40 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     /// Applies movement with collision and returns the movement vector.
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2505-2515
     /// </summary>
-    private Vector3<double> HandleRelativeFrictionAndCalculateMovement(Entity entity, Level level, Vector3<double> input, float blockFriction)
+    private Vector3<double> HandleRelativeFrictionAndCalculateMovement(Entity entity, Level level, Vector3<double> input,
+        float blockFriction)
     {
         // Debug: Track velocity when falling
         bool isFalling = !entity.IsOnGround && entity.Velocity.Y < 0;
         double velocityYBeforeMoveRelative = entity.Velocity.Y;
-        
+
         // Get friction-influenced speed
         float speed = GetFrictionInfluencedSpeed(entity, blockFriction);
-        
+
         // Add input movement to velocity
         MoveRelative(entity, speed, input);
         double velocityYAfterMoveRelative = entity.Velocity.Y;
-        
+
         // Handle climbable (ladder) logic
         entity.Velocity = HandleOnClimbable(entity, entity.Velocity);
-        
+
         // Store velocity before Move() to track what was actually applied
         var velocityBeforeMove = entity.Velocity;
-        
+
         // Apply movement with collision (this moves the entity and may modify velocity)
         Move(entity, level, velocityBeforeMove);
-        
+
         // Get movement vector after move() (velocity has been modified by collisions and block speed factor)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2509
         var movement = entity.Velocity;
-        
+
         // Handle ladder collision boost
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2510-2511
         if ((entity.HorizontalCollision || entity.IsJumping) && IsOnClimbable(entity, level))
         {
             movement = new Vector3<double>(movement.X, 0.2, movement.Z);
         }
-        
+
         // Debug logging: Only log when falling and there's significant change
         if (isFalling && Math.Abs(movement.Y - velocityYBeforeMoveRelative) > 0.001)
         {
@@ -455,10 +479,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.EntityId, velocityYBeforeMoveRelative, velocityYAfterMoveRelative,
                 velocityBeforeMove.Y, movement.Y, GetBlockSpeedFactor(entity, level));
         }
-        
+
         return movement;
     }
-    
+
     /// <summary>
     /// Gets the block speed factor for the entity's current position.
     /// </summary>
@@ -511,13 +535,14 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         {
             return Vector3<double>.Zero;
         }
-        
+
         var movement = lengthSqr > 1.0 ? input.Normalized() * speed : input * speed;
-        
+
         float yawRad = yaw * (MathF.PI / 180.0f);
         float sin = MathF.Sin(yawRad);
         float cos = MathF.Cos(yawRad);
-        
+
+        // Rotation matrix matches Java implementation exactly
         return new Vector3<double>(
             movement.X * cos - movement.Z * sin,
             movement.Y,
@@ -531,19 +556,21 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         double x = 0.0;
         double z = 0.0;
-        
-        if (entity.Input.Forward) z -= 1.0;
-        if (entity.Input.Backward) z += 1.0;
+
+        // CRITICAL FIX: Forward = positive Z (South), Backward = negative Z (North)
+        // This matches Input.GetMoveVector() and Minecraft's coordinate system
+        if (entity.Input.Forward) z += 1.0;   // Fixed: was z -= 1.0
+        if (entity.Input.Backward) z -= 1.0;   // Fixed: was z += 1.0
         if (entity.Input.Left) x -= 1.0;
         if (entity.Input.Right) x += 1.0;
-        
+
         // Normalize diagonal movement
         if (x != 0.0 && z != 0.0)
         {
             x *= 0.7071067811865476; // 1/sqrt(2)
             z *= 0.7071067811865476;
         }
-        
+
         return new Vector3<double>(x, 0.0, z);
     }
 
@@ -576,8 +603,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             {
                 yd = movement.Y - baseGravity / 16.0;
             }
+
             return new Vector3<double>(movement.X, yd, movement.Z);
         }
+
         return movement;
     }
 
@@ -605,7 +634,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.Velocity.X,
                 Math.Max(jumpPower, entity.Velocity.Y),
                 entity.Velocity.Z);
-            
+
             // Apply sprint jump boost
             if (entity.IsSprinting)
             {
@@ -667,13 +696,13 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             double xd = Math.Clamp(delta.X, -maxClimbSpeed, maxClimbSpeed);
             double zd = Math.Clamp(delta.Z, -maxClimbSpeed, maxClimbSpeed);
             double yd = Math.Max(delta.Y, -maxClimbSpeed);
-            
+
             // TODO: Handle scaffolding and suppress sliding down logic when implemented
             // For now, just clamp the velocity
-            
+
             return new Vector3<double>(xd, yd, zd);
         }
-        
+
         return delta;
     }
 
@@ -698,11 +727,11 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         {
             return;
         }
-        
+
         // Collide movement
         var movement = Collide(entity, level, delta);
         var movementLengthSqr = movement.LengthSquared();
-        
+
         if (movementLengthSqr > 1.0E-7)
         {
             // Update position
@@ -711,18 +740,18 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.Position.Y + movement.Y,
                 entity.Position.Z + movement.Z);
         }
-        
+
         // Update collision flags and ground detection
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:784-790
         bool xCollision = Math.Abs(delta.X - movement.X) > 1.0E-7;
         bool zCollision = Math.Abs(delta.Z - movement.Z) > 1.0E-7;
         entity.HorizontalCollision = xCollision || zCollision;
-        
+
         bool yCollision = Math.Abs(delta.Y - movement.Y) > 1.0E-7;
         bool verticalCollisionBelow = yCollision && delta.Y < 0.0;
         bool wasOnGround = entity.IsOnGround;
         entity.IsOnGround = verticalCollisionBelow;
-        
+
         // Reset Y velocity when landing on ground (downward velocity should be zeroed)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java
         // When entity lands, the downward velocity is effectively reset
@@ -733,7 +762,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 0.0,
                 entity.Velocity.Z);
         }
-        
+
         // Zero horizontal velocity on collision (for next tick)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:808-811
         if (entity.HorizontalCollision)
@@ -743,22 +772,22 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.Velocity.Y,
                 zCollision ? 0.0 : entity.Velocity.Z);
         }
-        
+
         // Apply block speed factor (affects velocity for next tick)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:827-828
         var blockPos = entity.BlockPosition();
         var blockState = level.GetBlockAt(blockPos.X, blockPos.Y, blockPos.Z);
         float blockSpeedFactor = blockState?.SpeedFactor ?? 1.0f;
-        
+
         // Debug: Track when falling and block speed factor is applied
         bool isFalling = !entity.IsOnGround && delta.Y < 0;
         double velocityYBeforeBlockSpeed = entity.Velocity.Y;
-        
+
         entity.Velocity = new Vector3<double>(
             entity.Velocity.X * blockSpeedFactor,
             entity.Velocity.Y, // Y is NOT affected by block speed factor
             entity.Velocity.Z * blockSpeedFactor);
-        
+
         // Debug logging: Only log when falling and block speed factor is not 1.0 (to catch issues)
         if (isFalling && (blockSpeedFactor != 1.0f || Math.Abs(entity.Velocity.Y - velocityYBeforeBlockSpeed) > 0.0001))
         {
@@ -779,19 +808,19 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     private Vector3<double> Collide(Entity entity, Level level, Vector3<double> movement)
     {
         var aabb = entity.GetBoundingBox();
-        
+
         // Get colliding shapes
         var collidingShapes = level.GetCollidingShapes(aabb.ExpandTowards(movement)).ToList();
-        
+
         // Collide with shapes (X, Y, Z order)
         var resolvedMovement = CollideWithShapes(movement, aabb, collidingShapes);
-        
+
         // Check for collisions
         bool xCollision = Math.Abs(movement.X - resolvedMovement.X) > 1.0E-7;
         bool yCollision = Math.Abs(movement.Y - resolvedMovement.Y) > 1.0E-7;
         bool zCollision = Math.Abs(movement.Z - resolvedMovement.Z) > 1.0E-7;
         bool onGroundAfterCollision = yCollision && movement.Y < 0.0;
-        
+
         // Step-up logic
         double stepHeight = PhysicsConstants.DefaultStepHeight;
         if (stepHeight > 0.0 && (onGroundAfterCollision || entity.IsOnGround) && (xCollision || zCollision))
@@ -802,17 +831,17 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             {
                 stepUpAABB = stepUpAABB.ExpandTowards(0.0, -9.999999747378752E-6, 0.0);
             }
-            
+
             var stepUpShapes = level.GetCollidingShapes(stepUpAABB).ToList();
             var candidateHeights = CollectCandidateStepUpHeights(groundedAABB, stepUpShapes, (float)stepHeight, (float)resolvedMovement.Y);
-            
+
             foreach (var candidateHeight in candidateHeights)
             {
                 var stepMovement = new Vector3<double>(movement.X, candidateHeight, movement.Z);
                 var stepFromGround = CollideWithShapes(stepMovement, groundedAABB, stepUpShapes);
                 double horizontalDistSqr = stepFromGround.X * stepFromGround.X + stepFromGround.Z * stepFromGround.Z;
                 double resolvedDistSqr = resolvedMovement.X * resolvedMovement.X + resolvedMovement.Z * resolvedMovement.Z;
-                
+
                 if (horizontalDistSqr > resolvedDistSqr)
                 {
                     double distanceToGround = aabb.MinY - groundedAABB.MinY;
@@ -823,7 +852,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 }
             }
         }
-        
+
         return resolvedMovement;
     }
 
@@ -837,9 +866,9 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         {
             return movement;
         }
-        
+
         var resolvedMovement = Vector3<double>.Zero;
-        
+
         // Resolve collisions in X, Y, Z order (vanilla uses axisStepOrder which optimizes, but X-Y-Z works)
         var axes = new[] { Axis.X, Axis.Y, Axis.Z };
         foreach (var axis in axes)
@@ -851,12 +880,12 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 Axis.Z => movement.Z,
                 _ => 0.0
             };
-            
+
             if (Math.Abs(axisMovement) > 1.0E-7)
             {
                 var movedBox = boundingBox.Move(resolvedMovement.X, resolvedMovement.Y, resolvedMovement.Z);
                 double collision = Shapes.Collide(axis, movedBox, shapes, axisMovement);
-                
+
                 resolvedMovement = axis switch
                 {
                     Axis.X => new Vector3<double>(collision, resolvedMovement.Y, resolvedMovement.Z),
@@ -866,7 +895,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 };
             }
         }
-        
+
         return resolvedMovement;
     }
 
@@ -877,7 +906,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     private float[] CollectCandidateStepUpHeights(AABB boundingBox, List<VoxelShape> colliders, float maxStepHeight, float stepHeightToSkip)
     {
         var candidates = new HashSet<float>();
-        
+
         foreach (var collider in colliders)
         {
             var coords = collider.GetCoords(Axis.Y);
@@ -885,14 +914,14 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             {
                 double coord = coords.GetDouble(i);
                 float relativeCoord = (float)(coord - boundingBox.MinY);
-                
+
                 if (relativeCoord >= 0.0f && relativeCoord != stepHeightToSkip && relativeCoord <= maxStepHeight)
                 {
                     candidates.Add(relativeCoord);
                 }
             }
         }
-        
+
         var sorted = candidates.ToArray();
         Array.Sort(sorted);
         return sorted;
@@ -909,16 +938,16 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         double deltaZ = entity.Position.Z - entity.LastSentPosition.Z;
         double deltaYRot = entity.YawPitch.X - entity.LastSentYawPitch.X;
         double deltaXRot = entity.YawPitch.Y - entity.LastSentYawPitch.Y;
-        
+
         entity.PositionReminder++;
-        bool move = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ) > PositionUpdateThreshold || 
+        bool move = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ) > PositionUpdateThreshold ||
                     entity.PositionReminder >= PositionReminderInterval;
         bool rot = Math.Abs(deltaYRot) > 1.0E-7 || Math.Abs(deltaXRot) > 1.0E-7;
-        
+
         var flags = MovementFlags.None;
         if (entity.IsOnGround) flags |= MovementFlags.OnGround;
         if (entity.HorizontalCollision) flags |= MovementFlags.HorizontalCollision;
-        
+
         if (move && rot)
         {
             await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
@@ -950,7 +979,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 Flags = flags
             });
         }
-        else if (entity.IsOnGround != entity.LastSentOnGround || 
+        else if (entity.IsOnGround != entity.LastSentOnGround ||
                  entity.HorizontalCollision != entity.LastSentHorizontalCollision)
         {
             // Status-only packet (no position/rotation change)
@@ -964,19 +993,19 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 Flags = flags
             });
         }
-        
+
         // Update last sent values
         if (move)
         {
             entity.LastSentPosition = entity.Position;
             entity.PositionReminder = 0;
         }
-        
+
         if (rot)
         {
             entity.LastSentYawPitch = entity.YawPitch;
         }
-        
+
         entity.LastSentOnGround = entity.IsOnGround;
         entity.LastSentHorizontalCollision = entity.HorizontalCollision;
     }
@@ -994,7 +1023,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     {
         // Apply knockback resistance
         power *= 1.0 - knockbackResistance;
-        
+
         if (power <= 0.0)
         {
             return;
@@ -1023,10 +1052,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Apply knockback to velocity
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1574
         var currentVelocity = entity.Velocity;
-        double newY = entity.IsOnGround 
-            ? Math.Min(0.4, currentVelocity.Y / 2.0 + power) 
+        double newY = entity.IsOnGround
+            ? Math.Min(0.4, currentVelocity.Y / 2.0 + power)
             : currentVelocity.Y;
-        
+
         entity.Velocity = new Vector3<double>(
             currentVelocity.X / 2.0 - direction.X,
             newY,

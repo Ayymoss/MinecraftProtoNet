@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x1E, ProtocolState.Play, true)]
+[Packet(0x1E, ProtocolState.Play)]
 public class MovePlayerPositionRotationPacket : IServerboundPacket
 {
     public required double X { get; set; }

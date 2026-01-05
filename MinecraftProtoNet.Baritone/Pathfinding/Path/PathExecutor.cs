@@ -64,6 +64,8 @@ public class PathExecutor : IPathExecutor
     private IBaritone Baritone => _behavior.Baritone;
 
     private bool _sprintNextTick;
+    private int _recursionDepth = 0;
+    private const int MaxRecursionDepth = 10;
 
     public PathExecutor(PathingBehavior behavior, IPath path)
     {
@@ -79,12 +81,43 @@ public class PathExecutor : IPathExecutor
     /// <returns>True if a movement just finished (and the player is therefore in a "stable" state), false otherwise.</returns>
     public bool OnTick()
     {
+        // Prevent infinite recursion
+        if (_recursionDepth >= MaxRecursionDepth)
+        {
+            Baritone.GetGameEventHandler().LogDirect($"PathExecutor: Max recursion depth reached, cancelling path");
+            Cancel();
+            return true;
+        }
+        _recursionDepth++;
+        try
+        {
+            return OnTickInternal();
+        }
+        finally
+        {
+            _recursionDepth--;
+        }
+    }
+
+    private bool OnTickInternal()
+    {
+        // Prevent infinite recursion - check depth here too since recursive calls bypass OnTick()
+        if (_recursionDepth >= MaxRecursionDepth)
+        {
+            Baritone.GetGameEventHandler().LogDirect($"PathExecutor: Max recursion depth reached in OnTickInternal, cancelling path");
+            Cancel();
+            return true;
+        }
+        
         if (_pathPosition == _path.Length() - 1)
         {
             _pathPosition++;
         }
         if (_pathPosition >= _path.Length())
         {
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/path/PathExecutor.java:86-88
+            // Clear keys when path is finished to stop movement
+            ClearKeys();
             return true; // stop bugging me, I'm done
         }
         var movement = (MovementType)_path.Movements()[_pathPosition];
@@ -108,8 +141,16 @@ public class PathExecutor : IPathExecutor
                         _path.Movements()[j].Reset();
                     }
                     OnChangeInPathPosition();
-                    OnTick();
-                    return false;
+                    // Increment depth for recursive call
+                    _recursionDepth++;
+                    try
+                    {
+                        return OnTickInternal();
+                    }
+                    finally
+                    {
+                        _recursionDepth--;
+                    }
                 }
             }
             // Check if we're ahead (skip forward)
@@ -127,10 +168,22 @@ public class PathExecutor : IPathExecutor
                     }
                     _pathPosition = i - 1;
                     OnChangeInPathPosition();
-                    OnTick();
-                    return false;
+                    // Increment depth for recursive call
+                    _recursionDepth++;
+                    try
+                    {
+                        return OnTickInternal();
+                    }
+                    finally
+                    {
+                        _recursionDepth--;
+                    }
                 }
             }
+            // If we can't find the player in the path, they might be off-path (e.g., in water)
+            // Don't recurse infinitely - just continue with current movement
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/path/PathExecutor.java:134
+            // The path executor will handle off-path detection via ClosestPathPos
         }
 
         var status = ClosestPathPos(_path);
@@ -303,8 +356,16 @@ public class PathExecutor : IPathExecutor
         {
             _pathPosition++;
             OnChangeInPathPosition();
-            OnTick();
-            return true;
+            // Increment depth for recursive call
+            _recursionDepth++;
+            try
+            {
+                return OnTickInternal();
+            }
+            finally
+            {
+                _recursionDepth--;
+            }
         }
         else
         {

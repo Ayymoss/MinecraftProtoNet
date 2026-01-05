@@ -56,6 +56,10 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
 
                 entity.HasPendingTeleport = true;
                 entity.TeleportYawPitch = playerPositionPacket.YawPitch;
+                
+                // CRITICAL: Initialize LastSentYawPitch to current rotation to prevent false rotation changes
+                // This ensures rotation packets are only sent when rotation actually changes
+                entity.LastSentYawPitch = entity.YawPitch;
 
                 await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
                 if (!_playerLoaded)
@@ -63,6 +67,7 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                     await client.SendPacketAsync(new PlayerLoadedPacket());
 
                     // Start the game loop (physics tick loop)
+                    // Note: Baritone hook should already be attached via BaritoneGameLoopHook singleton
                     gameLoop.Start(client);
 
                     _playerLoaded = true;

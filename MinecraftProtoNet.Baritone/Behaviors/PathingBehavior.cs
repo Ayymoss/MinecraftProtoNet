@@ -171,6 +171,9 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
             _safeToCancel = _current.OnTick();
             if (_current.Failed() || _current.Finished())
             {
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:172-186
+                // Clear input overrides when path finishes to stop movement
+                Baritone.GetInputOverrideHandler().ClearAllKeys();
                 _current = null;
                 if (_goal == null || (_goal.IsInGoal(Ctx.PlayerFeet() ?? new BetterBlockPos(0, 0, 0))))
                 {
@@ -287,26 +290,63 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
         }
         if (_goal == null)
         {
+            Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Goal is null, cannot start pathfinding");
             return false;
         }
-        if (_goal.IsInGoal(Ctx.PlayerFeet() ?? new BetterBlockPos(0, 0, 0)))
+        var playerFeet = Ctx.PlayerFeet() ?? new BetterBlockPos(0, 0, 0);
+        if (_goal.IsInGoal(playerFeet))
         {
+            Baritone.GetGameEventHandler().LogDirect($"SecretInternalSetGoalAndPath: Already at goal {_goal}");
             return false;
         }
         lock (_pathPlanLock)
         {
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:262-335
+            // If there's a current path, check if we need to cancel it
             if (_current != null)
             {
-                return false;
+                var currentPath = _current.GetPath();
+                var currentGoal = currentPath.GetGoal();
+                // If the goal is different, cancel the current path
+                if (currentGoal == null || !_goal.Equals(currentGoal) || !_goal.IsInGoal(currentPath.GetDest()))
+                {
+                    if (IsSafeToCancel())
+                    {
+                        Baritone.GetGameEventHandler().LogDirect($"SecretInternalSetGoalAndPath: Cancelling current path (goal changed from {currentGoal} to {_goal})");
+                        // Cancel inline to avoid deadlock (we're already holding _pathPlanLock)
+                        QueuePathEvent(PathEvent.Canceled);
+                        if (_inProgress != null)
+                        {
+                            _inProgress.Cancel();
+                        }
+                        _current = null;
+                        _next = null;
+                        Baritone.GetInputOverrideHandler().ClearAllKeys();
+                    }
+                    else
+                    {
+                        Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Already executing a path and cannot cancel safely");
+                        return false;
+                    }
+                }
+                else
+                {
+                    // Same goal, no need to start a new path
+                    Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Already pathing to the same goal");
+                    return false;
+                }
             }
             lock (_pathCalcLock)
             {
                 if (_inProgress != null)
                 {
+                    Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Path calculation already in progress");
                     return false;
                 }
+                var start = _expectedSegmentStart ?? playerFeet;
+                Baritone.GetGameEventHandler().LogDirect($"SecretInternalSetGoalAndPath: Starting pathfinding from {start} to {_goal}");
                 QueuePathEvent(PathEvent.CalcStarted);
-                FindPathInNewThread(_expectedSegmentStart ?? new BetterBlockPos(0, 0, 0), true, _context);
+                FindPathInNewThread(start, true, _context);
                 return true;
             }
         }

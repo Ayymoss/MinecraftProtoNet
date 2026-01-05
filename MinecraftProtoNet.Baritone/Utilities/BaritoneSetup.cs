@@ -28,12 +28,14 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Service that hooks Baritone to the game loop during construction.
     /// </summary>
-    internal class BaritoneGameLoopHook
+    public class BaritoneGameLoopHook
     {
         public BaritoneGameLoopHook(IGameLoop gameLoop, ILogger<BaritoneGameLoopHook> logger)
         {
+            logger.LogWarning("BaritoneGameLoopHook: Hooking Baritone to game loop (IsRunning={IsRunning})", gameLoop.IsRunning);
             // Hook Baritone tick events to the game loop
             BaritoneIntegration.HookToGameLoop(gameLoop, logger);
+            logger.LogWarning("BaritoneGameLoopHook: Successfully hooked Baritone to game loop");
         }
     }
 }

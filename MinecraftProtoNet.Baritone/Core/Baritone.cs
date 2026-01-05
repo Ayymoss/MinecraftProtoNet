@@ -34,6 +34,7 @@ using MinecraftProtoNet.Baritone.Process;
 using MinecraftProtoNet.Baritone.Selection;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Baritone.Utils.Player;
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Services;
@@ -138,6 +139,15 @@ public class Baritone : IBaritone
         _worldProvider = new WorldProvider(this);
         _selectionManager = new SelectionManager(this);
         _commandManager = new CommandManager(this);
+
+        // Configure logger setting to use ILogger
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/Settings.java:1277-1284
+        var logger = LoggingConfiguration.CreateLogger("MinecraftProtoNet.Baritone");
+        BaritoneAPI.GetSettings().Logger.Value = (message) =>
+        {
+            // Log to ILogger infrastructure
+            logger.LogInformation("[Baritone] {Message}", message);
+        };
     }
 
     public void RegisterBehavior(IBehavior behavior)

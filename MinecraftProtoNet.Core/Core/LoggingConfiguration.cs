@@ -26,7 +26,7 @@ public static class LoggingConfiguration
         lock (Lock)
         {
             var binPath = AppDomain.CurrentDomain.BaseDirectory;
-            var logPath = Path.Combine(binPath, "logs", "logicstream-.log");
+            var logPath = Path.Combine(binPath, "logs", "minecraftProtoNet-.log");
 
             var serilogLogger = new LoggerConfiguration()
                 .MinimumLevel.Is(minLevel)
