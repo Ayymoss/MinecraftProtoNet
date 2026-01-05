@@ -19,8 +19,10 @@ public class DamageEventPacket : IClientboundPacket
     {
         EntityId = buffer.ReadVarInt();
         SourceTypeId = buffer.ReadVarInt();
-        SourceCauseId = buffer.ReadVarInt();
-        SourceDirectId = buffer.ReadVarInt();
+        // Read optional entity IDs: Java uses readOptionalEntityId which returns varInt - 1
+        // So 0 means -1 (no entity), 1 means entity ID 0, etc.
+        SourceCauseId = buffer.ReadVarInt() - 1;
+        SourceDirectId = buffer.ReadVarInt() - 1;
 
         if (!buffer.ReadBoolean()) return;
 

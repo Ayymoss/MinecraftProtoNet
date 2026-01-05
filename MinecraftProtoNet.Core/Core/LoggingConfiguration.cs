@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Events;
 
 namespace MinecraftProtoNet.Core.Core;
 
@@ -9,33 +10,31 @@ namespace MinecraftProtoNet.Core.Core;
 public static class LoggingConfiguration
 {
     private static ILoggerFactory? _loggerFactory;
-    private static readonly object Lock = new();
+    private static readonly Lock Lock = new();
 
     /// <summary>
     /// Creates or returns the shared logger factory configured with Serilog.
     /// </summary>
     /// <param name="minLevel">Minimum log level (default: Debug). Use Verbose for detailed tick-by-tick logs.</param>
-    public static ILoggerFactory CreateLoggerFactory(Serilog.Events.LogEventLevel minLevel = Serilog.Events.LogEventLevel.Debug)
+    public static ILoggerFactory CreateLoggerFactory(LogEventLevel minLevel = LogEventLevel.Debug)
     {
         if (_loggerFactory is not null)
+        {
             return _loggerFactory;
+        }
 
         lock (Lock)
         {
-            if (_loggerFactory is not null)
-                return _loggerFactory;
+            var binPath = AppDomain.CurrentDomain.BaseDirectory;
+            var logPath = Path.Combine(binPath, "logs", "logicstream-.log");
 
             var serilogLogger = new LoggerConfiguration()
                 .MinimumLevel.Is(minLevel)
-                .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Information)
-                .MinimumLevel.Override("Microsoft.AspNetCore.Components", Serilog.Events.LogEventLevel.Warning)
-                .WriteTo.Console(
-                    outputTemplate: "[{Timestamp:HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
-                .WriteTo.File(
-                    path: "logs/minecraft-.log",
-                    rollingInterval: RollingInterval.Day,
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+                .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+                .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
                 .Enrich.FromLogContext()
+                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+                .WriteTo.File(logPath, rollingInterval: RollingInterval.Day)
                 .CreateLogger();
 
             // Set the static logger for classes using Log.Verbose(), Log.Debug(), etc.
@@ -43,7 +42,6 @@ public static class LoggingConfiguration
 
             _loggerFactory = new LoggerFactory().AddSerilog(serilogLogger);
             return _loggerFactory;
-
         }
     }
 

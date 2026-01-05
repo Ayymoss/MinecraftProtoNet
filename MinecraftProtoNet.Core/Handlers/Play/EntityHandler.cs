@@ -1,11 +1,15 @@
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Attributes;
 using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Handlers.Base;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Packets.Base;
 using MinecraftProtoNet.Core.Packets.Play.Clientbound;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Core.Handlers.Play;
 
@@ -20,7 +24,8 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(SetEntityMotionPacket))]
 [HandlesPacket(typeof(HurtAnimationPacket))]
 [HandlesPacket(typeof(SetHealthPacket))]
-public class EntityHandler() : IPacketHandler
+[HandlesPacket(typeof(DamageEventPacket))]
+public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physicsService) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(EntityHandler));
@@ -77,6 +82,10 @@ public class EntityHandler() : IPacketHandler
 
 
             case EntityPositionSyncPacket positionSyncPacket:
+                var isLocalPlayerSync = client.State.LocalPlayer.HasEntity && positionSyncPacket.EntityId == client.State.LocalPlayer.Entity?.EntityId;
+                var oldPosSync = isLocalPlayerSync && client.State.LocalPlayer.Entity != null ? client.State.LocalPlayer.Entity.Position : Vector3<double>.Zero;
+                var oldVelSync = isLocalPlayerSync && client.State.LocalPlayer.Entity != null ? client.State.LocalPlayer.Entity.Velocity : Vector3<double>.Zero;
+                
                 await client.State.Level.SetPositionAsync(
                     positionSyncPacket.EntityId,
                     positionSyncPacket.Position,
@@ -90,6 +99,12 @@ public class EntityHandler() : IPacketHandler
                     positionSyncPacket.Velocity,
                     positionSyncPacket.YawPitch,
                     positionSyncPacket.OnGround);
+                
+                if (isLocalPlayerSync)
+                {
+                    logger.LogDebug("EntityPositionSyncPacket (LOCAL PLAYER): EntityId={EntityId}, OldPos={OldPos}, NewPos={NewPos}, OldVel={OldVel}, NewVel={NewVel}, OnGround={OnGround}",
+                        positionSyncPacket.EntityId, oldPosSync, positionSyncPacket.Position, oldVelSync, positionSyncPacket.Velocity, positionSyncPacket.OnGround);
+                }
                 break;
 
             case MoveEntityPositionRotationPacket moveEntityPacket:
@@ -117,9 +132,24 @@ public class EntityHandler() : IPacketHandler
                 break;
 
 
-            case SetEntityMotionPacket:
-                // Server sends velocity for entities but clients typically don't use it
-                // (except for projectiles and item entities)
+            case SetEntityMotionPacket setEntityMotionPacket:
+                // Server sends velocity updates for knockback, pushing, explosions, etc.
+                // This is server-authoritative velocity that should override client-side physics.
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:1082-1085
+                var entity = client.State.Level.GetEntityOfId(setEntityMotionPacket.EntityId);
+                if (entity != null)
+                {
+                    var oldVelocity = entity.Velocity;
+                    var isLocalPlayer = client.State.LocalPlayer.HasEntity && entity.EntityId == client.State.LocalPlayer.Entity.EntityId;
+                    // Apply server-sent velocity directly (in blocks/tick)
+                    entity.Velocity = setEntityMotionPacket.Velocity;
+                    logger.LogDebug("SetEntityMotionPacket: EntityId={EntityId}, IsLocalPlayer={IsLocalPlayer}, OldVel={OldVel}, NewVel={NewVel}",
+                        setEntityMotionPacket.EntityId, isLocalPlayer, oldVelocity, setEntityMotionPacket.Velocity);
+                }
+                else
+                {
+                    logger.LogTrace("SetEntityMotionPacket: EntityId={EntityId} not found", setEntityMotionPacket.EntityId);
+                }
                 break;
 
             case HurtAnimationPacket hurtAnimationPacket:
@@ -143,6 +173,63 @@ public class EntityHandler() : IPacketHandler
                     });
                 }
 
+                break;
+
+            case DamageEventPacket damageEventPacket:
+                // Apply knockback when entity takes damage
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1197-1215
+                // Try to get entity - check local player first, then Level registry
+                Entity? damagedEntity = null;
+                if (client.State.LocalPlayer.HasEntity && 
+                    client.State.LocalPlayer.Entity?.EntityId == damageEventPacket.EntityId)
+                {
+                    damagedEntity = client.State.LocalPlayer.Entity;
+                }
+                else
+                {
+                    damagedEntity = client.State.Level.GetEntityOfId(damageEventPacket.EntityId);
+                }
+                
+                if (damagedEntity == null) break;
+
+                // Calculate knockback direction
+                // Java logic: Try SourcePosition first, then SourceDirectId (attacker entity)
+                double xd = 0.0;
+                double zd = 0.0;
+                
+                if (damageEventPacket.SourcePosition != null)
+                {
+                    // Use source position if available
+                    xd = damageEventPacket.SourcePosition.X - damagedEntity.Position.X;
+                    zd = damageEventPacket.SourcePosition.Z - damagedEntity.Position.Z;
+                }
+                else if (damageEventPacket.SourceDirectId >= 0)
+                {
+                    // Try to get attacker entity position from SourceDirectId
+                    // Check player entities first
+                    var attackerEntity = client.State.Level.GetEntityOfId(damageEventPacket.SourceDirectId);
+                    if (attackerEntity == null)
+                    {
+                        // Check world entities (non-player entities)
+                        var attackerWorldEntity = client.State.WorldEntities.GetEntity(damageEventPacket.SourceDirectId);
+                        if (attackerWorldEntity != null)
+                        {
+                            xd = attackerWorldEntity.Position.X - damagedEntity.Position.X;
+                            zd = attackerWorldEntity.Position.Z - damagedEntity.Position.Z;
+                        }
+                    }
+                    else
+                    {
+                        xd = attackerEntity.Position.X - damagedEntity.Position.X;
+                        zd = attackerEntity.Position.Z - damagedEntity.Position.Z;
+                    }
+                }
+                // If xd and zd are still 0.0, knockback() will use random direction (matches Java behavior)
+
+                // Apply knockback with default power (0.4)
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1211
+                // TODO: Get knockback resistance from entity attributes when implemented
+                physicsService.Knockback(damagedEntity, PhysicsConstants.DefaultKnockback, xd, zd, knockbackResistance: 0.0);
                 break;
         }
     }

@@ -118,6 +118,29 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
         }
     }
 
+    /// <summary>
+    /// Gets all pushable entities within the specified bounding box.
+    /// For client-side, this returns all player entities that intersect the bounding box.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientLevel.java:403-406
+    /// </summary>
+    public IEnumerable<Entity> GetPushableEntities(Entity pusher, AABB boundingBox)
+    {
+        var allEntities = GetAllEntities().ToList();
+        foreach (var entity in allEntities)
+        {
+            // Don't push self
+            if (entity.EntityId == pusher.EntityId)
+                continue;
+
+            // Check if bounding boxes intersect
+            var entityBox = entity.GetBoundingBox();
+            if (boundingBox.Intersects(entityBox))
+            {
+                yield return entity;
+            }
+        }
+    }
+
     // ==== Chunk Manager Delegation ====
 
     public ConcurrentDictionary<(int ChunkX, int ChunkZ), Chunk> Chunks => chunkManager.Chunks;

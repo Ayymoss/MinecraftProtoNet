@@ -74,6 +74,36 @@ public class Entity
     public Vector3<double> Velocity { get; set; } = new();
     public Vector2<float> YawPitch { get; set; } = new();
 
+    /// <summary>
+    /// Applies a velocity impulse to this entity.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1859-1865
+    /// </summary>
+    public void Push(Vector3<double> impulse)
+    {
+        if (double.IsFinite(impulse.X) && double.IsFinite(impulse.Y) && double.IsFinite(impulse.Z))
+        {
+            Velocity = new Vector3<double>(
+                Velocity.X + impulse.X,
+                Velocity.Y + impulse.Y,
+                Velocity.Z + impulse.Z);
+        }
+    }
+
+    /// <summary>
+    /// Applies a velocity impulse to this entity (component-wise).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1859-1865
+    /// </summary>
+    public void Push(double x, double y, double z)
+    {
+        if (double.IsFinite(x) && double.IsFinite(y) && double.IsFinite(z))
+        {
+            Velocity = new Vector3<double>(
+                Velocity.X + x,
+                Velocity.Y + y,
+                Velocity.Z + z);
+        }
+    }
+
     // ===== Physics State =====
     public bool IsOnGround { get; set; }
     public bool HorizontalCollision { get; set; }

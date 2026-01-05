@@ -230,13 +230,24 @@ public class MinecraftClient : IMinecraftClient
     // It is now replaced by this implementation.
     public async Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null)
     {
-        if (!State.LocalPlayer.HasEntity) return;
+        if (!State.LocalPlayer.HasEntity)
+        {
+            return;
+        }
         
-        await _physicsService.PhysicsTickAsync(
-            State.LocalPlayer.Entity, 
-            State.Level, 
-            this,
-            prePhysicsCallback);
+        try
+        {
+            await _physicsService.PhysicsTickAsync(
+                State.LocalPlayer.Entity, 
+                State.Level, 
+                this,
+                prePhysicsCallback);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PhysicsTickAsync: Exception in physics tick");
+            throw;
+        }
     }
 
 

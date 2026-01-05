@@ -43,8 +43,8 @@ public static class BufferExtensions
         var parts = fullname.Split('.');
         if (parts.Length < 5) return fullname;
 
-        var state = parts[2];
-        var name = parts[4].Replace("Packet", string.Empty).Titleize();
+        var state = parts[3];
+        var name = parts[5].Replace("Packet", string.Empty).Titleize();
         
         return packetId.HasValue 
             ? $"[{state} : {name} (0x{packetId.Value:X2})] ->" 

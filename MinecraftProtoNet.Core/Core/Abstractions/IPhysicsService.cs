@@ -19,4 +19,15 @@ public interface IPhysicsService
         Level level,
         IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null);
+
+    /// <summary>
+    /// Applies knockback to an entity.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1563-1576
+    /// </summary>
+    /// <param name="entity">The entity to apply knockback to</param>
+    /// <param name="power">Knockback power (default is 0.4)</param>
+    /// <param name="xd">X direction component (from attacker to entity)</param>
+    /// <param name="zd">Z direction component (from attacker to entity)</param>
+    /// <param name="knockbackResistance">Knockback resistance attribute value (0.0 to 1.0)</param>
+    void Knockback(Entity entity, double power, double xd, double zd, double knockbackResistance = 0.0);
 }
