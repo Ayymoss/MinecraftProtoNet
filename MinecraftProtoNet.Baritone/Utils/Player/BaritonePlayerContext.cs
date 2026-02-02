@@ -34,19 +34,29 @@ public class BaritonePlayerContext : IPlayerContext
 {
     private readonly IBaritone _baritone;
     private readonly IMinecraftClient _mc;
+    private readonly IPlayerController _playerController;
 
     public BaritonePlayerContext(IBaritone baritone, IMinecraftClient mc)
     {
         _baritone = baritone;
         _mc = mc;
+        _playerController = new BaritonePlayerController(baritone, mc);
     }
 
     public object Minecraft() => _mc;
     public object? Player() => _mc.State.LocalPlayer?.Entity;
-    public IPlayerController PlayerController() => throw new NotImplementedException(); // Will be implemented
+    public IPlayerController PlayerController() => _playerController;
     public object? World() => _mc.State.Level;
     public IWorldData? WorldData() => _baritone.GetWorldProvider().GetCurrentWorld();
-    public object? ObjectMouseOver() => null;
+    public object? ObjectMouseOver()
+    {
+        var player = _mc.State.LocalPlayer?.Entity;
+        var level = _mc.State.Level;
+        if (player == null || level == null) return null;
+        
+        return player.GetLookingAtBlock(level, _playerController.GetBlockReachDistance());
+    }
+
     public BetterBlockPos? PlayerFeet()
     {
         var player = _mc.State.LocalPlayer?.Entity;
@@ -81,7 +91,22 @@ public class BaritonePlayerContext : IPlayerContext
         return new Rotation(player.YawPitch.X, player.YawPitch.Y);
     }
 
-    public BetterBlockPos? GetSelectedBlock() => null;
-    public bool IsLookingAt(BetterBlockPos pos) => false;
+    public BetterBlockPos? GetSelectedBlock()
+    {
+        var player = _mc.State.LocalPlayer?.Entity;
+        var level = _mc.State.Level;
+        if (player == null || level == null) return null;
+
+        var hit = player.GetLookingAtBlock(level, _playerController.GetBlockReachDistance());
+        if (hit == null) return null;
+
+        return new BetterBlockPos(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z);
+    }
+
+    public bool IsLookingAt(BetterBlockPos pos)
+    {
+        var selected = GetSelectedBlock();
+        return selected != null && selected.X == pos.X && selected.Y == pos.Y && selected.Z == pos.Z;
+    }
 }
 

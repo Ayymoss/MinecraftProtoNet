@@ -127,6 +127,7 @@ public static class BlockPhysicsData
 
         // ===== Bedrock (unbreakable) =====
         ["minecraft:bedrock"] = new(0.6f, 1.0f, 1.0f, true, -1.0f),
+        ["bedrock"] = new(0.6f, 1.0f, 1.0f, true, -1.0f),
 
         // ===== Pressure Plates (no collision) =====
         ["minecraft:stone_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),

@@ -12,7 +12,7 @@
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ * along with Baritone.  See <https://www.gnu.org/licenses/>.
  *
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java
  */
@@ -49,7 +49,9 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
 
     protected override HashSet<BetterBlockPos> CalculateValidPositions()
     {
-        var prior = new BetterBlockPos(Src.X - GetDirection().X, Src.Y + 1, Src.Z - GetDirection().Z);
+        var dir = GetDirection();
+        var horizontalDir = (dir.X, 0, dir.Z);
+        var prior = new BetterBlockPos(Src.X - horizontalDir.X, Src.Y, Src.Z - horizontalDir.Z);
         return new HashSet<BetterBlockPos> { Src, Src.Above(), Dest, prior, prior.Above() };
     }
 
@@ -93,25 +95,18 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         }
         
         var srcUp2 = context.Get(x, y + 2, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:95
-        // Check for falling blocks
         string srcUp2Name = srcUp2.Name;
         bool isFallingBlock = srcUp2Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
                              srcUp2Name.Contains("sand", StringComparison.OrdinalIgnoreCase);
         if (isFallingBlock)
         {
-            // Add cost for breaking falling blocks
         }
         
         var srcDown = context.Get(x, y - 1, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:98
-        // Check for ladder/vine
         string srcDownName = srcDown.Name;
         bool isClimbable = srcDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
                           srcDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
         
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:100
-        // Check for bottom slab logic
         bool jumpingFromBottomSlab = MovementHelper.IsBottomSlab(srcDown);
         bool jumpingToBottomSlab = MovementHelper.IsBottomSlab(toPlace);
         if (jumpingFromBottomSlab && !jumpingToBottomSlab)
@@ -134,8 +129,6 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         }
         else
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:123
-            // Check for soul sand (slows movement)
             string srcDownName2 = srcDown.Name;
             if (srcDownName2.Contains("soul_sand", StringComparison.OrdinalIgnoreCase))
             {
@@ -165,9 +158,13 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
 
     protected override MovementState UpdateState(MovementState state)
     {
+        var player = Ctx.Player() as Entity;
+        if (player == null) return state;
+
         var feet = Ctx.PlayerFeet();
         if (feet != null && feet.Y < Src.Y)
         {
+            Baritone.GetGameEventHandler().LogDirect($"Ascend: Player fell below Src level ({feet.Y} < {Src.Y}), unreachable");
             return state.SetStatus(MovementStatus.Unreachable);
         }
         base.UpdateState(state);
@@ -177,42 +174,52 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
             return state;
         }
 
-        if (feet != null && (feet.Equals(Dest) || feet.Equals(new BetterBlockPos(Dest.X - GetDirection().X, Dest.Y - 1, Dest.Z - GetDirection().Z))))
+        if (feet != null && (feet.Equals(Dest) || feet.Equals(new BetterBlockPos(Dest.X + GetDirection().X, Dest.Y, Dest.Z + GetDirection().Z))))
         {
+            Baritone.GetGameEventHandler().LogDirect($"Ascend: Success at {feet}");
             return state.SetStatus(MovementStatus.Success);
         }
 
-        if (PositionToPlace == null) return state;
-        var jumpingOnto = BlockStateInterface.Get(Ctx, PositionToPlace);
-        if (!MovementHelper.CanWalkOn(Ctx, PositionToPlace, jumpingOnto))
+        if (PositionToPlace != null)
         {
-            _ticksWithoutPlacement++;
-            var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
-            if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
+            var jumpingOnto = BlockStateInterface.Get(Ctx, PositionToPlace);
+            if (!MovementHelper.CanWalkOn(Ctx, PositionToPlace, jumpingOnto))
             {
-                state.SetInput(Input.Sneak, true);
-                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:170
-                // Check if crouching and set click right
-                var player = Ctx.Player() as Entity;
-                if (player != null && player.IsSneaking)
+                _ticksWithoutPlacement++;
+                var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
+                if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
                 {
-                    // Right click to place block
-                    Baritone.GetInputOverrideHandler().SetInputForceState(Input.ClickRight, true);
+                    state.SetInput(Input.Sneak, true);
+                    if (state.GetInput(Input.Sneak) || player.IsSneaking)
+                    {
+                        state.SetInput(Input.ClickRight, true);
+                    }
                 }
+                
+                if (_ticksWithoutPlacement > 10)
+                {
+                    state.SetInput(Input.MoveBack, true);
+                }
+
+                // Reference: baritone-1.21.11-REFERENCE-ONLY - Java returns early here to prioritize placement look target
+                // If we don't return, MoveTowards will overwrite the placement target.
+                return state;
             }
-            if (_ticksWithoutPlacement > 10)
-            {
-                state.SetInput(Input.MoveBack, true);
-            }
-            return state;
+        }
+
+        // Only move towards if we aren't already there
+        double dX = Dest.X + 0.5 - player.Position.X;
+        double dZ = Dest.Z + 0.5 - player.Position.Z;
+        double ab = Math.Sqrt(dX * dX + dZ * dZ);
+
+        if (feet == null || !feet.Equals(Dest) || ab > 0.25)
+        {
+            MovementHelper.MoveTowards(Ctx, state, Dest);
         }
         
-        MovementHelper.MoveTowards(Ctx, state, Dest);
-        
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:181
-        // Bottom slab check
+        var jumpingOntoFinal = BlockStateInterface.Get(Ctx, PositionToPlace!);
         var srcDownState = BlockStateInterface.Get(Ctx, Src.Below());
-        if (MovementHelper.IsBottomSlab(jumpingOnto) && !MovementHelper.IsBottomSlab(srcDownState))
+        if (MovementHelper.IsBottomSlab(jumpingOntoFinal) && !MovementHelper.IsBottomSlab(srcDownState))
         {
             return state;
         }
@@ -222,35 +229,38 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
             return state;
         }
 
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementAscend.java:192-198
-        // Complex jump timing logic
-        if (HeadBonkClear())
+        var dir = GetDirection();
+        int xAxis = Math.Abs(dir.X);
+        int zAxis = Math.Abs(dir.Z);
+        double flatDistToNext = xAxis * Math.Abs((Dest.X + 0.5) - player.Position.X) + zAxis * Math.Abs((Dest.Z + 0.5) - player.Position.Z);
+        double sideDist = zAxis * Math.Abs((Dest.X + 0.5) - player.Position.X) + xAxis * Math.Abs((Dest.Z + 0.5) - player.Position.Z);
+
+        double lateralMotion = xAxis * player.Velocity.Z + zAxis * player.Velocity.X;
+        if (Math.Abs(lateralMotion) > 0.1)
         {
-            // Check distance to determine jump timing
-            if (feet != null)
-            {
-                double distSq = feet.DistanceSq(Src);
-                if (distSq < 0.25) // Close enough to jump
-                {
-                    return state.SetInput(Input.Jump, true);
-                }
-            }
+            return state;
         }
 
-        // Distance checks for jump timing
-        if (feet != null)
+        if (HeadBonkClear())
         {
-            double distSq = feet.DistanceSq(Src);
-            if (distSq < 0.5) // Close enough to jump
-            {
-                return state.SetInput(Input.Jump, true);
-            }
+            return state.SetInput(Input.Jump, true);
         }
-        return state;
+
+        if (flatDistToNext > 1.2 || sideDist > 0.2)
+        {
+            return state;
+        }
+
+        return state.SetInput(Input.Jump, true);
     }
 
     public bool HeadBonkClear()
     {
+        if (!MovementHelper.CanWalkThrough(Ctx, Src.Above(2)))
+        {
+            return false;
+        }
+
         var startUp = Src.Above(2);
         for (int i = 0; i < 4; i++)
         {
@@ -268,4 +278,3 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         return state.GetStatus() != MovementStatus.Running || _ticksWithoutPlacement == 0;
     }
 }
-

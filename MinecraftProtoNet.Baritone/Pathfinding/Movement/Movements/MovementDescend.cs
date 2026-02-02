@@ -287,15 +287,26 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
 
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:254
         // Complex movement logic
-        if (playerFeet != null && !playerFeet.Equals(Dest))
+        var player = Ctx.Player() as Entity;
+        if (player != null && playerFeet != null && !playerFeet.Equals(Dest))
         {
-            if (_numTicks++ < 20)
+            double diffX = player.Position.X - (Dest.X + 0.5);
+            double diffZ = player.Position.Z - (Dest.Z + 0.5);
+            double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+            double x = player.Position.X - (Src.X + 0.5);
+            double z = player.Position.Z - (Src.Z + 0.5);
+            double fromStart = Math.Sqrt(x * x + z * z);
+
+            if (!playerFeet.Equals(Dest) || ab > 0.25)
             {
-                MovementHelper.MoveTowards(Ctx, state, fakeDest);
-            }
-            else
-            {
-                MovementHelper.MoveTowards(Ctx, state, Dest);
+                if (_numTicks++ < 20 && fromStart < 1.25)
+                {
+                    MovementHelper.MoveTowards(Ctx, state, fakeDest);
+                }
+                else
+                {
+                    MovementHelper.MoveTowards(Ctx, state, Dest);
+                }
             }
         }
 
@@ -309,7 +320,7 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
             return true;
         }
 
-        var into = new BetterBlockPos(Dest.X - (Dest.X - Src.X), Dest.Y, Dest.Z - (Dest.Z - Src.Z));
+        var into = new BetterBlockPos(Dest.X + (Dest.X - Src.X), Dest.Y, Dest.Z + (Dest.Z - Src.Z));
         if (SkipToAscend())
         {
             return true;
@@ -328,7 +339,7 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
 
     public bool SkipToAscend()
     {
-        var into = new BetterBlockPos(Dest.X - (Dest.X - Src.X), Dest.Y, Dest.Z - (Dest.Z - Src.Z));
+        var into = new BetterBlockPos(Dest.X + (Dest.X - Src.X), Dest.Y, Dest.Z + (Dest.Z - Src.Z));
         return !MovementHelper.CanWalkThrough(Ctx, into) &&
                MovementHelper.CanWalkThrough(Ctx, into.Above()) &&
                MovementHelper.CanWalkThrough(Ctx, into.Above(2));

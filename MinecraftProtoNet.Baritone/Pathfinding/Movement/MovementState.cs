@@ -55,6 +55,11 @@ public class MovementState
         return this;
     }
 
+    public bool GetInput(Input input)
+    {
+        return _inputState.TryGetValue(input, out var forced) && forced;
+    }
+
     public Dictionary<Input, bool> GetInputStates() => _inputState;
 
     public class MovementTarget

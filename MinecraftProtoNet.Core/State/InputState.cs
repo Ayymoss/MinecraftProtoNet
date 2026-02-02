@@ -28,6 +28,8 @@ public class InputState
     public void SetJump(bool value) => Current = Current with { Jump = value };
     public void SetSneak(bool value) => Current = Current with { Shift = value };
     public void SetSprint(bool value) => Current = Current with { Sprint = value };
+    public void SetClickLeft(bool value) => Current = Current with { ClickLeft = value };
+    public void SetClickRight(bool value) => Current = Current with { ClickRight = value };
 
     /// <summary>
     /// Clears all movement input.

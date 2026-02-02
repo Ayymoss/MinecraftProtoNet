@@ -301,40 +301,12 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
         }
         lock (_pathPlanLock)
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:262-335
-            // If there's a current path, check if we need to cancel it
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:276-278
+            // If there's a current path, we don't start a new one here.
+            // Revalidation is handled by PathingControlManager.
             if (_current != null)
             {
-                var currentPath = _current.GetPath();
-                var currentGoal = currentPath.GetGoal();
-                // If the goal is different, cancel the current path
-                if (currentGoal == null || !_goal.Equals(currentGoal) || !_goal.IsInGoal(currentPath.GetDest()))
-                {
-                    if (IsSafeToCancel())
-                    {
-                        Baritone.GetGameEventHandler().LogDirect($"SecretInternalSetGoalAndPath: Cancelling current path (goal changed from {currentGoal} to {_goal})");
-                        // Cancel inline to avoid deadlock (we're already holding _pathPlanLock)
-                        QueuePathEvent(PathEvent.Canceled);
-                        if (_inProgress != null)
-                        {
-                            _inProgress.Cancel();
-                        }
-                        _current = null;
-                        _next = null;
-                        Baritone.GetInputOverrideHandler().ClearAllKeys();
-                    }
-                    else
-                    {
-                        Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Already executing a path and cannot cancel safely");
-                        return false;
-                    }
-                }
-                else
-                {
-                    // Same goal, no need to start a new path
-                    Baritone.GetGameEventHandler().LogDirect("SecretInternalSetGoalAndPath: Already pathing to the same goal");
-                    return false;
-                }
+                return false;
             }
             lock (_pathCalcLock)
             {

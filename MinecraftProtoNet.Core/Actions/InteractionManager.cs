@@ -19,6 +19,8 @@ public class InteractionManager : IInteractionManager
     private Vector3<int>? _breakingBlockPosition;
     private BlockFace? _breakingBlockFace;
     private bool _isBreakingBlock;
+    private long _startBreakingTick;
+    private double _totalBreakingTicks;
 
     public InteractionManager(IMinecraftClient client, ILogger<InteractionManager> logger)
     {
@@ -31,32 +33,96 @@ public class InteractionManager : IInteractionManager
         if (!_client.State.LocalPlayer.HasEntity) return false;
         var entity = _client.State.LocalPlayer.Entity;
 
-        var hit = entity.GetLookingAtBlock(_client.State.Level, ReachDistance);
-        if (hit is null) return false;
+        var tick = _client.State.Level.ClientTickCounter;
 
-        _logger.LogInformation("Digging block at {Pos} (Face={Face})", hit.BlockPosition, hit.Face);
-
-        // Simple instant dig for now (like creative/instabreak)
-        // In survival, we'd need Start/Cancel/Finish sequence based on digging speed.
-        // For interaction logic parity with Action, we just send start/finish.
+        // If we are already breaking a block, try to keep breaking it even if we aren't looking EXACTLY at it
+        // as long as we are looking at SOME block and Baritone still wants to dig.
+        // Actually, Baritone sets ClickLeft every tick it wants to dig.
         
+        if (_isBreakingBlock)
+        {
+            var elapsed = tick - _startBreakingTick;
+            if (elapsed >= _totalBreakingTicks)
+            {
+                _logger.LogInformation("Digging block at {Pos} finished after {Elapsed} ticks", _breakingBlockPosition, elapsed);
+                await _client.SendPacketAsync(new PlayerActionPacket
+                {
+                    Status = PlayerActionPacket.StatusType.FinishedDigging,
+                    Position = new Vector3<double>(_breakingBlockPosition!.X, _breakingBlockPosition.Y, _breakingBlockPosition.Z),
+                    Face = _breakingBlockFace!.Value,
+                    Sequence = entity.IncrementSequence()
+                });
+                await _client.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+                
+                _isBreakingBlock = false;
+                _breakingBlockPosition = null;
+                return true;
+            }
+            
+            // Periodically send ContinueDestroyBlockAsync (e.g. every 5 ticks)
+            if (tick % 5 == 0)
+            {
+                await ContinueDestroyBlockAsync(_breakingBlockPosition!, _breakingBlockFace!.Value);
+            }
+            await _client.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+            return true;
+        }
+
+        // Start breaking a new block
+        var hit = entity.GetLookingAtBlock(_client.State.Level, ReachDistance);
+        if (hit is null)
+        {
+            return false;
+        }
+
+        var pos = hit.BlockPosition;
+        var face = hit.Face;
+
+        _logger.LogInformation("Digging block at {Pos} (Face={Face}) started", pos, face);
+        
+        // Calculate mining time
+        var block = _client.State.Level.GetBlockAt(pos.X, pos.Y, pos.Z);
+        if (block == null) return false;
+
+        float hardness = block.DestroySpeed;
+        if (hardness < 0) 
+        {
+            _logger.LogWarning("DigBlockAsync: Attempted to break unbreakable block {BlockName}", block.Name);
+            return false;
+        }
+
+        // TODO: Get tool speed from registry
+        double toolSpeed = 1.0; 
+        _totalBreakingTicks = (hardness * 1.5) / toolSpeed * 20.0;
+
+        _isBreakingBlock = true;
+        _breakingBlockPosition = pos;
+        _breakingBlockFace = face;
+        _startBreakingTick = tick;
+
         await _client.SendPacketAsync(new PlayerActionPacket
         {
             Status = PlayerActionPacket.StatusType.StartedDigging,
-            Position = new Vector3<double>(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z),
-            Face = hit.Face,
+            Position = new Vector3<double>(pos.X, pos.Y, pos.Z),
+            Face = face,
             Sequence = entity.IncrementSequence()
         });
-        
-        await _client.SendPacketAsync(new PlayerActionPacket
-        {
-            Status = PlayerActionPacket.StatusType.FinishedDigging,
-            Position = new Vector3<double>(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z),
-            Face = hit.Face,
-            Sequence = entity.IncrementSequence()
-        });
-
         await _client.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
+        
+        // If it's instabreak, finish immediately
+        if (_totalBreakingTicks <= 0)
+        {
+            await _client.SendPacketAsync(new PlayerActionPacket
+            {
+                Status = PlayerActionPacket.StatusType.FinishedDigging,
+                Position = new Vector3<double>(pos.X, pos.Y, pos.Z),
+                Face = face,
+                Sequence = entity.IncrementSequence()
+            });
+            _isBreakingBlock = false;
+            _breakingBlockPosition = null;
+        }
+        
         return true;
     }
 
@@ -228,9 +294,13 @@ public class InteractionManager : IInteractionManager
 
         // 2. Fallback to Block Interaction
         var hit = entity.GetLookingAtBlock(_client.State.Level, ReachDistance);
-        if (hit is null) return false;
+        if (hit is null)
+        {
+            _logger.LogWarning("InteractAsync: No block found in reach ({ReachDistance})", ReachDistance);
+            return false;
+        }
 
-        _logger.LogInformation("Interacting with block at {Pos}", hit.BlockPosition);
+        _logger.LogInformation("InteractAsync: Interacting with block at {Pos} facing {Face}", hit.BlockPosition, hit.Face);
 
         var cursor = hit.GetInBlockPosition();
         await _client.SendPacketAsync(new UseItemOnPacket

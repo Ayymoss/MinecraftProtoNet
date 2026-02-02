@@ -139,8 +139,7 @@ public class InventoryBehavior(IBaritone baritone) : Behavior(baritone), IInvent
         var player = Baritone.GetPlayerContext().Player() as Entity;
         if (player == null) return -1;
         
-        var settings = Core.Baritone.Settings();
-        var acceptableItems = settings.AcceptableThrowawayItems.Value;
+        var itemRegistry = Baritone.GetItemRegistryService();
         
         // Check all inventory slots (0-35 for main inventory, 36-44 for hotbar)
         for (int i = 0; i < 36; i++)
@@ -148,42 +147,32 @@ public class InventoryBehavior(IBaritone baritone) : Behavior(baritone), IInvent
             var slot = player.Inventory.GetSlot((short)i);
             if (slot.ItemId != null && slot.ItemCount > 0)
             {
-                // TODO: Check if item name matches acceptable throwaway items using item registry
-                // For now, check if it's a common throwaway block
-                // This will be enhanced when item registry is available
+                if (itemRegistry.IsThrowawayBlock(slot.ItemId.Value))
+                {
+                    return i;
+                }
             }
         }
         
         return -1;
     }
 
-    /// <summary>
-    /// Checks if the inventory has generic throwaway items.
-    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/InventoryBehavior.java:162-169
-    /// </summary>
     public bool HasGenericThrowaway()
     {
         var player = Baritone.GetPlayerContext().Player() as Entity;
         if (player == null) return false;
         
         var settings = Core.Baritone.Settings();
-        var acceptableItems = settings.AcceptableThrowawayItems.Value;
+        if (!settings.AllowPlace.Value) return false;
+        
+        var itemRegistry = Baritone.GetItemRegistryService();
         
         // Check if any acceptable throwaway items are in the inventory
-        foreach (var itemName in acceptableItems)
+        return Throwaway(false, slot =>
         {
-            if (Throwaway(false, slot =>
-            {
-                // TODO: Check if slot item matches itemName using item registry
-                // For now, return false
-                return false;
-            }))
-            {
-                return true;
-            }
-        }
-        
-        return false;
+            if (slot.ItemId == null || slot.ItemCount <= 0) return false;
+            return itemRegistry.IsThrowawayBlock(slot.ItemId.Value);
+        });
     }
 
     /// <summary>
@@ -192,55 +181,14 @@ public class InventoryBehavior(IBaritone baritone) : Behavior(baritone), IInvent
     /// </summary>
     public bool SelectThrowawayForLocation(bool select, int x, int y, int z)
     {
-        var builderProcess = ((BaritoneImpl)Baritone).GetBuilderProcess();
-        var bsi = ((BaritoneImpl)Baritone).Bsi;
-        if (bsi == null) return false;
+        var itemRegistry = Baritone.GetItemRegistryService();
         
-        var currentState = bsi.Get0(x, y, z);
-        // Convert World.Chunk.BlockState to Json.BlockState for interface
-        var jsonBlockState = currentState != null 
-            ? new BlockState { Id = currentState.Id, Properties = currentState.Properties }
-            : null;
-        var maybe = builderProcess?.PlaceAt(x, y, z, jsonBlockState!);
-        
-        if (maybe != null)
+        // Try to find a throwaway block
+        return Throwaway(select, slot =>
         {
-            // Try to find exact block match first
-            if (Throwaway(select, slot =>
-            {
-                // TODO: Check if slot contains the exact block needed using item registry
-                return false;
-            }))
-            {
-                return true;
-            }
-            
-            // Try to find block type match
-            if (Throwaway(select, slot =>
-            {
-                // TODO: Check if slot contains block of same type using item registry
-                return false;
-            }))
-            {
-                return true;
-            }
-        }
-        
-        // Fall back to generic throwaway items
-        var settings = Core.Baritone.Settings();
-        foreach (var itemName in settings.AcceptableThrowawayItems.Value)
-        {
-            if (Throwaway(select, slot =>
-            {
-                // TODO: Check if slot item matches itemName using item registry
-                return false;
-            }))
-            {
-                return true;
-            }
-        }
-        
-        return false;
+            if (slot.ItemId == null || slot.ItemCount <= 0) return false;
+            return itemRegistry.IsThrowawayBlock(slot.ItemId.Value);
+        });
     }
 
     /// <summary>

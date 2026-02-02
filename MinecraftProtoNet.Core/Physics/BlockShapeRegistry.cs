@@ -39,12 +39,40 @@ public class BlockShapeRegistry : IBlockShapeRegistry
 
         if (blockState.IsStairs)
         {
-            // Migrated naive logic from ChunkManager, should be improved to full shape later
             var isTop = blockState.IsTop;
-            return isTop 
+            var baseBox = isTop 
                 ? Shapes.Shapes.Box(0, 0.5, 0, 1, 1, 1) 
                 : Shapes.Shapes.Box(0, 0, 0, 1, 0.5, 1);
-            // Note: Missing the vertical part of stairs, but maintains parity with old simple logic for now.
+            
+            // Add the step part of the stair
+            var facing = blockState.Properties.GetValueOrDefault("facing", "north");
+            VoxelShape stepBox;
+            if (isTop)
+            {
+                // Top stairs: step is at the bottom half
+                stepBox = facing switch
+                {
+                    "north" => Shapes.Shapes.Box(0, 0, 0.5, 1, 0.5, 1),
+                    "south" => Shapes.Shapes.Box(0, 0, 0, 1, 0.5, 0.5),
+                    "west" => Shapes.Shapes.Box(0.5, 0, 0, 1, 0.5, 1),
+                    "east" => Shapes.Shapes.Box(0, 0, 0, 0.5, 0.5, 1),
+                    _ => Shapes.Shapes.Empty()
+                };
+            }
+            else
+            {
+                // Bottom stairs: step is at the top half
+                stepBox = facing switch
+                {
+                    "north" => Shapes.Shapes.Box(0, 0.5, 0.5, 1, 1, 1),
+                    "south" => Shapes.Shapes.Box(0, 0.5, 0, 1, 1, 0.5),
+                    "west" => Shapes.Shapes.Box(0.5, 0.5, 0, 1, 1, 1),
+                    "east" => Shapes.Shapes.Box(0, 0.5, 0, 0.5, 1, 1),
+                    _ => Shapes.Shapes.Empty()
+                };
+            }
+
+            return Shapes.Shapes.Or(baseBox, stepBox);
         }
 
         if (blockState.Name.Contains("carpet"))

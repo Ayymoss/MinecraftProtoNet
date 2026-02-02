@@ -22,6 +22,7 @@ using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.State;
 using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
@@ -233,6 +234,12 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
                 if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
                 {
                     // Ready to place
+                    // Check if crouching/sneaking is forced in current state OR player is already sneaking
+                    var player = Ctx.Player() as Entity;
+                    if (state.GetInput(BaritoneInput.Sneak) || (player != null && player.IsSneaking))
+                    {
+                        state.SetInput(BaritoneInput.ClickRight, true);
+                    }
                 }
             }
             

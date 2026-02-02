@@ -23,6 +23,7 @@ using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Core.Physics;
+using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
@@ -92,6 +93,10 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 return ActionCosts.CostInf;
             }
             double hardness2 = MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, pb0, true);
+            if (hardness2 >= ActionCosts.CostInf)
+            {
+                return ActionCosts.CostInf;
+            }
             if (hardness1 == 0 && hardness2 == 0)
             {
                 if (!water && context.CanSprint)
@@ -234,6 +239,11 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
         
         if (isTheBridgeBlockThere)
         {
+            if (feet != null && feet.Equals(Dest))
+            {
+                return state.SetStatus(MovementStatus.Success);
+            }
+
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:193-195
             // Sprint logic, movement towards dest
             var context = new CalculationContext(Baritone);
@@ -241,7 +251,19 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             {
                 state.SetInput(Input.Sprint, true);
             }
-            MovementHelper.MoveTowards(Ctx, state, Dest);
+
+            var player = Ctx.Player() as Entity;
+            if (player != null)
+            {
+                double diffX = player.Position.X - (Dest.X + 0.5);
+                double diffZ = player.Position.Z - (Dest.Z + 0.5);
+                double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+
+                if (feet == null || !feet.Equals(Dest) || ab > 0.25)
+                {
+                    MovementHelper.MoveTowards(Ctx, state, Dest.Above());
+                }
+            }
             return state;
         }
         else
@@ -250,10 +272,21 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:200-202
             // Block placement logic
             var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
-            // Handle place result
-            if (placeResult == MovementHelper.PlaceResult.ReadyToPlace || placeResult == MovementHelper.PlaceResult.Attempting)
+            
+            var player = Ctx.Player() as Entity;
+            if (player != null)
             {
-                MovementHelper.MoveTowards(Ctx, state, Dest);
+                double dist1 = Math.Max(Math.Abs(player.Position.X - (Dest.X + 0.5)), Math.Abs(player.Position.Z - (Dest.Z + 0.5)));
+                
+                // Handle place result
+                if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
+                {
+                    state.SetInput(Input.ClickRight, true);
+                }
+                if (placeResult == MovementHelper.PlaceResult.ReadyToPlace || placeResult == MovementHelper.PlaceResult.Attempting || dist1 < 0.6)
+                {
+                    MovementHelper.MoveTowards(Ctx, state, Dest);
+                }
             }
             return state;
         }

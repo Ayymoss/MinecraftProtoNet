@@ -88,9 +88,13 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
             SetInputForceState(Input.ClickRight, false);
         }
 
+        // DIAGNOSTIC: Log _forcedInputs state every 20 ticks
+        _tickCounter++;
+        var inControl = InControl();
+
         // Update Entity.InputState.Current based on forced inputs
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/InputOverrideHandler.java:96-104
-        if (InControl())
+        if (inControl)
         {
             var player = Ctx.Player() as Entity;
             if (player != null)
@@ -114,16 +118,8 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
                 inputState.SetJump(jump);
                 inputState.SetSneak(sneak);
                 inputState.SetSprint(sprint);
-                
-                // Reduced logging - only log every 100 ticks
-                _tickCounter++;
-                if (_tickCounter % 100 == 0)
-                {
-                    var pos = Ctx.PlayerFeet();
-                    var rot = Ctx.PlayerRotations();
-                    Baritone.GetGameEventHandler().LogDirect(
-                        $"Input: pos={pos}, rot={rot?.GetYaw():F1}°, inputs=[F:{forward} B:{backward} L:{left} R:{right}]");
-                }
+                inputState.SetClickLeft(IsInputForcedDown(Input.ClickLeft));
+                inputState.SetClickRight(IsInputForcedDown(Input.ClickRight));
             }
         }
     }

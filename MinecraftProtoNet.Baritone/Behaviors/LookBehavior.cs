@@ -53,39 +53,17 @@ public class LookBehavior : Behavior, ILookBehavior
     {
         _target = new Target(rotation, Target.Resolve(Ctx, blockInteract));
         
-        // CRITICAL FIX: Apply rotation immediately instead of waiting for OnPlayerUpdate(PRE)
-        // This ensures the rotation is set before physics tick uses it
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:89-95
         var player = Ctx.Player() as Entity;
         if (player != null && _target.Mode != Target.TargetMode.None)
         {
             var actual = _processor.PeekRotation(_target.Rotation);
-            var oldYawPitch = player.YawPitch;
             player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
-            
-            // CRITICAL: If rotation changed significantly, ensure packet will be sent
-            // Force LastSentYawPitch to be different so SendPositionAsync detects the change
-            // This ensures rotation packets are sent immediately when rotation changes
-            var deltaYaw = Math.Abs(actual.GetYaw() - player.LastSentYawPitch.X);
-            var deltaPitch = Math.Abs(actual.GetPitch() - player.LastSentYawPitch.Y);
-            if (deltaYaw > 0.1f || deltaPitch > 0.1f)
-            {
-                // Rotation changed significantly - packet will be sent by SendPositionAsync
-                // No need to modify LastSentYawPitch here, it will be updated after packet is sent
-            }
-            
-            // Reduced logging - only log significant rotation changes
-            if (Math.Abs(oldYawPitch.X - actual.GetYaw()) > 5.0f || Math.Abs(oldYawPitch.Y - actual.GetPitch()) > 5.0f)
-            {
-                Baritone.GetGameEventHandler().LogDirect(
-                    $"LookBehavior: rotation {oldYawPitch.X:F1}°→{actual.GetYaw():F1}°");
-            }
         }
     }
 
     public IAimProcessor GetAimProcessor() => _processor;
 
-    public override void OnTick(Api.Event.Events.TickEvent evt)
+    public override void OnTick(TickEvent evt)
     {
         if (evt.GetType() == TickEvent.TickEventType.In)
         {
@@ -93,8 +71,6 @@ public class LookBehavior : Behavior, ILookBehavior
         }
     }
 
-    private static int _playerUpdateCounter = 0;
-    
     public override void OnPlayerUpdate(PlayerUpdateEvent evt)
     {
         if (_target == null)
@@ -107,7 +83,6 @@ public class LookBehavior : Behavior, ILookBehavior
             case Api.Event.Events.Type.EventState.Pre:
                 if (_target.Mode == Target.TargetMode.None)
                 {
-                    Baritone.GetGameEventHandler().LogDirect("LookBehavior.OnPlayerUpdate(PRE): Target mode is None, skipping");
                     return;
                 }
 
@@ -116,17 +91,7 @@ public class LookBehavior : Behavior, ILookBehavior
                 {
                     _prevRotation = new Rotation(player.YawPitch.X, player.YawPitch.Y);
                     var actual = _processor.PeekRotation(_target.Rotation);
-                    var oldYawPitch = player.YawPitch;
                     player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
-                    
-                    // Always log rotation changes
-                    Baritone.GetGameEventHandler().LogDirect(
-                        $"LookBehavior.OnPlayerUpdate(PRE): old=({oldYawPitch.X:F2}, {oldYawPitch.Y:F2}), " +
-                        $"new=({actual.GetYaw():F2}, {actual.GetPitch():F2}), target=({_target.Rotation.GetYaw():F2}, {_target.Rotation.GetPitch():F2}), mode={_target.Mode}");
-                }
-                else
-                {
-                    Baritone.GetGameEventHandler().LogDirect("LookBehavior.OnPlayerUpdate(PRE): Player is null");
                 }
                 break;
 
@@ -151,15 +116,7 @@ public class LookBehavior : Behavior, ILookBehavior
                     }
                     else
                     {
-                        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:111-118
-                        // Check for elytra, smooth look settings
-                        bool hasElytra = false; // TODO: Check for elytra when equipment system is available
-                        if (hasElytra && Core.Baritone.Settings().ElytraLookBehavior.Value)
-                        {
-                            // Elytra look behavior - don't smooth
-                            playerPost.YawPitch = new Vector2<float>(_target.Rotation.GetYaw(), _target.Rotation.GetPitch());
-                        }
-                        else if (Core.Baritone.Settings().SmoothLook.Value)
+                        if (Core.Baritone.Settings().SmoothLook.Value)
                         {
                             float avgYaw = _smoothYawBuffer.Count > 0 ? (float)_smoothYawBuffer.Average() : _prevRotation.GetYaw();
                             float avgPitch = _smoothPitchBuffer.Count > 0 ? (float)_smoothPitchBuffer.Average() : _prevRotation.GetPitch();
@@ -175,11 +132,6 @@ public class LookBehavior : Behavior, ILookBehavior
 
     public override void OnSendPacket(PacketEvent evt)
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:127-131
-        // Update serverRotation from packet
-        // This would require packet type checking
-        // TODO: Implement when packet system is available
-        // For now, extract rotation from player entity
         var player = Ctx.Player() as Entity;
         if (player != null)
         {
@@ -190,6 +142,17 @@ public class LookBehavior : Behavior, ILookBehavior
     public override void OnWorldEvent(WorldEvent evt)
     {
         _serverRotation = null;
+        _target = null;
+    }
+
+    public override void OnPlayerRotationMove(RotationMoveEvent evt)
+    {
+        if (_target != null)
+        {
+            var actual = _processor.PeekRotation(_target.Rotation);
+            evt.SetYaw(actual.GetYaw());
+            evt.SetPitch(actual.GetPitch());
+        }
     }
 
     private class Target
@@ -212,8 +175,6 @@ public class LookBehavior : Behavior, ILookBehavior
 
         public static TargetMode Resolve(IPlayerContext ctx, bool blockInteract)
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:156-161
-            // Complex logic to determine mode
             var settings = Core.Baritone.Settings();
             if (blockInteract)
             {
@@ -223,4 +184,3 @@ public class LookBehavior : Behavior, ILookBehavior
         }
     }
 }
-

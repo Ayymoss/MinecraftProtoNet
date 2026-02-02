@@ -34,27 +34,6 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Update fluid state
         UpdateFluidState(entity, level);
 
-        // CRITICAL: Verify IsOnGround is correct by checking if there's actually a block below
-        // This fixes the case where a block is broken but IsOnGround is still true
-        if (entity.IsOnGround)
-        {
-            var blockPosBelow = GetBlockPosBelowThatAffectsMyMovement(entity, level);
-            var blockStateBelow = level.GetBlockAt(blockPosBelow.X, blockPosBelow.Y, blockPosBelow.Z);
-            // If there's no solid block below, entity is not on ground
-            if (blockStateBelow == null || blockStateBelow.IsAir || !blockStateBelow.HasCollision)
-            {
-                entity.IsOnGround = false;
-                // Reset Y velocity to 0 when transitioning from ground to air (start falling from rest)
-                if (entity.Velocity.Y < 0.0)
-                {
-                    entity.Velocity = new Vector3<double>(
-                        entity.Velocity.X,
-                        0.0,
-                        entity.Velocity.Z);
-                }
-            }
-        }
-
         // TODO: REMOVE
         var tick = level.ClientTickCounter;
         if (tick % 20 == 0)
@@ -837,8 +816,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
             foreach (var candidateHeight in candidateHeights)
             {
+                // CRITICAL FIX: Step-up must move Y (up) first, then horizontally
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java
                 var stepMovement = new Vector3<double>(movement.X, candidateHeight, movement.Z);
-                var stepFromGround = CollideWithShapes(stepMovement, groundedAABB, stepUpShapes);
+                var stepFromGround = CollideWithShapes(stepMovement, groundedAABB, stepUpShapes, new[] { Axis.Y, Axis.X, Axis.Z });
                 double horizontalDistSqr = stepFromGround.X * stepFromGround.X + stepFromGround.Z * stepFromGround.Z;
                 double resolvedDistSqr = resolvedMovement.X * resolvedMovement.X + resolvedMovement.Z * resolvedMovement.Z;
 
@@ -860,7 +841,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     /// Collides movement with a list of VoxelShapes.
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1171-1189
     /// </summary>
-    private Vector3<double> CollideWithShapes(Vector3<double> movement, AABB boundingBox, List<VoxelShape> shapes)
+    private Vector3<double> CollideWithShapes(Vector3<double> movement, AABB boundingBox, List<VoxelShape> shapes, Axis[]? axisOrder = null)
     {
         if (shapes.Count == 0)
         {
@@ -869,8 +850,8 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
         var resolvedMovement = Vector3<double>.Zero;
 
-        // Resolve collisions in X, Y, Z order (vanilla uses axisStepOrder which optimizes, but X-Y-Z works)
-        var axes = new[] { Axis.X, Axis.Y, Axis.Z };
+        // Resolve collisions in specified order (vanilla uses axisStepOrder which optimizes, but the order matters for step-up)
+        var axes = axisOrder ?? new[] { Axis.X, Axis.Y, Axis.Z };
         foreach (var axis in axes)
         {
             double axisMovement = axis switch
@@ -942,7 +923,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         entity.PositionReminder++;
         bool move = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ) > PositionUpdateThreshold ||
                     entity.PositionReminder >= PositionReminderInterval;
-        bool rot = Math.Abs(deltaYRot) > 1.0E-7 || Math.Abs(deltaXRot) > 1.0E-7;
+        
+        // Use a small threshold for rotation updates to avoid spamming tiny jitter
+        const float rotationThreshold = 0.001f;
+        bool rot = Math.Abs(deltaYRot) > rotationThreshold || Math.Abs(deltaXRot) > rotationThreshold;
 
         var flags = MovementFlags.None;
         if (entity.IsOnGround) flags |= MovementFlags.OnGround;

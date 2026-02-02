@@ -39,8 +39,6 @@ public abstract class Movement : IMovement
         BlockFace.North, BlockFace.South, BlockFace.East, BlockFace.West, BlockFace.Bottom
     };
 
-    private static int _movementTickCounter = 0;
-
     protected readonly IBaritone Baritone;
     protected readonly IPlayerContext Ctx;
 
@@ -150,6 +148,7 @@ public abstract class Movement : IMovement
         // Disable flying ability
         var player = Ctx.Player() as Entity;
         // TODO: Disable flying when abilities system is available
+        
         _currentState = UpdateState(_currentState);
         
         // If in liquid and below destination, jump
@@ -350,14 +349,14 @@ public abstract class Movement : IMovement
         return result;
     }
 
-    public List<BetterBlockPos> ToPlace(BlockStateInterface bsi)
+    public List<BetterBlockPos> ToPlace(BlockStateInterface bsi, CalculationContext context)
     {
         if (ToPlaceCached != null)
         {
             return ToPlaceCached;
         }
         var result = new List<BetterBlockPos>();
-        if (PositionToPlace != null && !MovementHelper.CanWalkOn(bsi, PositionToPlace.X, PositionToPlace.Y, PositionToPlace.Z))
+        if (PositionToPlace != null && !MovementHelper.CanWalkOn(context, PositionToPlace.X, PositionToPlace.Y, PositionToPlace.Z))
         {
             result.Add(PositionToPlace);
         }

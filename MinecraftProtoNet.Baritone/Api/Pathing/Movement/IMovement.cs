@@ -71,5 +71,10 @@ public interface IMovement
     /// Gets the direction of this movement.
     /// </summary>
     (int X, int Y, int Z) GetDirection();
+
+    /// <summary>
+    /// Returns all positions that need to be broken for this movement.
+    /// </summary>
+    BetterBlockPos[] ToBreakAll();
 }
 

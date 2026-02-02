@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
 using MinecraftProtoNet.Core.Auth;
@@ -242,6 +242,23 @@ public class MinecraftClient : IMinecraftClient
                 State.Level, 
                 this,
                 prePhysicsCallback);
+
+            // Handle input clicks (Baritone integration)
+            var entity = State.LocalPlayer.Entity;
+            if (entity.Input.ClickRight)
+            {
+                _logger.LogInformation("PhysicsTick: Right click input detected, calling InteractAsync");
+                await InteractionManager.InteractAsync();
+            }
+            if (entity.Input.ClickLeft)
+            {
+                // _logger.LogInformation("PhysicsTick: Left click input detected, calling DigBlockAsync");
+                await InteractionManager.DigBlockAsync();
+            }
+            else
+            {
+                await InteractionManager.ResetBlockRemovingAsync();
+            }
         }
         catch (Exception ex)
         {

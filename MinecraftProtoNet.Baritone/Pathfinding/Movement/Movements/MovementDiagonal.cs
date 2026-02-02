@@ -21,34 +21,62 @@ using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Baritone.Utils.Pathing;
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
+using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for diagonal movement (moving diagonally to an adjacent block).
+/// Movement for moving diagonally between blocks.
 /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDiagonal.java
 /// </summary>
 public class MovementDiagonal : Movement
 {
-    private static readonly double Sqrt2 = Math.Sqrt(2);
+    private readonly BlockFace _face1;
+    private readonly BlockFace _face2;
 
-    public MovementDiagonal(IBaritone baritone, BetterBlockPos start, BlockFace dir1, BlockFace dir2, int dy)
-        : this(baritone, start, GetRelative(start, dir1), GetRelative(start, dir2), dir2, dy)
+    public MovementDiagonal(IBaritone baritone, BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
+        : base(baritone, src, GetDest(src, face1, face2, yOffset), GetToBreak(src, face1, face2, yOffset), GetToWalkOn(src, face1, face2, yOffset))
     {
+        _face1 = face1;
+        _face2 = face2;
     }
 
-    private MovementDiagonal(IBaritone baritone, BetterBlockPos start, BetterBlockPos dir1, BetterBlockPos dir2, BlockFace dir2Face, int dy)
-        : this(baritone, start, GetRelative(dir1, dir2Face).Above(dy), dir1, dir2)
+    private static BetterBlockPos GetDest(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
     {
+        var pos = GetRelative(src, face1);
+        pos = GetRelative(pos, face2);
+        return new BetterBlockPos(pos.X, pos.Y + yOffset, pos.Z);
     }
 
-    private MovementDiagonal(IBaritone baritone, BetterBlockPos start, BetterBlockPos end, BetterBlockPos dir1, BetterBlockPos dir2)
-        : base(baritone, start, end, new[] { dir1, dir1.Above(), dir2, dir2.Above(), end, end.Above() })
+    private static BetterBlockPos[] GetToBreak(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
     {
+        var dest = GetDest(src, face1, face2, yOffset);
+        var diag1 = GetRelative(src, face1);
+        var diag2 = GetRelative(src, face2);
+        
+        var list = new List<BetterBlockPos> { dest, dest.Above() };
+        
+        if (yOffset > 0)
+        {
+            list.Add(src.Above(2));
+        }
+        else if (yOffset < 0)
+        {
+            list.Add(dest.Above(2));
+        }
+        
+        return list.ToArray();
+    }
+
+    private static BetterBlockPos? GetToWalkOn(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
+    {
+        return GetDest(src, face1, face2, yOffset).Below();
     }
 
     private static BetterBlockPos GetRelative(BetterBlockPos pos, BlockFace face)
@@ -148,14 +176,12 @@ public class MovementDiagonal : Movement
         
         if (!MovementHelper.CanWalkThrough(context, destX, y, destZ, destInto))
         {
-            ascend = true;
-            if (!context.AllowDiagonalAscend || 
-                !MovementHelper.CanWalkThrough(context, x, y + 2, z) || 
-                !MovementHelper.CanWalkOn(context, destX, y, destZ, destInto) || 
-                !MovementHelper.CanWalkThrough(context, destX, y + 2, destZ))
+            double cost = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, destInto, false);
+            if (cost >= ActionCosts.CostInf)
             {
                 return;
             }
+            res.Cost += cost;
             destWalkOn = destInto;
             fromDown = context.Get(x, y - 1, z);
         }
@@ -199,40 +225,17 @@ public class MovementDiagonal : Movement
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:183
         // Check for fromDown block type
         string fromDownName = fromDown.Name;
-        bool fromOnSoulSand = fromDownName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
-        if (fromOnSoulSand)
+        bool onClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) || 
+                          fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        if (onClimbable)
         {
-            multiplier *= 2.0;
+            multiplier *= 2.0; // Climbable blocks slow movement
         }
-        
-        double hardness1 = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, destInto, false);
-        if (hardness1 >= ActionCosts.CostInf)
-        {
-            return;
-        }
-        double hardness2 = MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, false);
-        if (hardness1 == 0 && hardness2 == 0)
-        {
-            if (!context.AssumeWalkOnWater && context.CanSprint)
-            {
-                multiplier *= ActionCosts.SprintMultiplier;
-            }
-        }
-        
-        double cost = multiplier * Sqrt2 + hardness1 + hardness2;
-        if (ascend)
-        {
-            cost += ActionCosts.JumpOneBlockCost + context.JumpPenalty;
-        }
-        else if (descend)
-        {
-            cost += ActionCosts.WalkOffBlockCost + Math.Max(ActionCosts.FallNBlocksCost[1], ActionCosts.CenterAfterFallCost);
-        }
-        
+
+        res.Cost += multiplier * Math.Sqrt(2);
         res.X = destX;
-        res.Y = y;
+        res.Y = descend ? y - 1 : (ascend ? y + 1 : y);
         res.Z = destZ;
-        res.Cost = cost;
     }
 
     protected override MovementState UpdateState(MovementState state)
@@ -248,16 +251,59 @@ public class MovementDiagonal : Movement
         {
             return state.SetStatus(MovementStatus.Success);
         }
-
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:229
-        // Complex diagonal movement logic
-        var context = new CalculationContext(Baritone);
-        if (context.CanSprint)
+        else if (!PlayerInValidPosition())
         {
-            state.SetInput(Input.Sprint, true);
+            // Check for liquid special case
+            if (!(MovementHelper.IsLiquid(Ctx, Src) && GetValidPositions().Contains(feet?.Above() ?? Src)))
+            {
+                return state.SetStatus(MovementStatus.Unreachable);
+            }
         }
-        MovementHelper.MoveTowards(Ctx, state, Dest);
+
+        if (Dest.Y > Src.Y && ((Entity)Ctx.Player()!).Position.Y < Src.Y + 0.1 && ((Entity)Ctx.Player()!).HorizontalCollision)
+        {
+            state.SetInput(BaritoneInput.Jump, true);
+        }
+
+        if (Sprint())
+        {
+            state.SetInput(BaritoneInput.Sprint, true);
+        }
+
+        var player = Ctx.Player() as Entity;
+        if (player != null)
+        {
+            double diffX = player.Position.X - (Dest.X + 0.5);
+            double diffZ = player.Position.Z - (Dest.Z + 0.5);
+            double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+
+            if (feet == null || !feet.Equals(Dest) || ab > 0.25)
+            {
+                MovementHelper.MoveTowards(Ctx, state, Dest);
+            }
+        }
         return state;
     }
-}
 
+    private bool Sprint()
+    {
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && MovementHelper.IsLiquid(Ctx, feet) && !Core.Baritone.Settings().SprintInWater.Value)
+        {
+            return false;
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            if (!MovementHelper.CanWalkThrough(Ctx, PositionsToBreak[i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    protected override bool Prepared(MovementState state)
+    {
+        return true;
+    }
+}

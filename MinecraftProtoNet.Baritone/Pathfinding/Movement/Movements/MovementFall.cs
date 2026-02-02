@@ -145,10 +145,7 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
             
             // Movement towards destination with avoidance logic
             var destCenter = Utils.VecUtils.GetBlockPosCenter(Dest);
-            double dx = Math.Abs(player.Position.X + player.Velocity.X - destCenter.X);
-            double dz = Math.Abs(player.Position.Z + player.Velocity.Z - destCenter.Z);
-            
-            if (dx > 0.1 || dz > 0.1)
+            if (Math.Abs(player.Position.X + player.Velocity.X - destCenter.X) > 0.1 || Math.Abs(player.Position.Z + player.Velocity.Z - destCenter.Z) > 0.1)
             {
                 if (!player.IsOnGround && Math.Abs(player.Velocity.Y) > 0.4)
                 {
@@ -156,36 +153,61 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
                 }
                 state.SetInput(BaritoneInput.MoveForward, true);
             }
-            
-            // Avoid ladders
-            BetterBlockPos? avoidDir = null;
-            for (int i = 0; i < 15; i++)
+
+            var avoid = Avoid();
+            Vector3<int> avoidVec;
+            if (!avoid.HasValue)
             {
-                var belowState = world.GetBlockAt(playerFeet?.X ?? 0, (playerFeet?.Y ?? 0) - i, playerFeet?.Z ?? 0);
-                if (belowState != null && belowState.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase))
-                {
-                    // TODO: Get ladder facing direction when block properties are available
-                    break;
-                }
+                avoidVec = new Vector3<int>(Src.X - Dest.X, 0, Src.Z - Dest.Z);
+            }
+            else
+            {
+                // TODO: Convert BlockFace to unit vector
+                avoidVec = new Vector3<int>(0, 0, 0); 
             }
             
             if (targetRotation == null && playerFeet != null)
             {
-                var avoidOffset = avoidDir != null ? new Vector3<double>(avoidDir.X * 0.125, 0, avoidDir.Z * 0.125) : new Vector3<double>(0, 0, 0);
+                var avoidOffset = new Vector3<double>(avoidVec.X * 0.125, 0, avoidVec.Z * 0.125);
                 var destCenterOffset = new Vector3<double>(destCenter.X + avoidOffset.X, destCenter.Y, destCenter.Z + avoidOffset.Z);
                 var playerHead2 = Ctx.PlayerHead();
                 var playerRot2 = Ctx.PlayerRotations();
                 if (playerHead2 != null && playerRot2 != null)
                 {
-                    state.SetTarget(new MovementState.MovementTarget(
-                        Utils.RotationUtils.CalcRotationFromVec3d(playerHead2, destCenterOffset, playerRot2),
-                        false
-                    ));
+                    double diffX = player.Position.X - destCenterOffset.X;
+                    double diffZ = player.Position.Z - destCenterOffset.Z;
+                    double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+
+                    if (!playerFeet.Equals(Dest) || ab > 0.25)
+                    {
+                        state.SetTarget(new MovementState.MovementTarget(
+                            Utils.RotationUtils.CalcRotationFromVec3d(playerHead2, destCenterOffset, playerRot2),
+                            false
+                        ));
+                    }
                 }
             }
         }
         
         return state;
+    }
+
+    private MinecraftProtoNet.Core.Enums.BlockFace? Avoid()
+    {
+        var world = Ctx.World() as Level;
+        if (world == null) return null;
+        var feet = Ctx.PlayerFeet();
+        if (feet == null) return null;
+        for (int i = 0; i < 15; i++)
+        {
+            var blockState = world.GetBlockAt(feet.X, feet.Y - i, feet.Z);
+            if (blockState != null && blockState.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase))
+            {
+                // TODO: Get ladder facing direction
+                return null;
+            }
+        }
+        return null;
     }
 
     protected override bool SafeToCancel(MovementState state)

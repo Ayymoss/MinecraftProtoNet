@@ -18,12 +18,14 @@ public readonly record struct Input(
     bool Right,
     bool Jump,
     bool Shift,
-    bool Sprint)
+    bool Sprint,
+    bool ClickLeft,
+    bool ClickRight)
 {
     /// <summary>
     /// Empty input with no keys pressed.
     /// </summary>
-    public static readonly Input Empty = new(false, false, false, false, false, false, false);
+    public static readonly Input Empty = new(false, false, false, false, false, false, false, false, false);
 
     /// <summary>
     /// Returns true if any movement key is pressed.
@@ -110,6 +112,8 @@ public readonly record struct Input(
         Right: (flags & 8) != 0,
         Jump: (flags & 16) != 0,
         Shift: (flags & 32) != 0,
-        Sprint: (flags & 64) != 0
+        Sprint: (flags & 64) != 0,
+        ClickLeft: false,
+        ClickRight: false
     );
 }

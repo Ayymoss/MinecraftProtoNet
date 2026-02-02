@@ -84,6 +84,25 @@ public static class RotationUtils
     /// </summary>
     public static Rotation CalcRotationFromVec3d(Vector3<double> orig, Vector3<double> dest, Rotation current)
     {
+        if (current == null)
+        {
+            return CalcRotationFromVec3d(orig, dest);
+        }
+
+        double dX = dest.X - orig.X;
+        double dY = dest.Y - orig.Y;
+        double dZ = dest.Z - orig.Z;
+        double distSq = dX * dX + dZ * dZ;
+
+        // If we are looking nearly straight up or down, maintain the current yaw to avoid spinning.
+        // Increased threshold to 0.0025 (5cm horizontally) for better stability.
+        if (distSq < 0.0025)
+        {
+            double dist = Math.Sqrt(distSq);
+            double pitch = Math.Atan2(-dY, dist);
+            return new Rotation(current.GetYaw(), (float)(pitch * RadToDeg));
+        }
+
         return WrapAnglesToRelative(current, CalcRotationFromVec3d(orig, dest));
     }
 
@@ -92,10 +111,13 @@ public static class RotationUtils
     /// </summary>
     private static Rotation CalcRotationFromVec3d(Vector3<double> orig, Vector3<double> dest)
     {
-        double[] delta = { orig.X - dest.X, orig.Y - dest.Y, orig.Z - dest.Z };
-        double yaw = Math.Atan2(delta[0], -delta[2]);
-        double dist = Math.Sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
-        double pitch = Math.Atan2(delta[1], dist);
+        double dX = dest.X - orig.X;
+        double dY = dest.Y - orig.Y;
+        double dZ = dest.Z - orig.Z;
+        double yaw = Math.Atan2(-dX, dZ);
+        double distSq = dX * dX + dZ * dZ;
+        double dist = Math.Sqrt(distSq);
+        double pitch = Math.Atan2(-dY, dist);
         return new Rotation(
             (float)(yaw * RadToDeg),
             (float)(pitch * RadToDeg)
