@@ -299,7 +299,7 @@ public class MovementParkour : Movement
         return state.GetStatus() != MovementStatus.Running;
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         base.UpdateState(state);
         if (state.GetStatus() != MovementStatus.Running)

@@ -95,12 +95,12 @@ public static class RotationUtils
         double distSq = dX * dX + dZ * dZ;
 
         // If we are looking nearly straight up or down, maintain the current yaw to avoid spinning.
-        // Increased threshold to 0.0025 (5cm horizontally) for better stability.
-        if (distSq < 0.0025)
+        // Increased threshold to 0.01 (10cm horizontally) for better stability during sub-block oscillation.
+        if (distSq < 0.01)
         {
             double dist = Math.Sqrt(distSq);
-            double pitch = Math.Atan2(-dY, dist);
-            return new Rotation(current.GetYaw(), (float)(pitch * RadToDeg));
+            double pitch = (float)(Math.Atan2(-dY, dist) * RadToDeg);
+            return new Rotation(current.GetYaw(), (float)pitch);
         }
 
         return WrapAnglesToRelative(current, CalcRotationFromVec3d(orig, dest));

@@ -74,7 +74,7 @@ public class MovementDownward(IBaritone baritone, BetterBlockPos start, BetterBl
         return ActionCosts.FallNBlocksCost[1] + MovementHelper.GetMiningDurationTicks(context, x, y - 1, z, down, false);
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         base.UpdateState(state);
         if (state.GetStatus() != MovementStatus.Running)

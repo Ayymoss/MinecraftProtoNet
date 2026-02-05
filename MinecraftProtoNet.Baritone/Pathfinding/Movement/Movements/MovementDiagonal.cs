@@ -238,7 +238,7 @@ public class MovementDiagonal : Movement
         res.Z = destZ;
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         base.UpdateState(state);
         if (state.GetStatus() != MovementStatus.Running)

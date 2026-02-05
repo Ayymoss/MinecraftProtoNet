@@ -44,6 +44,12 @@ public static class MovementHelper
         BlockFace.North, BlockFace.South, BlockFace.East, BlockFace.West, BlockFace.Bottom
     };
 
+    /// <summary>
+    /// Sets the movement target rotation and forward input to move towards a destination block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:652-658
+    /// NOTE: This method intentionally does NOT set sprint. Sprint must be controlled by individual
+    /// movement UpdateState methods, as each movement type has different sprint safety conditions.
+    /// </summary>
     public static void MoveTowards(IPlayerContext ctx, MovementState state, BetterBlockPos dest)
     {
         var player = ctx.Player() as Entity;
@@ -59,12 +65,6 @@ public static class MovementHelper
         
         state.SetTarget(new MovementState.MovementTarget(rot, false));
         state.SetInput(Input.MoveForward, true);
-
-        // Sprinting logic
-        if (new CalculationContext(BaritoneAPI.GetProvider().GetPrimaryBaritone()).CanSprint)
-        {
-            state.SetInput(Input.Sprint, true);
-        }
     }
 
     public static bool CanWalkOn(IPlayerContext ctx, BetterBlockPos pos)
@@ -218,10 +218,64 @@ public static class MovementHelper
         return state != null && !state.IsAir && state.HasCollision;
     }
 
+    /// <summary>
+    /// Checks if a block can be replaced when placing another block.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:291-318
+    /// Maps to Minecraft's state.canBeReplaced() plus special cases for snow layers.
+    /// </summary>
     public static bool IsReplaceable(int x, int y, int z, BlockState state, BlockStateInterface bsi)
     {
         if (state == null) return true;
-        return state.IsAir || IsWater(state) || IsLava(state) || state.Name.Contains("grass", StringComparison.OrdinalIgnoreCase);
+        
+        // Air is always replaceable
+        if (state.IsAir) return true;
+        
+        // Reference: MovementHelper.java:307-313 - Snow layers special case
+        if (state.IsSnow)
+        {
+            if (!bsi.WorldContainsLoadedChunk(x, z))
+            {
+                return true; // Default to true for unloaded chunks
+            }
+            return state.SnowLayers == 1;
+        }
+        
+        // Reference: MovementHelper.java:314-315 - Large fern and tall grass
+        string name = state.Name;
+        if (name.Equals("minecraft:large_fern", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:tall_grass", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        
+        // Reference: Minecraft's BlockBehaviour state.canBeReplaced() - blocks that return true
+        // This covers: dead_bush, short_grass, fern, vine, seagrass, tall_seagrass,
+        // glow_lichen, fire, soul_fire, water, lava, structure_void, light, etc.
+        if (name.Equals("minecraft:dead_bush", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:short_grass", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:fern", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:vine", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:seagrass", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:tall_seagrass", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:glow_lichen", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:fire", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:soul_fire", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:structure_void", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:light", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:warped_roots", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:crimson_roots", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:nether_sprouts", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        
+        // Liquids are replaceable
+        if (IsWater(state) || IsLava(state)) return true;
+        
+        // Grass block name contains "grass" but is NOT replaceable; short_grass/tall_grass are handled above
+        // So we do NOT use a broad name.Contains("grass") check here
+        
+        return false;
     }
 
     public static bool CanPlaceAgainst(BlockStateInterface bsi, int x, int y, int z)
@@ -416,15 +470,26 @@ public static class MovementHelper
         NoOption
     }
 
+    /// <summary>
+    /// Attempts to place a block at the given position by finding a valid adjacent block to place against.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:743-797
+    /// </summary>
     public static PlaceResult AttemptToPlaceABlock(MovementState state, IBaritone baritone, BetterBlockPos pos, bool preferDown, bool wouldSneak)
     {
         var ctx = baritone.GetPlayerContext();
+        // Reference: MovementHelper.java:745-750 - Direct reachability check
         var direct = RotationUtils.Reachable(ctx, pos, wouldSneak);
         bool found = false;
+        if (direct != null)
+        {
+            state.SetTarget(new MovementState.MovementTarget(direct, true));
+            found = true;
+        }
         
         var bsi = new BlockStateInterface(ctx);
         
         // Try placing against adjacent blocks
+        // Reference: MovementHelper.java:751-776
         for (int i = 0; i < HorizontalsButAlsoDown.Length; i++)
         {
             var direction = HorizontalsButAlsoDown[i];
@@ -447,8 +512,12 @@ public static class MovementHelper
                     return PlaceResult.NoOption;
                 }
                 
+                // Face center between pos and against1. For vertical faces (same Y) use block vertical center
+                // so the ray from above doesn't hit the top of the block first (causing NoOption when bridging).
                 double faceX = (pos.X + against1.X + 1.0) * 0.5;
-                double faceY = (pos.Y + against1.Y + 0.5) * 0.5;
+                double faceY = (pos.Y == against1.Y)
+                    ? pos.Y + 0.5  // Vertical face: use block center so we hit the side face, not the top
+                    : (pos.Y + against1.Y + 0.5) * 0.5;
                 double faceZ = (pos.Z + against1.Z + 1.0) * 0.5;
                 
                 if (pos.X == against1.X && pos.Z == against1.Z)
@@ -493,6 +562,7 @@ public static class MovementHelper
             }
         }
         
+        // Check if already looking at the block
         var objectMouseOver = ctx.ObjectMouseOver();
         if (objectMouseOver is RaycastHit hit)
         {
@@ -505,6 +575,15 @@ public static class MovementHelper
                 {
                     state.SetInput(Input.Sneak, true);
                 }
+                
+                // CRITICAL: Even if we are already looking, we must SET THE TARGET to ensure it persists 
+                // and isn't clobbered by the previous movement's rotation or other logic.
+                var playerRot = ctx.PlayerRotations();
+                if (playerRot != null)
+                {
+                    state.SetTarget(new MovementState.MovementTarget(playerRot, true));
+                }
+                
                 var inventoryBehavior = ((Core.Baritone)baritone).GetInventoryBehavior();
                 inventoryBehavior.SelectThrowawayForLocation(true, pos.X, pos.Y, pos.Z);
                 return PlaceResult.ReadyToPlace;

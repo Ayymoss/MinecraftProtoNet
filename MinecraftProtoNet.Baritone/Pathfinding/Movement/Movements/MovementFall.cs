@@ -64,7 +64,7 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
             context.Get(Dest.X, Src.Y - 2, Dest.Z), result);
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         base.UpdateState(state);
         if (state.GetStatus() != MovementStatus.Running)

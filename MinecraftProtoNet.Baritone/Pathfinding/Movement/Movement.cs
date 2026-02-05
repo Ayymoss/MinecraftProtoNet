@@ -145,9 +145,11 @@ public abstract class Movement : IMovement
     public MovementStatus Update()
     {
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java:147
-        // Disable flying ability
         var player = Ctx.Player() as Entity;
-        // TODO: Disable flying when abilities system is available
+        
+        // Reset inputs and target for the new tick
+        _currentState.GetInputStates().Clear();
+        _currentState.SetTarget(new MovementState.MovementTarget());
         
         _currentState = UpdateState(_currentState);
         
@@ -157,7 +159,6 @@ public abstract class Movement : IMovement
             _currentState.SetInput(Input.Jump, true);
         }
         
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java:157-161
         // If player is in wall, break it
         var playerEntity = Ctx.Player() as Entity;
         if (playerEntity != null)
@@ -174,13 +175,13 @@ public abstract class Movement : IMovement
             }
         }
 
-        // If the movement target has to force the new rotations, or we aren't using silent move, then force the rotations
-        var rotation = _currentState.GetTarget().GetRotation();
-        if (rotation != null)
+        // Apply rotation target
+        var target = _currentState.GetTarget();
+        if (target != null && target.GetRotation() != null)
         {
             Baritone.GetLookBehavior().UpdateTarget(
-                rotation,
-                _currentState.GetTarget().HasToForceRotations());
+                target.GetRotation()!,
+                target.HasToForceRotations());
         }
         
         Baritone.GetInputOverrideHandler().ClearAllKeys();
@@ -189,11 +190,7 @@ public abstract class Movement : IMovement
         {
             Baritone.GetInputOverrideHandler().SetInputForceState(kvp.Key, kvp.Value);
         }
-        _currentState.GetInputStates().Clear();
         
-        // Reduced logging - removed verbose movement logging
-
-        // If the current status indicates a completed movement
         if (_currentState.GetStatus().IsComplete())
         {
             Baritone.GetInputOverrideHandler().ClearAllKeys();
@@ -290,7 +287,7 @@ public abstract class Movement : IMovement
     /// <summary>
     /// Calculate latest movement state. Gets called once a tick.
     /// </summary>
-    protected virtual MovementState UpdateState(MovementState state)
+    public virtual MovementState UpdateState(MovementState state)
     {
         if (!Prepared(state))
         {

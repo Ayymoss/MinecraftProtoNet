@@ -57,6 +57,13 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
         // Handle jump input BEFORE travel (matches Java: jump happens before travel)
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2909-2934
+        // IMPORTANT: noJumpDelay is decremented BEFORE the jump check, not in the else branch.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2903-2905
+        if (entity.JumpCooldown > 0)
+        {
+            entity.JumpCooldown--;
+        }
+        
         if (entity.IsJumping)
         {
             if (entity.IsInWater || entity.IsInLava)
@@ -71,12 +78,19 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         }
         else
         {
-            // Decrement jump cooldown when not jumping
-            entity.JumpCooldown = Math.Max(0, entity.JumpCooldown - 1);
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2932
+            // When not jumping, reset cooldown immediately
+            entity.JumpCooldown = 0;
         }
 
         // Handle entity-to-entity pushing/collisions
         PushEntities(entity, level);
+
+        // Sync entity.IsSprinting from input state BEFORE travel.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
+        // In Java, aiStep() determines sprint state before travel() and sendPosition().
+        // entity.IsSprinting drives speed calculations in GetFrictionInfluencedSpeed and JumpFromGround.
+        entity.IsSprinting = entity.InputState.Current.Sprint;
 
         // Calculate movement based on travel method
         // Travel applies movement internally and updates velocity for next tick
@@ -475,13 +489,25 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     /// <summary>
     /// Gets friction-influenced speed based on block friction.
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2549-2551
+    /// In Java, getSpeed() returns the MOVEMENT_SPEED attribute value which includes modifiers.
+    /// Sprint modifier is +30% via ADD_MULTIPLIED_TOTAL (LivingEntity.java:3866).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:442
+    ///   this.setSpeed((float)this.getAttributeValue(Attributes.MOVEMENT_SPEED));
     /// </summary>
     private float GetFrictionInfluencedSpeed(Entity entity, float blockFriction)
     {
         if (entity.IsOnGround)
         {
-            // Base movement speed (0.1) with friction formula: 0.216 / (friction^3)
-            return (float)(PhysicsConstants.BaseMovementSpeed * (0.21600002f / (blockFriction * blockFriction * blockFriction)));
+            // Calculate effective movement speed with attribute modifiers
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2162-2168
+            // Sprint modifier: ADD_MULTIPLIED_TOTAL with value 0.3 → speed * (1 + 0.3) = speed * 1.3
+            double effectiveSpeed = PhysicsConstants.BaseMovementSpeed;
+            if (entity.IsSprinting)
+            {
+                effectiveSpeed *= (1.0 + PhysicsConstants.SprintSpeedModifier);
+            }
+
+            return (float)(effectiveSpeed * (0.21600002f / (blockFriction * blockFriction * blockFriction)));
         }
         else
         {
@@ -530,6 +556,9 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
     /// <summary>
     /// Converts Entity.Input to Vector3 movement vector.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:626-657
+    /// Java: modifyInput() scales by 0.98, then by SNEAKING_SPEED (0.3) if crouching,
+    ///       then modifyInputSpeedForSquareMovement clamps magnitude to [0,1].
     /// </summary>
     private Vector3<double> ConvertInputToVector3(Entity entity)
     {
@@ -543,11 +572,28 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         if (entity.Input.Left) x -= 1.0;
         if (entity.Input.Right) x += 1.0;
 
-        // Normalize diagonal movement
-        if (x != 0.0 && z != 0.0)
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:646
+        // General input dampening: input.scale(0.98F)
+        x *= 0.98;
+        z *= 0.98;
+
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:651-654
+        // When sneaking (isMovingSlowly), scale input by SNEAKING_SPEED attribute (default 0.3)
+        if (entity.IsSneaking)
         {
-            x *= 0.7071067811865476; // 1/sqrt(2)
-            z *= 0.7071067811865476;
+            x *= PhysicsConstants.SneakingSpeedMultiplier;
+            z *= PhysicsConstants.SneakingSpeedMultiplier;
+        }
+
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:660-667
+        // modifyInputSpeedForSquareMovement: clamp input magnitude to [0, 1]
+        double length = Math.Sqrt(x * x + z * z);
+        if (length > 0.0)
+        {
+            double clamped = length < 1.0 ? length : 1.0;
+            double scale = clamped / length;
+            x *= scale;
+            z *= scale;
         }
 
         return new Vector3<double>(x, 0.0, z);
@@ -707,6 +753,10 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             return;
         }
 
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:763
+        // Back off from edge when sneaking to prevent falling off blocks
+        delta = MaybeBackOffFromEdge(entity, level, delta);
+
         // Collide movement
         var movement = Collide(entity, level, delta);
         var movementLengthSqr = movement.LengthSquared();
@@ -778,6 +828,108 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 entity.EntityId, entity.Position.Y, delta.Y, movement.Y,
                 velocityYBeforeBlockSpeed, blockSpeedFactor, entity.Velocity.Y);
         }
+    }
+
+    /// <summary>
+    /// Prevents a sneaking player from walking off block edges.
+    /// Iteratively reduces horizontal movement until the player won't fall.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:857-900
+    /// </summary>
+    private Vector3<double> MaybeBackOffFromEdge(Entity entity, Level level, Vector3<double> delta)
+    {
+        double maxDownStep = PhysicsConstants.DefaultStepHeight;
+
+        // Only apply when: not flying, not moving up, sneaking, and on or near ground
+        // Reference: Player.java:858-859 conditions
+        if (delta.Y > 0.0 || !entity.IsSneaking || !IsAboveGround(entity, level, maxDownStep))
+        {
+            return delta;
+        }
+
+        double deltaX = delta.X;
+        double deltaZ = delta.Z;
+        const double step = 0.05;
+        double stepX = Math.Sign(deltaX) * step;
+        double stepZ = Math.Sign(deltaZ) * step;
+
+        // Reference: Player.java:866-871 - Reduce deltaX until safe
+        while (deltaX != 0.0 && CanFallAtLeast(entity, level, deltaX, 0.0, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+                break;
+            }
+            deltaX -= stepX;
+        }
+
+        // Reference: Player.java:873-880 - Reduce deltaZ until safe
+        while (deltaZ != 0.0 && CanFallAtLeast(entity, level, 0.0, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+                break;
+            }
+            deltaZ -= stepZ;
+        }
+
+        // Reference: Player.java:882-894 - Reduce both together until safe
+        while (deltaX != 0.0 && deltaZ != 0.0 && CanFallAtLeast(entity, level, deltaX, deltaZ, maxDownStep))
+        {
+            if (Math.Abs(deltaX) <= step)
+            {
+                deltaX = 0.0;
+            }
+            else
+            {
+                deltaX -= stepX;
+            }
+
+            if (Math.Abs(deltaZ) <= step)
+            {
+                deltaZ = 0.0;
+            }
+            else
+            {
+                deltaZ -= stepZ;
+            }
+        }
+
+        return new Vector3<double>(deltaX, delta.Y, deltaZ);
+    }
+
+    /// <summary>
+    /// Checks if the entity is on the ground or close enough to be considered grounded.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:902-904
+    /// </summary>
+    private bool IsAboveGround(Entity entity, Level level, double maxDownStep)
+    {
+        // We don't track fallDistance, so just check onGround or use a simplified check
+        // Reference: onGround || (fallDistance < maxDownStep && !canFallAtLeast(0, 0, maxDownStep - fallDistance))
+        return entity.IsOnGround || !CanFallAtLeast(entity, level, 0.0, 0.0, maxDownStep);
+    }
+
+    /// <summary>
+    /// Checks if the player would fall at least minHeight if offset by (deltaX, deltaZ).
+    /// Creates a thin box below the player's bounding box at the offset position and checks for collisions.
+    /// Returns true if there are NO collisions (meaning the player WOULD fall).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:906-909
+    /// </summary>
+    private bool CanFallAtLeast(Entity entity, Level level, double deltaX, double deltaZ, double minHeight)
+    {
+        var bb = entity.GetBoundingBox();
+        // Create a box below the player at the offset position
+        // The small epsilon (1.0E-7) shrinks the box slightly to avoid false positives from touching edges
+        var checkBox = new AABB(
+            bb.MinX + 1.0E-7 + deltaX,
+            bb.MinY - minHeight - 1.0E-7,
+            bb.MinZ + 1.0E-7 + deltaZ,
+            bb.MaxX - 1.0E-7 + deltaX,
+            bb.MinY,
+            bb.MaxZ - 1.0E-7 + deltaZ);
+        // noCollision = no blocks in the box = player would fall
+        return !level.GetCollidingBlockAABBs(checkBox).Any();
     }
 
     /// <summary>
@@ -914,6 +1066,54 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     /// </summary>
     private async Task SendPositionAsync(Entity entity, IPacketSender packetSender)
     {
+        // ===== STEP 1: Send PlayerCommand + PlayerInput packets FIRST (matching Java order) =====
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
+        // Java order in tick(): sendShiftKeyState() → sendPlayerInput() → sendPosition()
+        // And within sendPosition(): sendIsSprintingIfNeeded() → position packets
+        // Net effect: commands + input before position packets.
+        
+        var currentInput = entity.InputState.Current;
+        
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:288-296
+        // sendIsSprintingIfNeeded() - uses dedicated wasSprinting field, NOT lastSentInput
+        bool currentlySprinting = currentInput.Sprint;
+        if (currentlySprinting != entity.WasSprinting)
+        {
+            _logger.LogInformation("[Sprint] State change: {Old} -> {New}, sending {Action}",
+                entity.WasSprinting ? "SPRINTING" : "NOT_SPRINTING",
+                currentlySprinting ? "SPRINTING" : "NOT_SPRINTING",
+                currentlySprinting ? "StartSprint" : "StopSprint");
+            await packetSender.SendPacketAsync(new PlayerCommandPacket
+            {
+                EntityId = entity.EntityId,
+                Action = currentlySprinting ? PlayerAction.StartSprint : PlayerAction.StopSprint
+            });
+            entity.WasSprinting = currentlySprinting;
+        }
+        
+        // NOTE: In 1.21.x, sneaking is communicated ONLY via PlayerInputPacket (0x2A) Shift flag.
+        // The PRESS_SHIFT_KEY/RELEASE_SHIFT_KEY actions were REMOVED from ServerboundPlayerCommandPacket.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/network/protocol/game/ServerboundPlayerCommandPacket.java:57-64
+        // The Shift flag in PlayerInputPacket (sent below) handles sneak state for the server.
+        
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:215-217
+        // Send PlayerInput packet when input flags change
+        var lastSentInput = entity.InputState.LastSent;
+        var keyPresses = currentInput.ToByte();
+        var lastKeyPresses = lastSentInput.ToByte();
+        
+        if (keyPresses != lastKeyPresses)
+        {
+            _logger.LogDebug("[Input] Flags changed: 0x{Old:X2} -> 0x{New:X2} (Sprint={Sprint}, Forward={Forward}, Shift={Shift})",
+                lastKeyPresses, keyPresses, currentInput.Sprint, currentInput.Forward, currentInput.Shift);
+            var flag = (PlayerInputPacket.MovementFlag)keyPresses;
+            await packetSender.SendPacketAsync(new PlayerInputPacket(flag));
+            entity.InputState.LastSent = currentInput;
+        }
+        
+        // ===== STEP 2: Send position/rotation packets =====
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:248-286
+        
         double deltaX = entity.Position.X - entity.LastSentPosition.X;
         double deltaY = entity.Position.Y - entity.LastSentPosition.Y;
         double deltaZ = entity.Position.Z - entity.LastSentPosition.Z;
@@ -967,8 +1167,6 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                  entity.HorizontalCollision != entity.LastSentHorizontalCollision)
         {
             // Status-only packet (no position/rotation change)
-            // Note: Minecraft sends a status-only packet, but we don't have that packet type.
-            // For now, we'll send a position packet with same position but updated flags.
             await packetSender.SendPacketAsync(new MovePlayerPositionPacket
             {
                 X = entity.LastSentPosition.X,

@@ -36,7 +36,8 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
     private readonly Favoring _favoring;
     private readonly CalculationContext _calcContext;
 
-    public AStarPathFinder(BetterBlockPos realStart, int startX, int startY, int startZ, Goal goal, Favoring favoring, CalculationContext context)
+    public AStarPathFinder(BetterBlockPos realStart, int startX, int startY, int startZ, Goal goal, Favoring favoring,
+        CalculationContext context)
         : base(realStart, startX, startY, startZ, goal, context)
     {
         _favoring = favoring;
@@ -52,12 +53,16 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
         StartNode.CombinedCost = StartNode.EstimatedCostToGoal;
         var openSet = new BinaryHeapOpenSet();
         openSet.Insert(StartNode);
-        double[] bestHeuristicSoFar = new double[Coefficients.Length]; // keep track of the best node by the metric of (estimatedCostToGoal + cost / COEFFICIENTS[i])
+        double[]
+            bestHeuristicSoFar =
+                new double[Coefficients
+                    .Length]; // keep track of the best node by the metric of (estimatedCostToGoal + cost / COEFFICIENTS[i])
         for (int i = 0; i < bestHeuristicSoFar.Length; i++)
         {
             bestHeuristicSoFar[i] = StartNode.EstimatedCostToGoal;
             BestSoFar[i] = StartNode;
         }
+
         var res = new MutableMoveResult();
         var worldBorder = new BetterWorldBorder(_calcContext.World.WorldBorder);
         long startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -71,6 +76,7 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                 // LogDirect($"slowPath is on, path timeout will be {Core.Baritone.Settings().SlowPathTimeoutMs.Value}ms instead of {primaryTimeout}ms");
             }
         }
+
         long primaryTimeoutTime = startTime + (slowPath ? Core.Baritone.Settings().SlowPathTimeoutMs.Value : primaryTimeout);
         long failureTimeoutTime = startTime + (slowPath ? Core.Baritone.Settings().SlowPathTimeoutMs.Value : failureTimeout);
         bool failing = true;
@@ -92,10 +98,12 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                     break;
                 }
             }
+
             if (slowPath)
             {
                 Thread.Sleep((int)Core.Baritone.Settings().SlowPathTimeDelayMs.Value);
             }
+
             PathNode currentNode = openSet.RemoveLowest();
             MostRecentConsidered = currentNode;
             numNodes++;
@@ -108,8 +116,10 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                     long elapsed = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startTime;
                     // LogDirect($"Took {elapsed}ms, {numMovementsConsidered} movements considered");
                 }
+
                 return new Path(RealStart, StartNode!, currentNode, numNodes, Goal, _calcContext);
             }
+
             foreach (var moves in allMoves)
             {
                 int newX = currentNode.X + moves.XOffset;
@@ -121,16 +131,20 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                     {
                         numEmptyChunk++;
                     }
+
                     continue;
                 }
+
                 if (!moves.DynamicXZ && !worldBorder.EntirelyContains(newX, newZ))
                 {
                     continue;
                 }
+
                 if (currentNode.Y + moves.YOffset > height || currentNode.Y + moves.YOffset < minY)
                 {
                     continue;
                 }
+
                 res.Reset();
                 moves.Apply(_calcContext, currentNode.X, currentNode.Y, currentNode.Z, res);
                 numMovementsConsidered++;
@@ -139,32 +153,38 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                 {
                     continue;
                 }
+
                 if (actionCost <= 0 || double.IsNaN(actionCost))
                 {
                     throw new InvalidOperationException(
                         $"{moves} from {currentNode.X} {currentNode.Y} {currentNode.Z} calculated implausible cost {actionCost}");
                 }
+
                 // check destination after verifying it's not COST_INF -- some movements return COST_INF without adjusting the destination
                 if (moves.DynamicXZ && !worldBorder.EntirelyContains(res.X, res.Z))
                 {
                     continue;
                 }
+
                 if (!moves.DynamicXZ && (res.X != newX || res.Z != newZ))
                 {
                     throw new InvalidOperationException(
                         $"{moves} from {currentNode.X} {currentNode.Y} {currentNode.Z} ended at x z {res.X} {res.Z} instead of {newX} {newZ}");
                 }
+
                 if (!moves.DynamicY && res.Y != currentNode.Y + moves.YOffset)
                 {
                     throw new InvalidOperationException(
                         $"{moves} from {currentNode.X} {currentNode.Y} {currentNode.Z} ended at y {res.Y} instead of {currentNode.Y + moves.YOffset}");
                 }
+
                 long hashCode = BetterBlockPos.LongHash(res.X, res.Y, res.Z);
                 if (isFavoring)
                 {
                     // see issue #18
                     actionCost *= _favoring.Calculate(hashCode);
                 }
+
                 PathNode neighbor = GetNodeAtPosition(res.X, res.Y, res.Z, hashCode);
                 double tentativeCost = currentNode.Cost + actionCost;
                 if (neighbor.Cost - tentativeCost > minimumImprovement)
@@ -180,6 +200,7 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                     {
                         openSet.Insert(neighbor); // don't double count, don't insert into open set if it's already there
                     }
+
                     for (int i = 0; i < Coefficients.Length; i++)
                     {
                         double heuristic = neighbor.EstimatedCostToGoal + neighbor.Cost / Coefficients[i];
@@ -196,14 +217,18 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                 }
             }
         }
+
         if (CancelRequested)
         {
             return null;
         }
-        Console.WriteLine($"{numMovementsConsidered} movements considered");
-        Console.WriteLine($"Open set size: {openSet.Size()}");
-        Console.WriteLine($"PathNode map size: {MapSize()}");
-        Console.WriteLine($"{(int)(numNodes * 1.0 / ((DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startTime) / 1000.0))} nodes per second");
+
+        Context.GetBaritone().GetGameEventHandler().LogDirect($"{numMovementsConsidered} movements considered");
+        Context.GetBaritone().GetGameEventHandler().LogDirect($"Open set size: {openSet.Size()}");
+        Context.GetBaritone().GetGameEventHandler().LogDirect($"PathNode map size: {MapSize()}");
+        Context.GetBaritone().GetGameEventHandler()
+            .LogDirect(
+                $"{(int)(numNodes * 1.0 / ((DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startTime) / 1000.0))} nodes per second");
         IPath? result = BestSoFarInternal(true, numNodes);
         if (result != null)
         {
@@ -215,7 +240,7 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
                 // LogDirect($"Took {elapsed}ms, {numMovementsConsidered} movements considered");
             }
         }
+
         return result;
     }
 }
-

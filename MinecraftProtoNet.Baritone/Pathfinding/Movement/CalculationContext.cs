@@ -105,6 +105,7 @@ public class CalculationContext
         {
             HasThrowaway = _cachedHasThrowaway ??= BaritoneSettings.Settings().AllowPlace.Value && baritone.GetInventoryBehavior().HasGenericThrowaway();
         }
+        //Baritone.GetGameEventHandler().LogDirect($"[DEBUG] CalculationContext: HasThrowaway={HasThrowaway}, AllowPlace={BaritoneSettings.Settings().AllowPlace.Value}");
 
         if (forUseOnAnotherThread)
         {
@@ -221,11 +222,11 @@ public class CalculationContext
         {
             return ActionCosts.CostInf;
         }
-        if (!BaritoneSettings.Settings().AllowPlaceInFluidsSource.Value && current.IsLiquid && current.Properties.TryGetValue("level", out var levelStr) && levelStr == "0")
+        if (!BaritoneSettings.Settings().AllowPlaceInFluidsSource.Value && current.IsLiquid && (!current.Properties.TryGetValue("level", out var levelStr) || levelStr == "0"))
         {
             return ActionCosts.CostInf;
         }
-        if (!BaritoneSettings.Settings().AllowPlaceInFluidsFlow.Value && current.IsLiquid && !(current.Properties.TryGetValue("level", out var levelStr2) && levelStr2 == "0"))
+        if (!BaritoneSettings.Settings().AllowPlaceInFluidsFlow.Value && current.IsLiquid && current.Properties.TryGetValue("level", out var levelStr2) && levelStr2 != "0")
         {
             return ActionCosts.CostInf;
         }

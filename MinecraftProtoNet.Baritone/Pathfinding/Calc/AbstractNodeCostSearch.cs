@@ -37,7 +37,7 @@ public abstract class AbstractNodeCostSearch : IPathFinder
 
     protected readonly Goal Goal;
 
-    private readonly CalculationContext Context;
+    protected readonly CalculationContext Context;
 
     /// <summary>
     /// Map from position hash code to PathNode.
@@ -151,7 +151,6 @@ public abstract class AbstractNodeCostSearch : IPathFinder
             {
                 // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java:142
                 Context.GetBaritone().GetGameEventHandler().LogDirect($"Pathing exception: {e}");
-                Console.WriteLine($"Pathing exception: {e}");
                 return new PathCalculationResult(PathCalculationResult.PathCalculationResultType.Exception);
             }
             finally
@@ -228,11 +227,11 @@ public abstract class AbstractNodeCostSearch : IPathFinder
                 {
                     if (Coefficients[i] >= 3)
                     {
-                        Console.WriteLine("Warning: cost coefficient is greater than three! Probably means that");
-                        Console.WriteLine("the path I found is pretty terrible (like sneak-bridging for dozens of blocks)");
-                        Console.WriteLine("But I'm going to do it anyway, because yolo");
+                        Context.GetBaritone().GetGameEventHandler().LogDirect("Warning: cost coefficient is greater than three! Probably means that");
+                        Context.GetBaritone().GetGameEventHandler().LogDirect("the path I found is pretty terrible (like sneak-bridging for dozens of blocks)");
+                        Context.GetBaritone().GetGameEventHandler().LogDirect("But I'm going to do it anyway, because yolo");
                     }
-                    Console.WriteLine($"Path goes for {Math.Sqrt(dist)} blocks");
+                    Context.GetBaritone().GetGameEventHandler().LogDirect($"Path goes for {Math.Sqrt(dist)} blocks");
                     // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java:225
                     if (Core.Baritone.Settings().DebugPathCompletion.Value)
                     {
@@ -248,12 +247,12 @@ public abstract class AbstractNodeCostSearch : IPathFinder
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java:233
             if (Core.Baritone.Settings().DebugPathCompletion.Value)
             {
-                Context.GetBaritone().GetGameEventHandler().LogDirect($"Even with a cost coefficient of {Coefficients[Coefficients.Length - 1]}, I couldn't get more than {Math.Sqrt(bestDist)} blocks");
+                Context.GetBaritone().GetGameEventHandler().LogDirect($"Even with a cost coefficient of {Coefficients[^1]}, I couldn't get more than {Math.Sqrt(bestDist)} blocks");
                 Context.GetBaritone().GetGameEventHandler().LogDirect("No path found =(");
             }
             Context.GetBaritone().GetGameEventHandler().LogNotification("No path found =(", true);
-            Console.WriteLine($"Even with a cost coefficient of {Coefficients[Coefficients.Length - 1]}, I couldn't get more than {Math.Sqrt(bestDist)} blocks");
-            Console.WriteLine("No path found =(");
+            Context.GetBaritone().GetGameEventHandler().LogDirect($"Even with a cost coefficient of {Coefficients[^1]}, I couldn't get more than {Math.Sqrt(bestDist)} blocks");
+            Context.GetBaritone().GetGameEventHandler().LogDirect("No path found =(");
         }
         return null;
     }

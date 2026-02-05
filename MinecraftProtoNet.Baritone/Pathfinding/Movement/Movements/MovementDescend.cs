@@ -258,7 +258,7 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
         }
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         base.UpdateState(state);
         if (state.GetStatus() != MovementStatus.Running)

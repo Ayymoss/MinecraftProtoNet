@@ -62,14 +62,8 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         if (!MovementHelper.CanWalkOn(context, destX, y, destZ, toPlace))
         {
             additionalPlacementCost = context.CostOfPlacingAt(destX, y, destZ, toPlace);
-            if (additionalPlacementCost >= ActionCosts.CostInf)
-            {
-                return ActionCosts.CostInf;
-            }
-            if (!MovementHelper.IsReplaceable(destX, y, destZ, toPlace, context.Bsi))
-            {
-                return ActionCosts.CostInf;
-            }
+            if (additionalPlacementCost >= ActionCosts.CostInf) return ActionCosts.CostInf;
+            if (!MovementHelper.IsReplaceable(destX, y, destZ, toPlace, context.Bsi)) return ActionCosts.CostInf;
             bool foundPlaceOption = false;
             for (int i = 0; i < 5; i++)
             {
@@ -78,85 +72,44 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
                 int againstX = destX + normal.X;
                 int againstY = y + normal.Y;
                 int againstZ = destZ + normal.Z;
-                if (againstX == x && againstZ == z)
-                {
-                    continue;
-                }
-                if (MovementHelper.CanPlaceAgainst(context.Bsi, againstX, againstY, againstZ))
-                {
-                    foundPlaceOption = true;
-                    break;
-                }
+                if (againstX == x && againstZ == z) continue;
+                if (MovementHelper.CanPlaceAgainst(context.Bsi, againstX, againstY, againstZ)) { foundPlaceOption = true; break; }
             }
-            if (!foundPlaceOption)
-            {
-                return ActionCosts.CostInf;
-            }
+            if (!foundPlaceOption) return ActionCosts.CostInf;
         }
         
         var srcUp2 = context.Get(x, y + 2, z);
         string srcUp2Name = srcUp2.Name;
-        bool isFallingBlock = srcUp2Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
-                             srcUp2Name.Contains("sand", StringComparison.OrdinalIgnoreCase);
-        if (isFallingBlock)
-        {
-        }
+        if (srcUp2Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) || srcUp2Name.Contains("sand", StringComparison.OrdinalIgnoreCase)) { }
         
         var srcDown = context.Get(x, y - 1, z);
-        string srcDownName = srcDown.Name;
-        bool isClimbable = srcDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                          srcDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-        
         bool jumpingFromBottomSlab = MovementHelper.IsBottomSlab(srcDown);
         bool jumpingToBottomSlab = MovementHelper.IsBottomSlab(toPlace);
-        if (jumpingFromBottomSlab && !jumpingToBottomSlab)
-        {
-            return ActionCosts.CostInf;
-        }
+        if (jumpingFromBottomSlab && !jumpingToBottomSlab) return ActionCosts.CostInf;
         
         double walk;
         if (jumpingToBottomSlab)
         {
-            if (jumpingFromBottomSlab)
-            {
-                walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
-                walk += context.JumpPenalty;
-            }
-            else
-            {
-                walk = ActionCosts.WalkOneBlockCost;
-            }
+            if (jumpingFromBottomSlab) { walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost); walk += context.JumpPenalty; }
+            else walk = ActionCosts.WalkOneBlockCost;
         }
         else
         {
-            string srcDownName2 = srcDown.Name;
-            if (srcDownName2.Contains("soul_sand", StringComparison.OrdinalIgnoreCase))
-            {
-                walk = Math.Max(ActionCosts.JumpOneBlockCost * 2.0, ActionCosts.WalkOneBlockCost * 2.0);
-            }
-            else
-            {
-                walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
-            }
+            if (srcDown.Name.Contains("soul_sand", StringComparison.OrdinalIgnoreCase)) walk = Math.Max(ActionCosts.JumpOneBlockCost * 2.0, ActionCosts.WalkOneBlockCost * 2.0);
+            else walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
             walk += context.JumpPenalty;
         }
 
         double totalCost = walk + additionalPlacementCost;
         totalCost += MovementHelper.GetMiningDurationTicks(context, x, y + 2, z, srcUp2, false);
-        if (totalCost >= ActionCosts.CostInf)
-        {
-            return ActionCosts.CostInf;
-        }
+        if (totalCost >= ActionCosts.CostInf) return ActionCosts.CostInf;
         totalCost += MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, false);
-        if (totalCost >= ActionCosts.CostInf)
-        {
-            return ActionCosts.CostInf;
-        }
+        if (totalCost >= ActionCosts.CostInf) return ActionCosts.CostInf;
         totalCost += MovementHelper.GetMiningDurationTicks(context, destX, y + 2, destZ, true);
         return totalCost;
     }
 
-    protected override MovementState UpdateState(MovementState state)
+    public override MovementState UpdateState(MovementState state)
     {
         var player = Ctx.Player() as Entity;
         if (player == null) return state;
@@ -169,10 +122,7 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         }
         base.UpdateState(state);
         
-        if (state.GetStatus() != MovementStatus.Running)
-        {
-            return state;
-        }
+        if (state.GetStatus() != MovementStatus.Running) return state;
 
         if (feet != null && (feet.Equals(Dest) || feet.Equals(new BetterBlockPos(Dest.X + GetDirection().X, Dest.Y, Dest.Z + GetDirection().Z))))
         {
@@ -187,47 +137,38 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
             {
                 _ticksWithoutPlacement++;
                 var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
+                
+                // CRITICAL: Priority is placement. Disable movement forward to avoid jittering across the placement origin.
+                state.SetInput(Input.MoveForward, false);
+                
                 if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
                 {
                     state.SetInput(Input.Sneak, true);
-                    if (state.GetInput(Input.Sneak) || player.IsSneaking)
-                    {
-                        state.SetInput(Input.ClickRight, true);
-                    }
+                    if (state.GetInput(Input.Sneak) || player.IsSneaking) state.SetInput(Input.ClickRight, true);
                 }
                 
                 if (_ticksWithoutPlacement > 10)
                 {
+                    Baritone.GetGameEventHandler().LogDirect($"Ascend: Stalled placement ({_ticksWithoutPlacement} ticks), moving back");
                     state.SetInput(Input.MoveBack, true);
                 }
 
-                // Reference: baritone-1.21.11-REFERENCE-ONLY - Java returns early here to prioritize placement look target
-                // If we don't return, MoveTowards will overwrite the placement target.
+                if (feet != null && (int)Math.Floor((double)feet.Y) == Dest.Y - 1) state.SetInput(Input.Jump, true);
                 return state;
             }
         }
 
-        // Only move towards if we aren't already there
         double dX = Dest.X + 0.5 - player.Position.X;
         double dZ = Dest.Z + 0.5 - player.Position.Z;
         double ab = Math.Sqrt(dX * dX + dZ * dZ);
 
-        if (feet == null || !feet.Equals(Dest) || ab > 0.25)
-        {
-            MovementHelper.MoveTowards(Ctx, state, Dest);
-        }
+        if (feet == null || !feet.Equals(Dest) || ab > 0.25) MovementHelper.MoveTowards(Ctx, state, Dest);
         
         var jumpingOntoFinal = BlockStateInterface.Get(Ctx, PositionToPlace!);
         var srcDownState = BlockStateInterface.Get(Ctx, Src.Below());
-        if (MovementHelper.IsBottomSlab(jumpingOntoFinal) && !MovementHelper.IsBottomSlab(srcDownState))
-        {
-            return state;
-        }
+        if (MovementHelper.IsBottomSlab(jumpingOntoFinal) && !MovementHelper.IsBottomSlab(srcDownState)) return state;
 
-        if (Core.Baritone.Settings().AssumeStep.Value || (feet != null && feet.Equals(Src.Above())))
-        {
-            return state;
-        }
+        if (Core.Baritone.Settings().AssumeStep.Value || (feet != null && feet.Equals(Src.Above()))) return state;
 
         var dir = GetDirection();
         int xAxis = Math.Abs(dir.X);
@@ -236,45 +177,24 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         double sideDist = zAxis * Math.Abs((Dest.X + 0.5) - player.Position.X) + xAxis * Math.Abs((Dest.Z + 0.5) - player.Position.Z);
 
         double lateralMotion = xAxis * player.Velocity.Z + zAxis * player.Velocity.X;
-        if (Math.Abs(lateralMotion) > 0.1)
-        {
-            return state;
-        }
+        if (Math.Abs(lateralMotion) > 0.1) return state;
 
-        if (HeadBonkClear())
-        {
-            return state.SetInput(Input.Jump, true);
-        }
-
-        if (flatDistToNext > 1.2 || sideDist > 0.2)
-        {
-            return state;
-        }
-
+        if (HeadBonkClear()) return state.SetInput(Input.Jump, true);
+        if (flatDistToNext > 1.2 || sideDist > 0.2) return state;
         return state.SetInput(Input.Jump, true);
     }
 
     public bool HeadBonkClear()
     {
-        if (!MovementHelper.CanWalkThrough(Ctx, Src.Above(2)))
-        {
-            return false;
-        }
-
+        if (!MovementHelper.CanWalkThrough(Ctx, Src.Above(2))) return false;
         var startUp = Src.Above(2);
         for (int i = 0; i < 4; i++)
         {
             var check = new BetterBlockPos(startUp.X + (i == 0 ? 1 : i == 1 ? -1 : 0), startUp.Y, startUp.Z + (i == 2 ? 1 : i == 3 ? -1 : 0));
-            if (!MovementHelper.CanWalkThrough(Ctx, check))
-            {
-                return false;
-            }
+            if (!MovementHelper.CanWalkThrough(Ctx, check)) return false;
         }
         return true;
     }
 
-    protected override bool SafeToCancel(MovementState state)
-    {
-        return state.GetStatus() != MovementStatus.Running || _ticksWithoutPlacement == 0;
-    }
+    protected override bool SafeToCancel(MovementState state) => state.GetStatus() != MovementStatus.Running || _ticksWithoutPlacement == 0;
 }

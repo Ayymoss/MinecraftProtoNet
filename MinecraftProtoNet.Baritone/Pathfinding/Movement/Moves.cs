@@ -148,7 +148,7 @@ public static class Moves
 
         // Pillar movement
         Pillar.Apply0Func = (ctx, src) => new Movements.MovementPillar(ctx.GetBaritone(), src, src.Above());
-        Pillar.CostFunc = (ctx, x, y, z) => Movements.MovementPillar.Cost(ctx, x, y, z);
+        Pillar.CostFunc = Movements.MovementPillar.Cost;
         Pillar.ApplyFunc = (ctx, x, y, z, res) =>
         {
             res.X = x;
