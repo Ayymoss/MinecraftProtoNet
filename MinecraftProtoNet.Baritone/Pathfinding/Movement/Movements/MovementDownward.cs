@@ -1,123 +1,113 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDownward.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for digging straight down.
-/// Based on Baritone's MovementDownward.java.
+/// Movement for going straight down one block.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDownward.java
 /// </summary>
-public class MovementDownward : MovementBase
+public class MovementDownward(IBaritone baritone, BetterBlockPos start, BetterBlockPos end) : Movement(baritone, start, end, [end])
 {
-    public MovementDownward(int srcX, int srcY, int srcZ)
-        : base(srcX, srcY, srcZ, srcX, srcY - 1, srcZ, MoveDirection.Downward)
+    private int _numTicks = 0;
+
+    public override void Reset()
     {
+        base.Reset();
+        _numTicks = 0;
     }
 
     public override double CalculateCost(CalculationContext context)
     {
-        var x = Source.X;
-        var y = Source.Y;
-        var z = Source.Z;
-
-        if (!context.AllowDownward || !context.AllowBreak)
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check the block we need to break
-        var toBreak = context.GetBlockState(x, y - 1, z);
-        if (toBreak == null)
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Can't break bedrock or similar
-        if (toBreak.Name.Contains("bedrock", StringComparison.OrdinalIgnoreCase))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check there's something to land on
-        var floor = context.GetBlockState(x, y - 2, z);
-        if (!MovementHelper.CanWalkOn(floor))
-        {
-            // Check for multi-block fall (up to maxFallHeight)
-            var fallDist = 1;
-            for (var i = 2; i <= context.MaxFallHeightNoWater + 1; i++)
-            {
-                var checkFloor = context.GetBlockState(x, y - 1 - i, z);
-                if (MovementHelper.CanWalkOn(checkFloor))
-                {
-                    fallDist = i;
-                    break;
-                }
-                if (MovementHelper.IsWater(checkFloor))
-                {
-                    // Water breaks fall
-                    fallDist = i;
-                    break;
-                }
-            }
-            if (fallDist > context.MaxFallHeightNoWater && !context.HasWaterBucket)
-            {
-                return ActionCosts.CostInf;
-            }
-        }
-
-        // TODO: Calculate actual block break time based on tool and block
-        var breakCost = ActionCosts.WalkOneBlockCost * 4; // Placeholder
-
-        Cost = breakCost + ActionCosts.GetFallCost(1);
-        return Cost;
+        return Cost(context, Src.X, Src.Y, Src.Z);
     }
 
-    public override MovementState UpdateState(Entity entity, Level level)
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
     {
-        var feet = GetFeetPosition(entity);
-        var blockBelow = level.GetBlockAt(Source.X, Source.Y - 1, Source.Z);
-        bool ladder = MovementHelper.IsClimbable(blockBelow);
+        return new HashSet<BetterBlockPos> { Src, Dest };
+    }
 
-        // Check if we've arrived
-        if (feet.Y <= Destination.Y && (entity.IsOnGround || ladder))
+    public static double Cost(CalculationContext context, int x, int y, int z)
+    {
+        if (!context.AllowDownward)
         {
-            State.ClearInputs();
-            State.Status = MovementStatus.Success;
-            return State;
+            return ActionCosts.CostInf;
+        }
+        if (!MovementHelper.CanWalkOn(context, x, y - 2, z))
+        {
+            return ActionCosts.CostInf;
+        }
+        var down = context.Get(x, y - 1, z);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDownward.java:62
+        // Check for ladder/vine
+        string downName = down.Name;
+        bool isClimbable = downName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                          downName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        if (isClimbable)
+        {
+            // Can descend on climbable blocks
+            return ActionCosts.LadderDownOneCost;
+        }
+        //     return ActionCosts.LadderDownOneCost;
+        // }
+        return ActionCosts.FallNBlocksCost[1] + MovementHelper.GetMiningDurationTicks(context, x, y - 1, z, down, false);
+    }
+
+    public override MovementState UpdateState(MovementState state)
+    {
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
         }
 
-        State.Status = MovementStatus.Running;
-
-        if (ladder)
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && feet.Equals(Dest))
         {
-            // Back away from ladder to descend
-            State.MoveBackward = true;
-            // Or look at the ladder and sneak?
-            // Baritone usually just backs away or sneaks.
+            return state.SetStatus(MovementStatus.Success);
         }
-        else
+        else if (!PlayerInValidPosition())
         {
-            // If the block below us is solid, we need to break it FIRST
-            if (!MovementHelper.CanWalkThrough(blockBelow))
-            {
-                // Always look straight down when breaking block below us
-                State.SetTarget(entity.YawPitch.X, 90, force: true); // Look straight down
-                State.LeftClick = true;
-                State.BreakBlockTarget = (Source.X, Source.Y - 1, Source.Z);
-                
-                // Return immediately to allow the executor to process the break
-                // Do NOT return State with Status.Running if we are just waiting for break
-                // The executor will handle the breaking tick.
-                return State;
-            }
-
-            // Once broken, we fall
-            State.LeftClick = false; // Stop clicking once broken
-            State.BreakBlockTarget = null;
+            return state.SetStatus(MovementStatus.Unreachable);
         }
+        
+        var player = Ctx.Player() as Entity;
+        if (player == null)
+        {
+            return state;
+        }
+        
+        double diffX = player.Position.X - (Dest.X + 0.5);
+        double diffZ = player.Position.Z - (Dest.Z + 0.5);
+        double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
 
-        return State;
+        if (_numTicks++ < 10 && ab < 0.2)
+        {
+            return state;
+        }
+        MovementHelper.MoveTowards(Ctx, state, PositionsToBreak[0]);
+        return state;
     }
 }
+

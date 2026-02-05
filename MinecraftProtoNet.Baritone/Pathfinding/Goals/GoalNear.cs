@@ -1,48 +1,131 @@
-using MinecraftProtoNet.Pathfinding.Goals;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/goals/GoalNear.java
+ */
+
+using MinecraftProtoNet.Baritone.Api.Pathing.Goals;
+using MinecraftProtoNet.Baritone.Api.Utils;
+
 namespace MinecraftProtoNet.Baritone.Pathfinding.Goals;
 
 /// <summary>
-/// A goal that represents getting within a certain range of a target position.
-/// The goal is satisfied when the distance to the target is less than or equal to the range.
+/// Goal that is satisfied when within a certain range of a position.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/goals/GoalNear.java
 /// </summary>
-public class GoalNear : IGoal
+public class GoalNear : Goal
 {
-    public int X { get; }
-    public int Y { get; }
-    public int Z { get; }
-    public int RangeSquared { get; }
+    private readonly int _x;
+    private readonly int _y;
+    private readonly int _z;
+    private readonly int _rangeSq;
 
-    /// <summary>
-    /// Creates a goal to get within range of a target position.
-    /// </summary>
-    /// <param name="x">Target X coordinate</param>
-    /// <param name="y">Target Y coordinate</param>
-    /// <param name="z">Target Z coordinate</param>
-    /// <param name="range">Maximum distance from target (in blocks)</param>
+    public GoalNear(BetterBlockPos pos, int range)
+    {
+        _x = pos.X;
+        _y = pos.Y;
+        _z = pos.Z;
+        _rangeSq = range * range;
+    }
+
     public GoalNear(int x, int y, int z, int range)
     {
-        X = x;
-        Y = y;
-        Z = z;
-        RangeSquared = range * range;
+        _x = x;
+        _y = y;
+        _z = z;
+        _rangeSq = range * range;
     }
 
-    /// <inheritdoc />
-    public bool IsInGoal(int x, int y, int z)
+    public override bool IsInGoal(int x, int y, int z)
     {
-        var dx = x - X;
-        var dy = y - Y;
-        var dz = z - Z;
-        return dx * dx + dy * dy + dz * dz <= RangeSquared;
+        int xDiff = x - _x;
+        int yDiff = y - _y;
+        int zDiff = z - _z;
+        return xDiff * xDiff + yDiff * yDiff + zDiff * zDiff <= _rangeSq;
     }
 
-    /// <inheritdoc />
-    public double Heuristic(int x, int y, int z)
+    public override double Heuristic(int x, int y, int z)
     {
-        // Baritone style: GoalNear uses GoalBlock's heuristic logic.
-        // It pulls towards the center even when within range.
-        return GoalBlock.CalculateHeuristic(x - X, y - Y, z - Z);
+        int xDiff = x - _x;
+        int yDiff = y - _y;
+        int zDiff = z - _z;
+        return GoalBlock.Calculate(xDiff, yDiff, zDiff);
     }
 
-    public override string ToString() => $"GoalNear({X}, {Y}, {Z}, range={Math.Sqrt(RangeSquared):F0})";
+    public override double Heuristic()
+    {
+        // TODO less hacky solution
+        int range = (int)Math.Ceiling(Math.Sqrt(_rangeSq));
+        var maybeAlwaysInside = new HashSet<double>(); // see pull request #1978
+        double minOutside = double.PositiveInfinity;
+        for (int dx = -range; dx <= range; dx++)
+        {
+            for (int dy = -range; dy <= range; dy++)
+            {
+                for (int dz = -range; dz <= range; dz++)
+                {
+                    double h = Heuristic(_x + dx, _y + dy, _z + dz);
+                    if (h < minOutside && IsInGoal(_x + dx, _y + dy, _z + dz))
+                    {
+                        maybeAlwaysInside.Add(h);
+                    }
+                    else
+                    {
+                        minOutside = Math.Min(minOutside, h);
+                    }
+                }
+            }
+        }
+        double maxInside = double.NegativeInfinity;
+        foreach (double inside in maybeAlwaysInside)
+        {
+            if (inside < minOutside)
+            {
+                maxInside = Math.Max(maxInside, inside);
+            }
+        }
+        return maxInside;
+    }
+
+    public BetterBlockPos GetGoalPos()
+    {
+        return new BetterBlockPos(_x, _y, _z);
+    }
+
+    public override bool Equals(object? obj)
+    {
+        if (this == obj)
+        {
+            return true;
+        }
+        if (obj is not GoalNear goal)
+        {
+            return false;
+        }
+        return _x == goal._x && _y == goal._y && _z == goal._z && _rangeSq == goal._rangeSq;
+    }
+
+    public override int GetHashCode()
+    {
+        return (int)BetterBlockPos.LongHash(_x, _y, _z) + _rangeSq;
+    }
+
+    public override string ToString()
+    {
+        return $"GoalNear{{x={_x}, y={_y}, z={_z}, rangeSq={_rangeSq}}}";
+    }
 }
+

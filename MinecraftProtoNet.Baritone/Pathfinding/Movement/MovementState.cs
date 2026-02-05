@@ -1,83 +1,95 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementState.java
+ */
+
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
 
 /// <summary>
-/// Mutable state for executing a movement.
-/// Based on Baritone's MovementState.
+/// State tracking for movement execution.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementState.java
 /// </summary>
 public class MovementState
 {
-    /// <summary>
-    /// Current status of the movement.
-    /// </summary>
-    public MovementStatus Status { get; set; } = MovementStatus.Waiting;
+    private MovementStatus _status;
+    private MovementTarget _target = new();
+    private readonly Dictionary<Input, bool> _inputState = new();
 
-    /// <summary>
-    /// Target rotation (yaw, pitch) if any.
-    /// </summary>
-    public (float Yaw, float Pitch)? TargetRotation { get; set; }
-
-    /// <summary>
-    /// Whether to force the rotation.
-    /// </summary>
-    public bool ForceRotation { get; set; }
-
-    // ===== Input States =====
-
-    public bool MoveForward { get; set; }
-    public bool MoveBackward { get; set; }
-    public bool MoveLeft { get; set; }
-    public bool MoveRight { get; set; }
-    public bool Jump { get; set; }
-    public bool Sneak { get; set; }
-    public bool Sprint { get; set; }
-    public bool LeftClick { get; set; }
-    public bool RightClick { get; set; }
-    
-    /// <summary>
-    /// Target block position to place a block at (if RightClick is true).
-    /// </summary>
-    public (int X, int Y, int Z)? PlaceBlockTarget { get; set; }
-
-    /// <summary>
-    /// Target block position to break (if LeftClick is true or implicit).
-    /// </summary>
-    public (int X, int Y, int Z)? BreakBlockTarget { get; set; }
-
-    /// <summary>
-    /// Clears all input states.
-    /// </summary>
-    public void ClearInputs()
-    {
-        MoveForward = false;
-        MoveBackward = false;
-        MoveLeft = false;
-        MoveRight = false;
-        Jump = false;
-        Sneak = false;
-        Sprint = false;
-        LeftClick = false;
-        RightClick = false;
-    }
-
-    /// <summary>
-    /// Sets the target rotation.
-    /// </summary>
-    public MovementState SetTarget(float yaw, float pitch, bool force = true)
-    {
-        TargetRotation = (yaw, pitch);
-        ForceRotation = force;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the movement status.
-    /// </summary>
     public MovementState SetStatus(MovementStatus status)
     {
-        Status = status;
+        _status = status;
         return this;
     }
+
+    public MovementStatus GetStatus() => _status;
+
+    public MovementTarget GetTarget() => _target;
+
+    public MovementState SetTarget(MovementTarget target)
+    {
+        _target = target;
+        return this;
+    }
+
+    public MovementState SetInput(Input input, bool forced)
+    {
+        _inputState[input] = forced;
+        return this;
+    }
+
+    public bool GetInput(Input input)
+    {
+        return _inputState.TryGetValue(input, out var forced) && forced;
+    }
+
+    public Dictionary<Input, bool> GetInputStates() => _inputState;
+
+    public class MovementTarget
+    {
+        /// <summary>
+        /// Yaw and pitch angles that must be matched
+        /// </summary>
+        public Rotation? Rotation;
+
+        /// <summary>
+        /// Whether or not this target must force rotations.
+        /// true if we're trying to place or break blocks, false if we're trying to look at the movement location
+        /// </summary>
+        private bool _forceRotations;
+
+        public MovementTarget()
+        {
+            Rotation = null;
+            _forceRotations = false;
+        }
+
+        public MovementTarget(Rotation? rotation, bool forceRotations)
+        {
+            Rotation = rotation;
+            _forceRotations = forceRotations;
+        }
+
+        public Rotation? GetRotation() => Rotation;
+
+        public bool HasToForceRotations() => _forceRotations;
+    }
 }
+

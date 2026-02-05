@@ -1,125 +1,249 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementFall.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.State;
+using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for falling multiple blocks with optional water bucket.
-/// Based on Baritone's MovementFall.java.
+/// Movement for falling multiple blocks.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementFall.java
 /// </summary>
-public class MovementFall : MovementBase
+public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos dest)
+    : Movement(baritone, src, dest, BuildPositionsToBreak(src, dest))
 {
-    /// <summary>
-    /// The actual fall distance (can be more than 1 block).
-    /// </summary>
-    public int FallDistance { get; }
-
-    public MovementFall(int srcX, int srcY, int srcZ, int destX, int destY, int destZ, MoveDirection direction)
-        : base(srcX, srcY, srcZ, destX, destY, destZ, direction)
-    {
-        FallDistance = srcY - destY;
-    }
-
     public override double CalculateCost(CalculationContext context)
     {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcY = Source.Y;
-
-        var fallHeight = srcY - destY;
-
-        // Check fall height limits
-        if (fallHeight > context.MaxFallHeightNoWater)
+        var result = new Baritone.Utils.Pathing.MutableMoveResult();
+        MovementDescend.Cost(context, Src.X, Src.Y, Src.Z, Dest.X, Dest.Z, result);
+        if (result.Y != Dest.Y)
         {
-            if (!context.HasWaterBucket || fallHeight > context.MaxFallHeightBucket)
-            {
-                return ActionCosts.CostInf;
-            }
-            // Water bucket save - add extra cost for placing water
-            Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(fallHeight) +
-                   ActionCosts.CenterAfterFallCost + ActionCosts.WalkOneBlockCost * 2;
-            return Cost;
+            return ActionCosts.CostInf; // doesn't apply to us, this position is a descend not a fall
         }
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor) && !MovementHelper.IsWater(destFloor))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check clearance during fall
-        for (var y = srcY; y > destY; y--)
-        {
-            var bodyBlock = context.GetBlockState(destX, y, destZ);
-            if (!MovementHelper.CanWalkThrough(bodyBlock))
-            {
-                return ActionCosts.CostInf;
-            }
-        }
-
-        // Check destination clearance
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody) || !MovementHelper.CanWalkThrough(destHead))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Water landing reduces cost (no fall damage)
-        if (MovementHelper.IsWater(destBody))
-        {
-            Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(fallHeight) * 0.5;
-            return Cost;
-        }
-
-        Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(fallHeight) + ActionCosts.CenterAfterFallCost;
-        return Cost;
+        return result.Cost;
     }
 
-    public override MovementState UpdateState(Entity entity, Level level)
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
     {
-        var feet = GetFeetPosition(entity);
-
-        // Check if we've arrived
-        if (feet.Y <= Destination.Y && entity.IsOnGround)
+        var set = new HashSet<BetterBlockPos> { Src };
+        for (int y = Src.Y - Dest.Y; y >= 0; y--)
         {
-            State.Status = MovementStatus.Success;
-            return State;
+            set.Add(Dest.Above(y));
+        }
+        return set;
+    }
+
+    private bool WillPlaceBucket()
+    {
+        var context = new CalculationContext(Baritone);
+        var result = new Baritone.Utils.Pathing.MutableMoveResult();
+        return MovementDescend.DynamicFallCost(context, Src.X, Src.Y, Src.Z, Dest.X, Dest.Z, 0, 
+            context.Get(Dest.X, Src.Y - 2, Dest.Z), result);
+    }
+
+    public override MovementState UpdateState(MovementState state)
+    {
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
         }
 
-        // Check if landed in water
-        if (entity.IsInWater && feet.Y <= Destination.Y + 1)
-        {
-            State.Status = MovementStatus.Success;
-            return State;
-        }
-
-        // Baritone line 98-99: Sneak on magma blocks
-        var blockBelow = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);
-        if (blockBelow?.Name == "minecraft:magma_block")
-        {
-            State.Sneak = true;
-        }
-
-        // Baritone lines 142-145: Sneak while falling with high velocity and off-center
-        // This helps steer towards the destination
-        var destCenter = (Destination.X + 0.5, Destination.Z + 0.5);
-        var predictedX = entity.Position.X + entity.Velocity.X;
-        var predictedZ = entity.Position.Z + entity.Velocity.Z;
-        var horizontalOffset = Math.Abs(predictedX - destCenter.Item1) + Math.Abs(predictedZ - destCenter.Item2);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementFall.java:87-160
+        var playerFeet = Ctx.PlayerFeet();
+        var player = Ctx.Player() as Entity;
+        if (player == null) return state;
         
-        if (!entity.IsOnGround && Math.Abs(entity.Velocity.Y) > 0.4 && horizontalOffset > 0.1)
+        var playerHead = Ctx.PlayerHead();
+        var playerRot = Ctx.PlayerRotations();
+        if (playerHead == null || playerRot == null) return state;
+        var toDest = Utils.RotationUtils.CalcRotationFromVec3d(
+            playerHead,
+            Utils.VecUtils.GetBlockPosCenter(Dest),
+            playerRot
+        );
+        Rotation? targetRotation = null;
+        
+        var world = Ctx.World() as Level;
+        if (world != null)
         {
-            State.Sneak = true;
+            var destState = world.GetBlockAt(Dest.X, Dest.Y, Dest.Z);
+            bool isWater = destState != null && MovementHelper.IsWater(destState);
+            bool willPlace = WillPlaceBucket();
+            
+            if (!isWater && willPlace && !playerFeet?.Equals(Dest) == true)
+            {
+                var context = new CalculationContext(Baritone);
+                if (!context.HasWaterBucket)
+                {
+                    return state.SetStatus(MovementStatus.Unreachable);
+                }
+                
+                // Select water bucket and aim down
+                // TODO: Select water bucket slot when item registry is available
+                targetRotation = new Rotation(toDest.GetYaw(), 90.0f);
+                
+                if (Ctx.IsLookingAt(Dest) || Ctx.IsLookingAt(Dest.Below()))
+                {
+                    state.SetInput(BaritoneInput.ClickRight, true);
+                }
+            }
+            
+            if (targetRotation != null)
+            {
+                state.SetTarget(new MovementState.MovementTarget(targetRotation, true));
+            }
+            else
+            {
+                state.SetTarget(new MovementState.MovementTarget(toDest, false));
+            }
+            
+            if (playerFeet != null && playerFeet.Equals(Dest))
+            {
+                double yDiff = player.Position.Y - playerFeet.Y;
+                if (yDiff < 0.094 || isWater) // 0.094 because lilypads
+                {
+                    if (isWater)
+                    {
+                        // Try to pick up water with empty bucket
+                        // TODO: Select empty bucket slot when item registry is available
+                        if (player.Velocity.Y >= 0)
+                        {
+                            state.SetInput(BaritoneInput.ClickRight, true);
+                        }
+                        return state;
+                    }
+                    else
+                    {
+                        return state.SetStatus(MovementStatus.Success);
+                    }
+                }
+            }
+            
+            // Movement towards destination with avoidance logic
+            var destCenter = Utils.VecUtils.GetBlockPosCenter(Dest);
+            if (Math.Abs(player.Position.X + player.Velocity.X - destCenter.X) > 0.1 || Math.Abs(player.Position.Z + player.Velocity.Z - destCenter.Z) > 0.1)
+            {
+                if (!player.IsOnGround && Math.Abs(player.Velocity.Y) > 0.4)
+                {
+                    state.SetInput(BaritoneInput.Sneak, true);
+                }
+                state.SetInput(BaritoneInput.MoveForward, true);
+            }
+
+            var avoid = Avoid();
+            Vector3<int> avoidVec;
+            if (!avoid.HasValue)
+            {
+                avoidVec = new Vector3<int>(Src.X - Dest.X, 0, Src.Z - Dest.Z);
+            }
+            else
+            {
+                // TODO: Convert BlockFace to unit vector
+                avoidVec = new Vector3<int>(0, 0, 0); 
+            }
+            
+            if (targetRotation == null && playerFeet != null)
+            {
+                var avoidOffset = new Vector3<double>(avoidVec.X * 0.125, 0, avoidVec.Z * 0.125);
+                var destCenterOffset = new Vector3<double>(destCenter.X + avoidOffset.X, destCenter.Y, destCenter.Z + avoidOffset.Z);
+                var playerHead2 = Ctx.PlayerHead();
+                var playerRot2 = Ctx.PlayerRotations();
+                if (playerHead2 != null && playerRot2 != null)
+                {
+                    double diffX = player.Position.X - destCenterOffset.X;
+                    double diffZ = player.Position.Z - destCenterOffset.Z;
+                    double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+
+                    if (!playerFeet.Equals(Dest) || ab > 0.25)
+                    {
+                        state.SetTarget(new MovementState.MovementTarget(
+                            Utils.RotationUtils.CalcRotationFromVec3d(playerHead2, destCenterOffset, playerRot2),
+                            false
+                        ));
+                    }
+                }
+            }
         }
+        
+        return state;
+    }
 
-        State.Status = MovementStatus.Running;
-        MoveTowards(entity);
+    private MinecraftProtoNet.Core.Enums.BlockFace? Avoid()
+    {
+        var world = Ctx.World() as Level;
+        if (world == null) return null;
+        var feet = Ctx.PlayerFeet();
+        if (feet == null) return null;
+        for (int i = 0; i < 15; i++)
+        {
+            var blockState = world.GetBlockAt(feet.X, feet.Y - i, feet.Z);
+            if (blockState != null && blockState.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase))
+            {
+                // TODO: Get ladder facing direction
+                return null;
+            }
+        }
+        return null;
+    }
 
-        return State;
+    protected override bool SafeToCancel(MovementState state)
+    {
+        var feet = Ctx.PlayerFeet();
+        return feet != null && (feet.Equals(Src) || state.GetStatus() != MovementStatus.Running);
+    }
+
+    protected override bool Prepared(MovementState state)
+    {
+        if (state.GetStatus() == MovementStatus.Waiting)
+        {
+            return true;
+        }
+        // Only break if one of the first three needs to be broken
+        for (int i = 0; i < 4 && i < PositionsToBreak.Length; i++)
+        {
+            if (!MovementHelper.CanWalkThrough(Ctx, PositionsToBreak[i]))
+            {
+                return base.Prepared(state);
+            }
+        }
+        return true;
+    }
+
+    private static BetterBlockPos[] BuildPositionsToBreak(BetterBlockPos src, BetterBlockPos dest)
+    {
+        int diffX = src.X - dest.X;
+        int diffZ = src.Z - dest.Z;
+        int diffY = Math.Abs(src.Y - dest.Y);
+        var toBreak = new BetterBlockPos[diffY + 2];
+        for (int i = 0; i < toBreak.Length; i++)
+        {
+            toBreak[i] = new BetterBlockPos(src.X - diffX, src.Y + 1 - i, src.Z - diffZ);
+        }
+        return toBreak;
     }
 }
+

@@ -1,46 +1,89 @@
-using MinecraftProtoNet.Pathfinding;
-using MinecraftProtoNet.Pathfinding.Goals;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/goals/GoalYLevel.java
+ */
+
+using MinecraftProtoNet.Baritone.Api.Pathing.Goals;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+
 namespace MinecraftProtoNet.Baritone.Pathfinding.Goals;
 
 /// <summary>
-/// A goal that represents reaching a specific Y level.
-/// The goal is satisfied at any X/Z when at the target Y level.
+/// Useful for mining (getting to diamond / iron level).
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/goals/GoalYLevel.java
 /// </summary>
-public class GoalYLevel : IGoal
+public class GoalYLevel : Goal
 {
-    public int Y { get; }
+    /// <summary>
+    /// The target Y level.
+    /// </summary>
+    public readonly int Level;
 
-    public GoalYLevel(int y)
+    public GoalYLevel(int level)
     {
-        Y = y;
+        Level = level;
     }
 
-    /// <inheritdoc />
-    public bool IsInGoal(int x, int y, int z)
+    public override bool IsInGoal(int x, int y, int z)
     {
-        return y == Y;
+        return y == Level;
     }
 
-    /// <inheritdoc />
-    public double Heuristic(int x, int y, int z)
+    public override double Heuristic(int x, int y, int z)
     {
-        var yDiff = Math.Abs(y - Y);
-        
-        if (yDiff == 0) return 0;
+        return Calculate(Level, y);
+    }
 
-        if (y < Y)
+    public static double Calculate(int goalY, int currentY)
+    {
+        if (currentY > goalY)
         {
-            // Need to go up
-            return yDiff * ActionCosts.JumpOneBlockCost;
+            // need to descend
+            return ActionCosts.FallNBlocksCost[2] / 2 * (currentY - goalY);
         }
-        else
+        if (currentY < goalY)
         {
-            // Need to go down - falling
-            return yDiff < ActionCosts.FallNBlocksCost.Length
-                ? ActionCosts.FallNBlocksCost[yDiff]
-                : ActionCosts.CostInf;
+            // need to ascend
+            return (goalY - currentY) * ActionCosts.JumpOneBlockCost;
         }
+        return 0;
     }
 
-    public override string ToString() => $"GoalYLevel({Y})";
+    public override bool Equals(object? obj)
+    {
+        if (this == obj)
+        {
+            return true;
+        }
+        if (obj is not GoalYLevel goal)
+        {
+            return false;
+        }
+        return Level == goal.Level;
+    }
+
+    public override int GetHashCode()
+    {
+        return Level * 1271009915;
+    }
+
+    public override string ToString()
+    {
+        return $"GoalYLevel{{y={Level}}}";
+    }
 }
+

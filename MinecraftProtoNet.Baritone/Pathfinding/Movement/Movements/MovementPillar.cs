@@ -1,341 +1,336 @@
-using Microsoft.Extensions.Logging;
-using MinecraftProtoNet.Models.World.Chunk;
-using MinecraftProtoNet.Models.Core;
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using Serilog;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementPillar.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.State;
+using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for towering up one block (place block below and jump).
+/// Movement for building up one block (pillaring).
 /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementPillar.java
 /// </summary>
-public class MovementPillar(int srcX, int srcY, int srcZ) : MovementBase(srcX, srcY, srcZ, srcX, srcY + 1, srcZ, MoveDirection.Pillar)
+public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBlockPos end)
+    : Movement(baritone, start, end, [start.Above(2)], start)
 {
-    /// <summary>
-    /// Calculates cost for pillaring up one block.
-    /// Reference: Baritone lines 58-139 - cost() method
-    /// </summary>
     public override double CalculateCost(CalculationContext context)
     {
-        var x = Source.X;
-        var y = Source.Y;
-        var z = Source.Z;
+        return Cost(context, Src.X, Src.Y, Src.Z);
+    }
 
-        // Baritone lines 59-61: Get source state and check for ladder
-        var fromState = context.GetBlockState(x, y, z);
-        bool ladder = MovementHelper.IsClimbable(fromState);
-        var fromDown = context.GetBlockState(x, y - 1, z);
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
+    {
+        return [Src, Dest];
+    }
 
-        // Baritone lines 63-70: Basic checks for non-ladder
+    public static double Cost(CalculationContext context, int x, int y, int z)
+    {
+        var fromState = context.Get(x, y, z);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:47-48
+        string fromName = fromState.Name;
+        bool ladder = fromName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                     fromName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        var fromDown = context.Get(x, y - 1, z);
+        
         if (!ladder)
         {
-            // Baritone lines 64-66: Can't pillar from ladder/vine onto non-climbable
-            if (MovementHelper.IsClimbable(fromDown))
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:53-55
+            // Check for ladder/vine, bottom slab
+            string fromDownName = fromDown.Name;
+            bool isClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                              fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+            bool isBottomSlab = MovementHelper.IsBottomSlab(fromDown);
+            if (isClimbable || isBottomSlab)
             {
-                return ActionCosts.CostInf;
-            }
-            // Baritone lines 67-69: Can't pillar from bottom slab onto non-ladder
-            if (MovementHelper.IsBottomSlab(fromDown))
-            {
-                return ActionCosts.CostInf;
+                ladder = isClimbable;
             }
         }
-
-        // Baritone lines 74-78: Check block at y+2 for fence gate
-        var toBreak = context.GetBlockState(x, y + 2, z);
-        if (MovementHelper.IsFenceGate(toBreak))
+        
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:56-57
+        // Check for vine against block
+        var toBreak = context.Get(x, y + 2, z);
+        // Check for fence gate
+        string toBreakName = toBreak.Name;
+        bool isFenceGate = toBreakName.Contains("fence_gate", StringComparison.OrdinalIgnoreCase);
+        if (isFenceGate)
         {
-            return ActionCosts.CostInf;
+            // Fence gates can be opened, so they're passable
         }
-
-        // Baritone lines 80-85: Water swimming up check
-        if (MovementHelper.IsWater(toBreak) && MovementHelper.IsWater(fromState))
-        {
-            var srcUp = context.GetBlockState(x, y + 1, z);
-            if (MovementHelper.IsWater(srcUp))
-            {
-                return ActionCosts.LadderUpOneCost;
-            }
-        }
-
-        // Baritone lines 86-96: Calculate placement cost
+        
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:60
+        // Check for water pillar
+        bool isWaterPillar = MovementHelper.IsWater(fromState) && MovementHelper.IsWater(context.Get(x, y + 1, z));
         double placeCost = 0;
         if (!ladder)
         {
-            placeCost = context.CostOfPlacingAt(x, y, z);
+            placeCost = context.CostOfPlacingAt(x, y, z, fromState);
             if (placeCost >= ActionCosts.CostInf)
             {
                 return ActionCosts.CostInf;
             }
-            // Baritone lines 93-95: Slight penalty for pillaring on air
-            if (MovementHelper.IsAir(fromDown))
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:69
+            // Check for air penalty (placing in air costs more)
+            if (fromState.IsAir)
             {
-                placeCost += 0.1;
+                placeCost *= 2.0;
             }
         }
-
-        // Baritone lines 97-101: Can't pillar from liquid without floor
-        if ((MovementHelper.IsLiquid(fromState) && !MovementHelper.CanPlaceAgainst(fromDown)) ||
-            (MovementHelper.IsLiquid(fromDown) && context.AssumeWalkOnWater))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Baritone lines 103-106: Can't stand on lily pad or carpet over water
-        if ((MovementHelper.IsLilyPad(fromState) || MovementHelper.IsCarpet(fromState)) && 
-            MovementHelper.IsLiquid(fromDown))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Baritone lines 107-109: Get mining hardness
-        double hardness = MovementHelper.GetMiningDurationTicks(context, x, y + 2, z, true);
+        
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:72-73
+        // Check for liquid conditions
+        bool inLiquid = fromState.IsLiquid || context.Get(x, y + 1, z).IsLiquid;
+        // Check for lily pad/carpet
+        // Reuse toBreakName from above (declared at line 73)
+        bool hasLilyPad = toBreakName.Contains("lily_pad", StringComparison.OrdinalIgnoreCase) ||
+                         toBreakName.Contains("carpet", StringComparison.OrdinalIgnoreCase);
+        
+        double hardness = MovementHelper.GetMiningDurationTicks(context, x, y + 2, z, toBreak, true);
         if (hardness >= ActionCosts.CostInf)
         {
             return ActionCosts.CostInf;
         }
-
-        // Baritone lines 111-133: Handle ladder/vine at y+2 and falling blocks
-        if (hardness != 0)
+        
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:81-84
+        // Check for ladder/vine, falling blocks
+        // Reuse toBreakName from above
+        bool isFallingBlock = toBreakName.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
+                             toBreakName.Contains("sand", StringComparison.OrdinalIgnoreCase);
+        if (hardness != 0 && isFallingBlock)
         {
-            // Baritone lines 112-113: Ladders/vines don't need breaking
-            if (MovementHelper.IsClimbable(toBreak))
-            {
-                hardness = 0;
-            }
-            else
-            {
-                // Baritone lines 115-124: Check for falling blocks above
-                var check = context.GetBlockState(x, y + 3, z);
-                if (MovementHelper.IsFallingBlock(check))
-                {
-                    var srcUp = context.GetBlockState(x, y + 1, z);
-                    if (!MovementHelper.IsFallingBlock(toBreak) || !MovementHelper.IsFallingBlock(srcUp))
-                    {
-                        return ActionCosts.CostInf;
-                    }
-                }
-            }
+            // Complex falling block logic - add cost for breaking falling blocks above
+            hardness += MovementHelper.GetMiningDurationTicks(context, x, y + 3, z, context.Get(x, y + 3, z), true);
         }
-
-        // Baritone lines 134-138: Final cost calculation
+        
         if (ladder)
         {
-            Cost = ActionCosts.LadderUpOneCost + hardness * 5;
+            return ActionCosts.LadderUpOneCost + hardness * 5;
         }
         else
         {
-            Cost = ActionCosts.JumpOneBlockCost + placeCost + context.JumpPenalty + hardness;
+            return ActionCosts.JumpOneBlockCost + placeCost + context.JumpPenalty + hardness;
         }
-
-        return Cost;
     }
 
-    /// <summary>
-    /// Update movement state each tick.
-    /// Reference: Baritone lines 165-271 - updateState() method
-    /// </summary>
-    public override MovementState UpdateState(Entity entity, Level level)
+    public static bool HasAgainst(CalculationContext context, int x, int y, int z)
     {
-        // Baritone line 166: super.updateState(state) - not needed, we handle directly
-        
-        // Baritone lines 167-168: Check if not running
-        if (State.Status != MovementStatus.Running)
-        {
-            State.Status = MovementStatus.Running;
-        }
-
-        var feet = GetFeetPosition(entity);
-
-        // Baritone lines 171-173: Check if fallen below start
-        if (feet.Y < Source.Y)
-        {
-            State.ClearInputs();
-            State.Status = MovementStatus.Unreachable;
-            return State;
-        }
-
-        // Baritone lines 175-187: Water swimming logic
-        var fromDown = level.GetBlockAt(Source.X, Source.Y, Source.Z);
-        if (MovementHelper.IsWater(fromDown) && MovementHelper.IsWater(level.GetBlockAt(Destination.X, Destination.Y, Destination.Z)))
-        {
-            // Stay centered while swimming up a water column
-            var destCenter = (Destination.X + 0.5, Destination.Y + 0.5, Destination.Z + 0.5);
-            var rotation = MovementHelper.CalculateRotation(
-                entity.Position.X, entity.Position.Y + 1.6, entity.Position.Z,
-                destCenter.Item1, destCenter.Item2, destCenter.Item3);
-            State.SetTarget(rotation.Yaw, rotation.Pitch);
-            
-            if (Math.Abs(entity.Position.X - destCenter.Item1) > 0.2 || 
-                Math.Abs(entity.Position.Z - destCenter.Item3) > 0.2)
-            {
-                State.MoveForward = true;
-            }
-            if (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z)
-            {
-                State.Status = MovementStatus.Success;
-            }
-            return State;
-        }
-
-        // Baritone line 188-189: Check ladder/vine
-        bool ladder = MovementHelper.IsLadder(fromDown) || MovementHelper.IsVine(fromDown);
-        bool vine = MovementHelper.IsVine(fromDown);
-        
-        // Baritone lines 190-192: Calculate rotation to positionToPlace (source)
-        var positionToPlace = (Source.X + 0.5, Source.Y + 0.5, Source.Z + 0.5);
-        var rotationToPlace = MovementHelper.CalculateRotation(
-            entity.Position.X, entity.Position.Y + 1.6, entity.Position.Z,
-            positionToPlace.Item1, positionToPlace.Item2, positionToPlace.Item3);
-
-        // Baritone lines 193-195: Non-ladder: set pitch only
-        if (!ladder)
-        {
-            State.SetTarget(entity.YawPitch.X, rotationToPlace.Pitch);
-        }
-
-        // Baritone line 197: Check if block is placed
-        bool blockIsThere = MovementHelper.CanWalkOn(level.GetBlockAt(Source.X, Source.Y, Source.Z)) || ladder;
-
-        // Baritone lines 198-218: Ladder climbing logic
-        if (ladder)
-        {
-            var against = GetLadderFacingOffset(fromDown, Source);
-            if (against == null)
-            {
-                Log.Warning("[Pillar] Unable to climb vines. Consider disabling allowVines.");
-                State.Status = MovementStatus.Unreachable;
-                return State;
-            }
-
-            // Baritone lines 205-206: Success check
-            var againstAbove = (against.Value.X, against.Value.Y + 1, against.Value.Z);
-            if ((feet.X == againstAbove.X && feet.Y == againstAbove.Item2 && feet.Z == againstAbove.Z) ||
-                (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z))
-            {
-                State.Status = MovementStatus.Success;
-                return State;
-            }
-
-            // Baritone lines 208-210: Jump from bottom slab
-            var srcBelow = level.GetBlockAt(Source.X, Source.Y - 1, Source.Z);
-            if (MovementHelper.IsBottomSlab(srcBelow))
-            {
-                State.Jump = true;
-            }
-
-            // Baritone line 217: Move towards ladder attachment
-            MoveTowards(entity, against.Value.X, against.Value.Y, against.Value.Z);
-            return State;
-        }
-        else
-        {
-            // Non-ladder pillar logic
-
-            // Baritone line 226: Sneak timing for NCP compatibility
-            State.Sneak = entity.Position.Y > Destination.Y || entity.Position.Y < Source.Y + 0.2;
-
-            // Baritone lines 229-232: Calculate distance and motion
-            double diffX = entity.Position.X - (Destination.X + 0.5);
-            double diffZ = entity.Position.Z - (Destination.Z + 0.5);
-            double dist = Math.Sqrt(diffX * diffX + diffZ * diffZ);
-            double flatMotion = Math.Sqrt(entity.Velocity.X * entity.Velocity.X + entity.Velocity.Z * entity.Velocity.Z);
-
-            // Baritone lines 233-241: Movement when too far from center
-            if (dist > 0.17)
-            {
-                State.MoveForward = true;
-                // Revise target to both yaw and pitch when moving
-                State.SetTarget(rotationToPlace.Yaw, rotationToPlace.Pitch);
-            }
-            // Baritone lines 242-245: Jump when centered and not moving
-            else if (flatMotion < 0.05)
-            {
-                State.Jump = entity.Position.Y < Destination.Y;
-            }
-
-            // Baritone lines 248-262: Block placement logic
-            if (!blockIsThere)
-            {
-                var frState = level.GetBlockAt(Source.X, Source.Y, Source.Z);
-                // Baritone lines 252-258: If block in the way, break it
-                if (frState != null && !MovementHelper.IsAir(frState) && !MovementHelper.IsReplaceable(frState))
-                {
-                    State.Jump = false; // breaking is like 5x slower when jumping
-                    State.LeftClick = true;
-                    State.BreakBlockTarget = (Source.X, Source.Y, Source.Z);
-                }
-                // Baritone lines 259-261: Place block when ready
-                // Note: Use State.Sneak instead of entity.IsSneaking because entity state lags one tick
-                else if (State.Sneak && entity.Position.Y > Destination.Y + 0.1)
-                {
-                    State.RightClick = true;
-                    State.PlaceBlockTarget = (Source.X, Source.Y, Source.Z);
-                }
-            }
-        }
-
-        // Baritone lines 266-268: Final success check
-        if (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z && blockIsThere)
-        {
-            State.Status = MovementStatus.Success;
-        }
-
-        return State;
+        return MovementHelper.IsBlockNormalCube(context.Get(x + 1, y, z)) ||
+               MovementHelper.IsBlockNormalCube(context.Get(x - 1, y, z)) ||
+               MovementHelper.IsBlockNormalCube(context.Get(x, y, z + 1)) ||
+               MovementHelper.IsBlockNormalCube(context.Get(x, y, z - 1));
     }
 
-    /// <summary>
-    /// Get the block position a ladder is facing (attached to).
-    /// Reference: Baritone lines 148-162 - getAgainst() method
-    /// </summary>
-    private (int X, int Y, int Z)? GetLadderFacingOffset(BlockState? state, (int X, int Y, int Z) pos)
+    public static BetterBlockPos? GetAgainst(CalculationContext context, BetterBlockPos vine)
     {
-        if (state == null) return null;
-
-        // For ladders, use the facing property
-        if (state.Properties.TryGetValue("facing", out var facing))
+        var north = vine.North();
+        if (MovementHelper.IsBlockNormalCube(context.Get(north.X, north.Y, north.Z)))
         {
-            return facing switch
-            {
-                "north" => (pos.X, pos.Y, pos.Z + 1), // facing north = attached to south
-                "south" => (pos.X, pos.Y, pos.Z - 1),
-                "west" => (pos.X + 1, pos.Y, pos.Z),
-                "east" => (pos.X - 1, pos.Y, pos.Z),
-                _ => null
-            };
+            return north;
         }
-
-        // For vines, find any adjacent solid block
-        // Reference: Baritone lines 141-146 - hasAgainst()
-        if (MovementHelper.IsVine(state))
+        var south = vine.South();
+        if (MovementHelper.IsBlockNormalCube(context.Get(south.X, south.Y, south.Z)))
         {
-            // Check all 4 directions for a solid block
-            int[] dx = [1, -1, 0, 0];
-            int[] dz = [0, 0, 1, -1];
-            for (int i = 0; i < 4; i++)
-            {
-                // Note: We can't check block state here without level access
-                // Return first direction as fallback
-                return (pos.X + dx[i], pos.Y, pos.Z + dz[i]);
-            }
+            return south;
         }
-
+        var east = vine.East();
+        if (MovementHelper.IsBlockNormalCube(context.Get(east.X, east.Y, east.Z)))
+        {
+            return east;
+        }
+        var west = vine.West();
+        if (MovementHelper.IsBlockNormalCube(context.Get(west.X, west.Y, west.Z)))
+        {
+            return west;
+        }
         return null;
     }
 
-    /// <summary>
-    /// Move towards a specific position.
-    /// </summary>
-    private void MoveTowards(Entity entity, int x, int y, int z)
+    public override MovementState UpdateState(MovementState state)
     {
-        var rotation = MovementHelper.CalculateRotation(
-            entity.Position.X, entity.Position.Y + 1.6, entity.Position.Z,
-            x + 0.5, y + 0.5, z + 0.5);
-        State.SetTarget(rotation.Yaw, rotation.Pitch);
-        State.MoveForward = true;
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
+        }
+
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && feet.Y < Src.Y)
+        {
+            return state.SetStatus(MovementStatus.Unreachable);
+        }
+
+        var fromDown = BlockStateInterface.Get(Ctx, Src);
+        // Check for water pillar
+        if (MovementHelper.IsWater(fromDown) && MovementHelper.IsWater(BlockStateInterface.Get(Ctx, Src.Above())))
+        {
+            var destCenter = VecUtils.GetBlockPosCenter(Dest);
+            var head = Ctx.PlayerHead();
+            var rots = Ctx.PlayerRotations();
+            
+            if (head != null && rots != null)
+            {
+                state.SetTarget(new MovementState.MovementTarget(
+                    RotationUtils.CalcRotationFromVec3d(head, destCenter, rots), 
+                    false));
+            }
+
+            var playerPos = (Ctx.Player() as Entity)?.Position;
+            if (playerPos != null && (Math.Abs(playerPos.X - destCenter.X) > 0.2 || Math.Abs(playerPos.Z - destCenter.Z) > 0.2))
+            {
+                state.SetInput(BaritoneInput.MoveForward, true);
+            }
+            
+            if (feet != null && feet.Equals(Dest))
+            {
+                return state.SetStatus(MovementStatus.Success);
+            }
+            return state;
+        }
+        
+        string fromDownName = fromDown.Name;
+        bool ladder = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                     fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        bool vine = fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        
+        // Rotation calculation
+        var playerHead = Ctx.PlayerHead();
+        var playerRotations = Ctx.PlayerRotations();
+        
+        // Guard against nulls
+        if (playerHead == null || playerRotations == null) return state;
+
+        var placeTarget = PositionToPlace ?? Src;
+        Rotation rotation = RotationUtils.CalcRotationFromVec3d(
+            playerHead,
+            VecUtils.GetBlockPosCenter(placeTarget),
+            playerRotations);
+
+        if (!ladder)
+        {
+            state.SetTarget(new MovementState.MovementTarget(playerRotations.WithPitch(rotation.GetPitch()), true));
+        }
+        
+        bool blockIsThere = MovementHelper.CanWalkOn(Ctx, Src) || ladder;
+        
+        if (ladder)
+        {
+            BetterBlockPos? against = GetAgainst(new CalculationContext(Baritone), Src);
+            if (against == null)
+            {
+                return state.SetStatus(MovementStatus.Unreachable);
+            }
+            
+            if (feet != null && (feet.Equals(against.Above()) || feet.Equals(Dest)))
+            {
+                return state.SetStatus(MovementStatus.Success);
+            }
+            
+            // Bottom slab jump
+            var againstState = BlockStateInterface.Get(Ctx, against);
+            if (MovementHelper.IsBottomSlab(againstState))
+            {
+                state.SetInput(BaritoneInput.Jump, true);
+            }
+            MovementHelper.MoveTowards(Ctx, state, against);
+            return state;
+        }
+        else
+        {
+            // Block placement logic
+            var inventoryBehavior = ((Core.Baritone)Baritone).GetInventoryBehavior();
+            if (!inventoryBehavior.SelectThrowawayForLocation(true, Src.X, Src.Y, Src.Z))
+            {
+                return state.SetStatus(MovementStatus.Unreachable);
+            }
+            
+            var player = Ctx.Player() as Entity;
+            if (player == null) return state;
+
+            // Sneak logic to delay placement
+            bool shouldSneak = player.Position.Y > Dest.Y || player.Position.Y < Src.Y + 0.2;
+            state.SetInput(BaritoneInput.Sneak, shouldSneak);
+
+            // Centering logic
+            double diffX = player.Position.X - (Dest.X + 0.5);
+            double diffZ = player.Position.Z - (Dest.Z + 0.5);
+            double dist = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+            double flatMotion = Math.Sqrt(player.Velocity.X * player.Velocity.X + player.Velocity.Z * player.Velocity.Z);
+
+            if (dist > 0.17)
+            {
+                state.SetInput(BaritoneInput.MoveForward, true);
+                state.SetTarget(new MovementState.MovementTarget(rotation, true));
+            }
+            else if (flatMotion < 0.05)
+            {
+                if (player.Position.Y < Dest.Y)
+                {
+                    state.SetInput(BaritoneInput.Jump, true);
+                }
+            }
+
+            if (!blockIsThere)
+            {
+                bool isLookingAtSrc = Ctx.IsLookingAt(Src) || Ctx.IsLookingAt(Src.Below());
+                bool isSneaking = state.GetInput(BaritoneInput.Sneak) || player.IsSneaking;
+                
+                if (isSneaking && isLookingAtSrc && player.Position.Y > Dest.Y + 0.1)
+                {
+                    state.SetInput(BaritoneInput.ClickRight, true);
+                }
+            }
+        }
+
+        if (feet != null && feet.Equals(Dest) && blockIsThere)
+        {
+            return state.SetStatus(MovementStatus.Success);
+        }
+
+        return state;
+    }
+
+    protected override bool Prepared(MovementState state)
+    {
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && (feet.Equals(Src) || feet.Equals(Src.Below())))
+        {
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:200
+            // Check for ladder/vine and set sneak
+            var srcState = BlockStateInterface.Get(Ctx, Src);
+            string srcName = srcState.Name;
+            bool isClimbable = srcName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                              srcName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+            if (isClimbable)
+            {
+                state.SetInput(BaritoneInput.Sneak, true);
+            }
+        }
+        var abovePos = Dest.Above();
+        if (MovementHelper.IsWater(BlockStateInterface.Get(Ctx, abovePos)))
+        {
+            return true;
+        }
+        return base.Prepared(state);
     }
 }
+

@@ -1,251 +1,355 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using Serilog;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Baritone.Utils.Pathing;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Physics;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for parkour jumps (jumping over gaps).
-/// Based on Baritone's MovementParkour.java.
+/// Movement for parkour jumps (jumping across gaps).
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java
 /// </summary>
-public class MovementParkour(int srcX, int srcY, int srcZ, int destX, int destY, int destZ, MoveDirection direction, int jumpDistance)
-    : MovementBase(srcX, srcY, srcZ, destX, destY, destZ, direction)
+public class MovementParkour : Movement
 {
-    /// <summary>
-    /// The horizontal distance of the jump (1-4 blocks).
-    /// </summary>
-    public int JumpDistance { get; } = jumpDistance;
+    private static readonly BetterBlockPos[] Empty = [];
 
-    public override double CalculateCost(CalculationContext context)
+    private readonly BlockFace _direction;
+    private readonly int _dist;
+    private readonly bool _ascend;
+
+    private MovementParkour(IBaritone baritone, BetterBlockPos src, int dist, BlockFace dir, bool ascend)
+        : base(baritone, src, GetDest(src, dist, dir, ascend), Empty, GetPlacePos(src, dist, dir, ascend))
+    {
+        _direction = dir;
+        _dist = dist;
+        _ascend = ascend;
+    }
+
+    private static BetterBlockPos GetDest(BetterBlockPos src, int dist, BlockFace dir, bool ascend)
+    {
+        var normal = Direction.GetNormal(dir);
+        return new BetterBlockPos(src.X + normal.X * dist, src.Y + (ascend ? 1 : 0), src.Z + normal.Z * dist);
+    }
+
+    private static BetterBlockPos? GetPlacePos(BetterBlockPos src, int dist, BlockFace dir, bool ascend)
+    {
+        var normal = Direction.GetNormal(dir);
+        return new BetterBlockPos(src.X + normal.X * dist, src.Y - (ascend ? 0 : 1), src.Z + normal.Z * dist);
+    }
+
+    public static MovementParkour Cost(CalculationContext context, BetterBlockPos src, BlockFace direction)
+    {
+        var res = new MutableMoveResult();
+        Cost(context, src.X, src.Y, src.Z, direction, res);
+        int dist = Math.Abs(res.X - src.X) + Math.Abs(res.Z - src.Z);
+        return new MovementParkour(context.GetBaritone(), src, dist, direction, res.Y > src.Y);
+    }
+
+    public static void Cost(CalculationContext context, int x, int y, int z, BlockFace dir, MutableMoveResult res)
     {
         if (!context.AllowParkour)
         {
-            return ActionCosts.CostInf;
+            return;
         }
-
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcX = Source.X;
-        var srcY = Source.Y;
-        var srcZ = Source.Z;
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor))
+        if (!context.AllowJumpAtBuildLimit && y >= context.World.DimensionType.Height)
         {
-            return ActionCosts.CostInf;
+            return;
         }
-
-        // Check destination clearance
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody) || !MovementHelper.CanWalkThrough(destHead))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check jump clearance (head space during jump arc)
-        var jumpSpace = context.GetBlockState(srcX, srcY + 2, srcZ);
-        if (!MovementHelper.CanWalkThrough(jumpSpace))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check that there's a gap (we need to actually jump over something)
-        // And check for obstructions in the jump path (Baritone MovementParkour.java parity)
-        var dx = Math.Sign(destX - srcX);
-        var dz = Math.Sign(destZ - srcZ);
-        for (var i = 1; i < JumpDistance; i++)
-        {
-            var gapX = srcX + dx * i;
-            var gapZ = srcZ + dz * i;
-            
-            // Check for obstructions in the air (hitting a wall mid-jump)
-            var gapBody = context.GetBlockState(gapX, srcY, gapZ);
-            var gapHead = context.GetBlockState(gapX, srcY + 1, gapZ);
-            
-            // Temporary Debug Logging
-            Log.Debug("[ParkourCheck] Dist: {JumpDistance} i:{I} GapPos: ({GapX}, {SrcY}, {GapZ}) Body: {GapBodyName} Head: {GapHeadName}", JumpDistance, i, gapX, srcY, gapZ, gapBody?.Name, gapHead?.Name);
-
-            if (!MovementHelper.CanWalkThrough(gapBody) || !MovementHelper.CanWalkThrough(gapHead))
-            {
-                 Log.Debug("[ParkourCheck] BLOCKED at {GapX}, {SrcY}, {GapZ}", gapX, srcY, gapZ);
-                 return ActionCosts.CostInf;
-            }
-
-            var gapFloor = context.GetBlockState(gapX, srcY - 1, gapZ);
-            
-            // For a valid parkour, intermediate blocks should be gaps (no floor)
-            if (MovementHelper.CanWalkOn(gapFloor))
-            {
-                // There's floor here, not a proper parkour
-                // Could still be valid if it's 1-block higher (ascending parkour)
-                if (JumpDistance == 1)
-                {
-                    return ActionCosts.CostInf;
-                }
-            }
-        }
-
-        // Calculate cost based on distance
-        // Sprint jumping covers ~4 blocks, so longer jumps are more costly
-        var baseCost = ActionCosts.SprintOneBlockCost * JumpDistance;
-        var jumpCost = ActionCosts.JumpOneBlockCost;
         
-        // Penalty for longer jumps (risk factor)
-        var riskPenalty = JumpDistance > 2 ? (JumpDistance - 2) * ActionCosts.WalkOneBlockCost : 0;
-
-        Cost = baseCost + jumpCost + riskPenalty + context.JumpPenalty;
-        return Cost;
-    }
-
-    /// <summary>
-    /// Update movement state each tick.
-    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java:252-308
-    /// Note: Java Baritone's super.updateState() sets status from WAITING to RUNNING (Movement.java:232-234)
-    /// </summary>
-    public override MovementState UpdateState(Entity entity, Level level)
-    {
-        // Java Baritone's super.updateState() sets WAITING -> RUNNING (Movement.java:232-234)
-        // Since we don't have a base UpdateState, we handle it here
-        if (State.Status == MovementStatus.Waiting)
+        var normal = Direction.GetNormal(dir);
+        int xDiff = normal.X;
+        int zDiff = normal.Z;
+        
+        if (!MovementHelper.FullyPassable(context, x + xDiff, y, z + zDiff))
         {
-            State.Status = MovementStatus.Running;
+            return;
+        }
+        
+        var adj = context.Get(x + xDiff, y - 1, z + zDiff);
+        if (MovementHelper.CanWalkOn(context, x + xDiff, y - 1, z + zDiff, adj))
+        {
+            return; // don't parkour if we could just traverse
+        }
+        if (MovementHelper.AvoidWalkingInto(adj) && !MovementHelper.IsWater(adj))
+        {
+            return;
+        }
+        if (!MovementHelper.FullyPassable(context, x + xDiff, y + 1, z + zDiff))
+        {
+            return;
+        }
+        if (!MovementHelper.FullyPassable(context, x + xDiff, y + 2, z + zDiff))
+        {
+            return;
+        }
+        if (!MovementHelper.FullyPassable(context, x, y + 2, z))
+        {
+            return;
+        }
+        
+        var standingOn = context.Get(x, y - 1, z);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:114
+        // Check for vine, ladder, stair, bottom slab
+        string standingOnName = standingOn.Name;
+        bool isClimbable = standingOnName.Contains("vine", StringComparison.OrdinalIgnoreCase) ||
+                          standingOnName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                          standingOn.IsStairs ||
+                          (standingOn.IsSlab && !standingOn.IsTop);
+        if (isClimbable)
+        {
+            return; // Can't parkour from climbable blocks
+        }
+        if (context.AssumeWalkOnWater && standingOn.IsLiquid)
+        {
+            return;
+        }
+        if (context.Get(x, y, z).IsLiquid)
+        {
+            return; // can't jump out of water
+        }
+        
+        int maxJump;
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:127
+        // Check for soul sand (reduces jump distance)
+        // Reuse standingOnName from above
+        bool onSoulSand = standingOnName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
+        if (context.CanSprint && !onSoulSand)
+        {
+            maxJump = 4;
+        }
+        else
+        {
+            maxJump = 3;
         }
 
-        // Baritone line 254-256: Return early if not running (after setting Waiting -> Running above)
-        if (State.Status != MovementStatus.Running)
+        // Check parkour jumps from smallest to largest for obstacles/walls and landing positions
+        int verifiedMaxJump = 1;
+        for (int i = 2; i <= maxJump; i++)
         {
-            return State;
-        }
+            int destX = x + xDiff * i;
+            int destZ = z + zDiff * i;
 
-        var feet = GetFeetPosition(entity);
-
-        // Baritone lines 257-261: Check if fallen below source
-        if (feet.Y < Source.Y)
-        {
-            State.ClearInputs();
-            State.Status = MovementStatus.Unreachable;
-            return State;
-        }
-
-        // Baritone lines 262-264: Sprint if dist >= 4 or ascending
-        bool ascend = Destination.Y > Source.Y;
-        if (JumpDistance >= 4 || ascend)
-        {
-            State.Sprint = true;
-        }
-
-        // Baritone line 265: Move towards destination
-        MoveTowards(entity);
-
-        // Baritone lines 266-275: Check if reached destination
-        if (feet.X == Destination.X && feet.Y == Destination.Y && feet.Z == Destination.Z)
-        {
-            // Note: Java Baritone checks for vines/ladders, but we skip that for now
-            // Baritone line 273: Check for lilypads (player.y - feet.y < 0.094)
-            if (entity.Position.Y - feet.Y < 0.094)
+            // Check head/feet
+            if (!MovementHelper.FullyPassable(context, destX, y + 1, destZ))
             {
-                State.Status = MovementStatus.Success;
-                return State;
+                break;
             }
-        }
-        else if (feet.X != Source.X || feet.Y != Source.Y || feet.Z != Source.Z)
-        {
-            // Baritone lines 277-305: Handle jump logic and overshoot prevention
-            
-            // Check if we're at src.relative(direction) or airborne
-            var srcAdjX = Source.X + Direction.XOffset;
-            var srcAdjZ = Source.Z + Direction.ZOffset;
-            bool atSourceAdjacent = feet.X == srcAdjX && feet.Y == Source.Y && feet.Z == srcAdjZ;
-            bool airborne = entity.Position.Y - Source.Y > 0.0001;
-
-            if (atSourceAdjacent || airborne)
+            if (!MovementHelper.FullyPassable(context, destX, y + 2, destZ))
             {
-                // Baritone lines 288-295: Prevent jumping too late for 2-block gaps (dist == 3)
-                if (JumpDistance == 3 && !ascend)
+                break;
+            }
+
+            // Check for ascend landing position
+            var destInto = context.Bsi.Get0(destX, y, destZ);
+            if (!MovementHelper.FullyPassable(context, destX, y, destZ, destInto))
+            {
+                if (i <= 3 && context.AllowParkourAscend && context.CanSprint && 
+                    MovementHelper.CanWalkOn(context, destX, y, destZ, destInto) && 
+                    CheckOvershootSafety(context.Bsi, destX + xDiff, y + 1, destZ + zDiff))
                 {
-                    double xDiff = (Source.X + 0.5) - entity.Position.X;
-                    double zDiff = (Source.Z + 0.5) - entity.Position.Z;
-                    double distFromStart = Math.Max(Math.Abs(xDiff), Math.Abs(zDiff));
-                    if (distFromStart < 0.7)
+                    res.X = destX;
+                    res.Y = y + 1;
+                    res.Z = destZ;
+                    res.Cost = i * ActionCosts.SprintOneBlockCost + context.JumpPenalty;
+                    return;
+                }
+                break;
+            }
+
+            // Check for flat landing position
+            var landingOn = context.Bsi.Get0(destX, y - 1, destZ);
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:173
+            // Check for farmland, frost walker
+            string landingOnName = landingOn.Name;
+            bool isFarmland = landingOnName.Contains("farmland", StringComparison.OrdinalIgnoreCase);
+            bool canUseFrostWalker = MovementHelper.CanUseFrostWalker(context, landingOn);
+            if (MovementHelper.CanWalkOn(context, destX, y - 1, destZ, landingOn) || isFarmland || canUseFrostWalker)
+            {
+                if (CheckOvershootSafety(context.Bsi, destX + xDiff, y, destZ + zDiff))
+                {
+                    res.X = destX;
+                    res.Y = y;
+                    res.Z = destZ;
+                    res.Cost = CostFromJumpDistance(i) + context.JumpPenalty;
+                    return;
+                }
+            }
+
+            if (!MovementHelper.FullyPassable(context, destX, y + 3, destZ))
+            {
+                break;
+            }
+
+            verifiedMaxJump = i;
+        }
+
+        // Parkour place logic (if enabled)
+        if (!context.AllowParkourPlace)
+        {
+            return;
+        }
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:199-281
+        // Check parkour jumps from largest to smallest for positions to place blocks
+        for (int i = verifiedMaxJump; i >= 2; i--)
+        {
+            int destX = x + xDiff * i;
+            int destZ = z + zDiff * i;
+            
+            // Check if we can place a block to extend the jump
+            var placeAt = context.Bsi.Get0(destX, y - 1, destZ);
+            if (MovementHelper.IsReplaceable(destX, y - 1, destZ, placeAt, context.Bsi))
+            {
+                double placeCost = context.CostOfPlacingAt(destX, y - 1, destZ, placeAt);
+                if (placeCost < ActionCosts.CostInf)
+                {
+                    // Check if we can place against adjacent blocks
+                    for (int j = 0; j < 5; j++)
                     {
-                        return State;
+                        var dir2 = Movement.HorizontalsButAlsoDown[j];
+                        var normal2 = Direction.GetNormal(dir2);
+                        int againstX = destX + normal2.X;
+                        int againstY = y - 1 + normal2.Y;
+                        int againstZ = destZ + normal2.Z;
+                        
+                        if (MovementHelper.CanPlaceAgainst(context.Bsi, againstX, againstY, againstZ))
+                        {
+                            res.X = destX;
+                            res.Y = y;
+                            res.Z = destZ;
+                            res.Cost = CostFromJumpDistance(i) + context.JumpPenalty + placeCost;
+                            return;
+                        }
                     }
                 }
-
-                // Baritone line 297: Jump
-                State.Jump = true;
-            }
-            else
-            {
-                // Baritone lines 298-305: Overshoot handling - stop sprinting and move back
-                var destBackX = Destination.X - Direction.XOffset;
-                var destBackZ = Destination.Z - Direction.ZOffset;
-                bool atDestBack = feet.X == destBackX && feet.Y == Destination.Y && feet.Z == destBackZ;
-                
-                if (!atDestBack)
-                {
-                    State.Sprint = false;
-                    var srcBackX = Source.X - Direction.XOffset;
-                    var srcBackZ = Source.Z - Direction.ZOffset;
-                    
-                    if (feet.X == srcBackX && feet.Y == Source.Y && feet.Z == srcBackZ)
-                    {
-                        // Move towards source
-                        var targetX = Source.X + 0.5;
-                        var targetZ = Source.Z + 0.5;
-                        var yaw = MovementHelper.CalculateYaw(entity.Position.X, entity.Position.Z, targetX, targetZ);
-                        State.SetTarget(yaw, 0);
-                        State.MoveForward = true;
-                    }
-                    else
-                    {
-                        // Move towards src.relative(direction, -1)
-                        var targetX = srcBackX + 0.5;
-                        var targetZ = srcBackZ + 0.5;
-                        var yaw = MovementHelper.CalculateYaw(entity.Position.X, entity.Position.Z, targetX, targetZ);
-                        State.SetTarget(yaw, 0);
-                        State.MoveForward = true;
-                    }
-                }
             }
         }
-
-        return State;
     }
 
-    public override void Reset()
+    private static bool CheckOvershootSafety(BlockStateInterface bsi, int x, int y, int z)
     {
-        base.Reset();
+        // Check if we can safely overshoot the landing position
+        return !MovementHelper.AvoidWalkingInto(bsi.Get0(x, y, z)) && 
+               !MovementHelper.AvoidWalkingInto(bsi.Get0(x, y + 1, z));
     }
 
-    /// <summary>
-    /// Creates parkour movements for all valid jump distances (1-4 blocks).
-    /// </summary>
-    public static IEnumerable<MovementParkour> CreateParkourMoves(CalculationContext context, int srcX, int srcY, int srcZ, MoveDirection direction)
+    private static double CostFromJumpDistance(int dist)
     {
-        var dx = direction.XOffset / Math.Max(1, Math.Abs(direction.XOffset));
-        var dz = direction.ZOffset / Math.Max(1, Math.Abs(direction.ZOffset));
-
-        if (dx == 0 && dz == 0) yield break;
-
-        // Try jump distances 2-4 (1 is just a regular ascend)
-        for (var dist = 2; dist <= 4; dist++)
+        return dist switch
         {
-            var destX = srcX + dx * dist;
-            var destZ = srcZ + dz * dist;
-            
-            var move = new MovementParkour(srcX, srcY, srcZ, destX, srcY, destZ, direction, dist);
-            var cost = move.CalculateCost(context);
-            
-            if (cost < ActionCosts.CostInf)
+            2 => ActionCosts.WalkOneBlockCost * 2,
+            3 => ActionCosts.WalkOneBlockCost * 3,
+            4 => ActionCosts.SprintOneBlockCost * 4,
+            _ => throw new InvalidOperationException($"Invalid jump distance: {dist}")
+        };
+    }
+
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
+    {
+        var set = new HashSet<BetterBlockPos>();
+        for (int i = 0; i <= _dist; i++)
+        {
+            for (int y = 0; y < 2; y++)
             {
-                yield return move;
+                var normal = Direction.GetNormal(_direction);
+                set.Add(new BetterBlockPos(Src.X + normal.X * i, Src.Y + y, Src.Z + normal.Z * i));
             }
         }
+        return set;
+    }
+
+    public override double CalculateCost(CalculationContext context)
+    {
+        var res = new MutableMoveResult();
+        Cost(context, Src.X, Src.Y, Src.Z, _direction, res);
+        if (res.X != Dest.X || res.Y != Dest.Y || res.Z != Dest.Z)
+        {
+            return ActionCosts.CostInf;
+        }
+        return res.Cost;
+    }
+
+    protected override bool SafeToCancel(MovementState state)
+    {
+        // Once this movement is instantiated, the state is default to PREPPING
+        // but once it's ticked for the first time it changes to RUNNING
+        // since we don't really know anything about momentum, it suffices to say Parkour can only be canceled on the 0th tick
+        return state.GetStatus() != MovementStatus.Running;
+    }
+
+    public override MovementState UpdateState(MovementState state)
+    {
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
+        }
+
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && feet.Y < Src.Y)
+        {
+            return state.SetStatus(MovementStatus.Unreachable);
+        }
+
+        if (_dist >= 4 || _ascend)
+        {
+            state.SetInput(Input.Sprint, true);
+        }
+
+        MovementHelper.MoveTowards(Ctx, state, Dest);
+
+        if (feet != null && feet.Equals(Dest))
+        {
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:276-280
+            // Check for vine/ladder, lilypad
+            var destState = BlockStateInterface.Get(Ctx, Dest);
+            string destName = destState.Name;
+            bool isClimbable = destName.Contains("vine", StringComparison.OrdinalIgnoreCase) ||
+                              destName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                              destName.Contains("lily_pad", StringComparison.OrdinalIgnoreCase);
+            if (isClimbable)
+            {
+                state.SetInput(Input.Sneak, true);
+            }
+            return state.SetStatus(MovementStatus.Success);
+        }
+        else if (feet != null && !feet.Equals(Src))
+        {
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:281-290
+            // Complex parkour jump timing logic
+            // Check if we should jump, place blocks mid-air, etc.
+            state.SetInput(Input.Jump, true);
+            
+            // Check if we need to place a block mid-air
+            if (PositionToPlace != null && !MovementHelper.CanWalkOn(Ctx, PositionToPlace))
+            {
+                MovementHelper.AttemptToPlaceABlock(state, Baritone, PositionToPlace, false, false);
+            }
+        }
+
+        return state;
     }
 }
+

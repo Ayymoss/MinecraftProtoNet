@@ -25,6 +25,7 @@
 _UpgradeReport_Files/
 [Pp]ackages/
 .idea/
+.sisyphus/
 
 Thumbs.db
 Desktop.ini

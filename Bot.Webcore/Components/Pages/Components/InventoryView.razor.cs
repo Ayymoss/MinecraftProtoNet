@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components.Web;
-using MinecraftProtoNet.Enums;
-using MinecraftProtoNet.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
 
 namespace Bot.Webcore.Components.Pages.Components;
 

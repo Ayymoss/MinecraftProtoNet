@@ -1,322 +1,347 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDescend.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Baritone.Utils.Pathing;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for stepping/falling down one block.
-/// Based on Baritone's MovementDescend.java.
+/// Movement for descending one block down.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDescend.java
 /// </summary>
-public class MovementDescend : MovementBase
+public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlockPos end)
+    : Movement(baritone, start, end, [end.Above(2), end.Above(), end], end.Below())
 {
-    private int _numTicks;
-    
-    /// <summary>
-    /// When true, forces safe mode for this movement.
-    /// Can be set by PathExecutor when context requires it.
-    /// </summary>
-    public bool ForceSafeMode { get; set; }
-
-    public MovementDescend(int srcX, int srcY, int srcZ, int destX, int destZ, MoveDirection direction)
-        : base(srcX, srcY, srcZ, destX, srcY - 1, destZ, direction)
-    {
-    }
-
-    /// <summary>
-    /// Returns valid positions for descend movement.
-    /// Based on Baritone MovementDescend.calculateValidPositions() lines 75-77.
-    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDescend.java
-    /// </summary>
-    public override HashSet<(int X, int Y, int Z)> GetValidPositions()
-    {
-        return [Source, (Destination.X, Destination.Y + 1, Destination.Z), Destination];
-    }
-
-    public override double CalculateCost(CalculationContext context)
-    {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcX = Source.X;
-        var srcY = Source.Y;
-        var srcZ = Source.Z;
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Check body and head clearance at destination
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        
-        double breakCost = 0;
-        
-        if (!MovementHelper.CanWalkThrough(destBody))
-        {
-            if (!context.AllowBreak) return ActionCosts.CostInf;
-            var time = ActionCosts.CalculateMiningDuration(1.0f, destBody.DestroySpeed, true); // Placeholder tool
-            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
-            breakCost += time;
-        }
-
-        if (!MovementHelper.CanWalkThrough(destHead))
-        {
-            if (!context.AllowBreak) return ActionCosts.CostInf;
-            var time = ActionCosts.CalculateMiningDuration(1.0f, destHead.DestroySpeed, true);
-            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
-            breakCost += time;
-        }
-
-        // Check we can walk off current position (head clearance going forward)
-        var forwardHead = context.GetBlockState(destX, srcY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(forwardHead))
-        {
-            if (!context.AllowBreak) return ActionCosts.CostInf;
-            var time = ActionCosts.CalculateMiningDuration(1.0f, forwardHead.DestroySpeed, true);
-            if (time >= ActionCosts.CostInf) return ActionCosts.CostInf;
-            breakCost += time;
-        }
-
-        if (breakCost > 0)
-        {
-            Cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) * 3 + breakCost;
-            return Cost;
-        }
-
-        // Check for dangerous blocks
-        if (MovementHelper.AvoidWalkingInto(destBody))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        // Calculate cost: walk to edge + fall + center
-        var cost = ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) + ActionCosts.CenterAfterFallCost;
-
-        // Water check at destination
-        if (MovementHelper.IsWater(destBody))
-        {
-            cost = ActionCosts.WalkOneInWaterCost;
-        }
-
-        Cost = cost;
-        return Cost;
-    }
-
-    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
-    {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcY = Source.Y;
-
-        // Check body and head clearance at destination
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody)) yield return (destX, destY, destZ);
-        if (!MovementHelper.CanWalkThrough(destHead)) yield return (destX, destY + 1, destZ);
-
-        // Check head clearance going forward (above starting position edge)
-        var forwardHead = context.GetBlockState(destX, srcY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(forwardHead)) yield return (destX, srcY + 1, destZ);
-    }
-
-    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
-    {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor) && context.HasThrowaway && MovementHelper.IsReplaceable(destFloor))
-        {
-             yield return (destX, destY - 1, destZ);
-        }
-    }
-
-    public override MovementState UpdateState(Entity entity, Level level)
-    {
-        var feet = GetFeetPosition(entity);
-
-        // Baritone line 234: fakeDest is dest projected past the actual destination in the same direction
-        // This prevents the 180-degree turn when stepping down
-        var fakeDest = (
-            X: Destination.X * 2 - Source.X,
-            Y: Destination.Y,
-            Z: Destination.Z * 2 - Source.Z
-        );
-
-        // Check if we've arrived (Baritone lines 235-241)
-        var playerAtDest = feet.X == Destination.X && feet.Z == Destination.Z;
-        var playerAtFakeDest = feet.X == fakeDest.X && feet.Z == fakeDest.Z;
-        var closeToGround = entity.Position.Y - Destination.Y < 0.5;
-        
-        if ((playerAtDest || playerAtFakeDest) && closeToGround && entity.IsOnGround)
-        {
-            State.ClearInputs();
-            State.Status = MovementStatus.Success;
-            return State;
-        }
-
-        State.Status = MovementStatus.Running;
-        
-        // Baritone line 242: Check if we should use safe mode
-        if (SafeMode(level))
-        {
-            // Safe mode: move towards a point between source and destination (83% towards dest)
-            // Baritone lines 243-250
-            var safeDestX = (Source.X + 0.5) * 0.17 + (Destination.X + 0.5) * 0.83;
-            var safeDestZ = (Source.Z + 0.5) * 0.17 + (Destination.Z + 0.5) * 0.83;
-            MoveTowardsPoint(entity, safeDestX, safeDestZ);
-            State.MoveForward = true;
-            return State;
-        }
-
-        // Calculate distance from destination and from start (Baritone lines 253-258)
-        var diffX = entity.Position.X - (Destination.X + 0.5);
-        var diffZ = entity.Position.Z - (Destination.Z + 0.5);
-        var distFromDest = Math.Sqrt(diffX * diffX + diffZ * diffZ);
-
-        var fromStartX = entity.Position.X - (Source.X + 0.5);
-        var fromStartZ = entity.Position.Z - (Source.Z + 0.5);
-        var distFromStart = Math.Sqrt(fromStartX * fromStartX + fromStartZ * fromStartZ);
-
-        // Check if we're falling (Y is below source level)
-        var isFalling = entity.Position.Y < Source.Y - 0.1;
-
-        // Baritone lines 262-268: Move towards fakeDest for first 20 ticks while close to start
-        if (feet.X != Destination.X || feet.Z != Destination.Z || distFromDest > 0.25)
-        {
-            _numTicks++;
-            
-            // CRITICAL: Only update rotation while on ground approaching the edge.
-            // Once falling, DO NOT update rotation - maintain the direction we had.
-            // This prevents yaw flip when player overshoots fakeDest during fast movement.
-            // In real Minecraft, air control is minimal so momentum carries you through.
-            if (!isFalling)
-            {
-                // Still on ground - aim toward fakeDest
-                MoveTowardsPoint(entity, fakeDest.X + 0.5, fakeDest.Z + 0.5);
-            }
-            // While falling: keep MoveForward but don't change rotation
-        }
-
-        // Can sprint while on source level (before the fall) and NOT in safe mode
-        if (entity.IsOnGround && feet.Y == Source.Y)
-        {
-            State.Sprint = true;
-        }
-
-        // Check for obstructions to break
-        // We need to clear 3 blocks at destination: destBody (Y-1), destHead (Y), destAbove (Y+1)
-        // Note: Destination.Y is source.Y - 1
-        
-        // 1. Check destBody (feet level at destination)
-        var destBody = level.GetBlockAt(Destination.X, Destination.Y, Destination.Z); 
-        if (destBody != null && !MovementHelper.CanWalkThrough(destBody))
-        {
-            State.Status = MovementStatus.Running;
-            State.ClearInputs();
-            State.BreakBlockTarget = (Destination.X, Destination.Y, Destination.Z);
-            return State;
-        }
-
-        // 2. Check destHead (head level at destination)
-        var destHead = level.GetBlockAt(Destination.X, Destination.Y + 1, Destination.Z);
-        if (destHead != null && !MovementHelper.CanWalkThrough(destHead))
-        {
-            State.Status = MovementStatus.Running;
-            State.ClearInputs();
-            State.BreakBlockTarget = (Destination.X, Destination.Y + 1, Destination.Z);
-            return State;
-        }
-
-        // 3. Check destAbove (above head at destination) - for clearance
-        var destAbove = level.GetBlockAt(Destination.X, Destination.Y + 2, Destination.Z);
-        if (destAbove != null && !MovementHelper.CanWalkThrough(destAbove))
-        {
-            State.Status = MovementStatus.Running;
-            State.ClearInputs();
-            State.BreakBlockTarget = (Destination.X, Destination.Y + 2, Destination.Z);
-            return State;
-        }
-
-        // Clear any previous break target
-        State.BreakBlockTarget = null;
-
-        // Baritone line 260: Sneak on magma blocks to avoid damage
-        var blockBelow = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);
-        if (blockBelow?.Name == "minecraft:magma_block")
-        {
-            State.Sneak = true;
-            State.Sprint = false; // Can't sprint while sneaking
-        }
-
-        State.MoveForward = true;
-
-        return State;
-    }
-    
-    /// <summary>
-    /// Determines if this descend should use safe mode.
-    /// Baritone lines 272-289.
-    /// </summary>
-    public bool SafeMode(Level level)
-    {
-        if (ForceSafeMode)
-        {
-            return true;
-        }
-        
-        // Note: Full implementation would check blocks ahead like Baritone does
-        // For now, we check if SkipToAscend would cause a glitch
-        if (SkipToAscend(level))
-        {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /// <summary>
-    /// Checks if sprinting through this descend could cause the player to glitch.
-    /// Baritone lines 291-293: returns true if dest is blocked but the blocks above are passable.
-    /// </summary>
-    public bool SkipToAscend(Level level)
-    {
-        // Baritone logic: Check if we are descending into a block that is blocked above
-        // This implies we have to jump immediately after descending
-        var destHead = level.GetBlockAt(Destination.X, Destination.Y + 1, Destination.Z);
-        var destAbove = level.GetBlockAt(Destination.X, Destination.Y + 2, Destination.Z);
-        
-        // If head or above is blocked (normal cube), it forces a "squeeze" or jump
-        // Baritone isBlockNormalCube() is essentially "blocks motion" here
-        if (destHead != null && destHead.BlocksMotion) return true;
-        if (destAbove != null && destAbove.BlocksMotion) return true;
-        
-        return false;
-    }
-
-    /// <summary>
-    /// Move towards a specific point (used for fakeDest and safe mode).
-    /// </summary>
-    private void MoveTowardsPoint(Entity entity, double targetX, double targetZ)
-    {
-        var yaw = MovementHelper.CalculateYaw(entity.Position.X, entity.Position.Z, targetX, targetZ);
-        State.SetTarget(yaw, entity.YawPitch.Y);
-        State.MoveForward = true;
-    }
+    private int _numTicks = 0;
+    private bool _forceSafeMode = false;
 
     public override void Reset()
     {
         base.Reset();
         _numTicks = 0;
-        ForceSafeMode = false;
+        _forceSafeMode = false;
+    }
+
+    /// <summary>
+    /// Called by PathExecutor if needing safeMode can only be detected with knowledge about the next movement.
+    /// </summary>
+    public void ForceSafeMode()
+    {
+        _forceSafeMode = true;
+    }
+
+    public override double CalculateCost(CalculationContext context)
+    {
+        var result = new MutableMoveResult();
+        Cost(context, Src.X, Src.Y, Src.Z, Dest.X, Dest.Z, result);
+        if (result.Y != Dest.Y)
+        {
+            return ActionCosts.CostInf; // doesn't apply to us, this position is a fall not a descend
+        }
+
+        return result.Cost;
+    }
+
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
+    {
+        return new HashSet<BetterBlockPos> { Src, Dest.Above(), Dest };
+    }
+
+    public static void Cost(CalculationContext context, int x, int y, int z, int destX, int destZ, MutableMoveResult res)
+    {
+        double totalCost = 0;
+        var destDown = context.Get(destX, y - 1, destZ);
+        totalCost += MovementHelper.GetMiningDurationTicks(context, destX, y - 1, destZ, destDown, false);
+        if (totalCost >= ActionCosts.CostInf)
+        {
+            return;
+        }
+
+        totalCost += MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, false);
+        if (totalCost >= ActionCosts.CostInf)
+        {
+            return;
+        }
+
+        totalCost += MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, true);
+        if (totalCost >= ActionCosts.CostInf)
+        {
+            return;
+        }
+
+        var fromDown = context.Get(x, y - 1, z);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:96
+        // Check for ladder/vine
+        string fromDownName = fromDown.Name;
+        bool isClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                          fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        if (isClimbable)
+        {
+            // Can descend on climbable blocks
+        }
+
+        var below = context.Get(destX, y - 2, destZ);
+        if (!MovementHelper.CanWalkOn(context, destX, y - 2, destZ, below))
+        {
+            DynamicFallCost(context, x, y, z, destX, destZ, totalCost, below, res);
+            return;
+        }
+
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:105
+        // Check for ladder/vine, frost walker
+        string destDownName = destDown.Name;
+        // Reuse isClimbable from above (declared at line 99)
+        bool isClimbable2 = destDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                          destDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        if (isClimbable2)
+        {
+            // Can descend on climbable blocks
+        }
+        if (MovementHelper.CanUseFrostWalker(context, destDown))
+        {
+            return;
+        }
+
+        double walk = ActionCosts.WalkOffBlockCost;
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:112
+        // Check for soul sand (slows movement)
+        // Reuse destDownName from above
+        if (destDownName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase))
+        {
+            walk *= 2.0;
+        }
+        totalCost += walk + Math.Max(ActionCosts.FallNBlocksCost[1], ActionCosts.CenterAfterFallCost);
+        res.X = destX;
+        res.Y = y - 1;
+        res.Z = destZ;
+        res.Cost = totalCost;
+    }
+
+    public static bool DynamicFallCost(CalculationContext context, int x, int y, int z, int destX, int destZ, double frontBreak,
+        BlockState below, MutableMoveResult res)
+    {
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:123-126
+        // Check for falling blocks
+        string belowName = below.Name;
+        bool isFallingBlock = belowName.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
+                             belowName.Contains("sand", StringComparison.OrdinalIgnoreCase);
+        if (frontBreak != 0 && isFallingBlock)
+        {
+            // Add cost for breaking falling blocks
+            frontBreak += MovementHelper.GetMiningDurationTicks(context, destX, y - 1, destZ, below, true);
+        }
+
+        if (!MovementHelper.CanWalkThrough(context, destX, y - 2, destZ, below))
+        {
+            return false;
+        }
+
+        double costSoFar = 0;
+        int effectiveStartHeight = y;
+        for (int fallHeight = 3; true; fallHeight++)
+        {
+            int newY = y - fallHeight;
+            if (newY < context.World.DimensionType.MinY)
+            {
+                return false;
+            }
+
+            bool reachedMinimum = fallHeight >= context.MinFallHeight;
+            var ontoBlock = context.Get(destX, newY, destZ);
+            int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight);
+            double tentativeCost = ActionCosts.WalkOffBlockCost +
+                                   ActionCosts.FallNBlocksCost[Math.Min(unprotectedFallHeight, ActionCosts.FallNBlocksCost.Length - 1)] +
+                                   frontBreak + costSoFar;
+
+            if (reachedMinimum && MovementHelper.IsWater(ontoBlock))
+            {
+                if (!MovementHelper.CanWalkThrough(context, destX, newY, destZ, ontoBlock))
+                {
+                    return false;
+                }
+
+                if (context.AssumeWalkOnWater)
+                {
+                    return false;
+                }
+
+                if (MovementHelper.IsFlowing(destX, newY, destZ, ontoBlock, context.Bsi))
+                {
+                    return false;
+                }
+
+                if (!MovementHelper.CanWalkOn(context, destX, newY - 1, destZ))
+                {
+                    return false;
+                }
+
+                res.X = destX;
+                res.Y = newY;
+                res.Z = destZ;
+                res.Cost = tentativeCost;
+                return false;
+            }
+
+            if (reachedMinimum && context.AllowFallIntoLava && MovementHelper.IsLava(ontoBlock))
+            {
+                res.X = destX;
+                res.Y = newY;
+                res.Z = destZ;
+                res.Cost = tentativeCost;
+                return false;
+            }
+
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:189
+            // Check for vine/ladder
+            string ontoName = ontoBlock.Name;
+            bool isClimbable = ontoName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                              ontoName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+            if (isClimbable || MovementHelper.CanWalkThrough(context, destX, newY, destZ, ontoBlock))
+            {
+                continue;
+            }
+
+            if (!MovementHelper.CanWalkOn(context, destX, newY, destZ, ontoBlock))
+            {
+                return false;
+            }
+
+            if (MovementHelper.IsBottomSlab(ontoBlock))
+            {
+                return false;
+            }
+
+            if (reachedMinimum && unprotectedFallHeight <= context.MaxFallHeightNoWater + 1)
+            {
+                res.X = destX;
+                res.Y = newY + 1;
+                res.Z = destZ;
+                res.Cost = tentativeCost;
+                return false;
+            }
+
+            if (reachedMinimum && context.HasWaterBucket && unprotectedFallHeight <= context.MaxFallHeightBucket + 1)
+            {
+                res.X = destX;
+                res.Y = newY + 1;
+                res.Z = destZ;
+                res.Cost = tentativeCost + context.PlaceBucketCost();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    public override MovementState UpdateState(MovementState state)
+    {
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
+        }
+
+        var playerFeet = Ctx.PlayerFeet();
+        var fakeDest = new BetterBlockPos(Dest.X * 2 - Src.X, Dest.Y, Dest.Z * 2 - Src.Z);
+        if (playerFeet != null && (playerFeet.Equals(Dest) || playerFeet.Equals(fakeDest)) &&
+            (MovementHelper.IsLiquid(Ctx, Dest) || ((Ctx.Player() as Entity)?.Position.Y ?? 0) - Dest.Y < 0.5))
+        {
+            return state.SetStatus(MovementStatus.Success);
+        }
+
+        if (SafeMode())
+        {
+            double destX = (Src.X + 0.5) * 0.17 + (Dest.X + 0.5) * 0.83;
+            double destZ = (Src.Z + 0.5) * 0.17 + (Dest.Z + 0.5) * 0.83;
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:249
+            // Set target rotation and move forward
+            var destPos = new BetterBlockPos((int)Math.Floor(destX), Dest.Y, (int)Math.Floor(destZ));
+            MovementHelper.MoveTowards(Ctx, state, destPos);
+            return state;
+        }
+
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:254
+        // Complex movement logic
+        var player = Ctx.Player() as Entity;
+        if (player != null && playerFeet != null && !playerFeet.Equals(Dest))
+        {
+            double diffX = player.Position.X - (Dest.X + 0.5);
+            double diffZ = player.Position.Z - (Dest.Z + 0.5);
+            double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+            double x = player.Position.X - (Src.X + 0.5);
+            double z = player.Position.Z - (Src.Z + 0.5);
+            double fromStart = Math.Sqrt(x * x + z * z);
+
+            if (!playerFeet.Equals(Dest) || ab > 0.25)
+            {
+                if (_numTicks++ < 20 && fromStart < 1.25)
+                {
+                    MovementHelper.MoveTowards(Ctx, state, fakeDest);
+                }
+                else
+                {
+                    MovementHelper.MoveTowards(Ctx, state, Dest);
+                }
+            }
+        }
+
+        return state;
+    }
+
+    public bool SafeMode()
+    {
+        if (_forceSafeMode)
+        {
+            return true;
+        }
+
+        var into = new BetterBlockPos(Dest.X + (Dest.X - Src.X), Dest.Y, Dest.Z + (Dest.Z - Src.Z));
+        if (SkipToAscend())
+        {
+            return true;
+        }
+
+        for (int y = 0; y <= 2; y++)
+        {
+            if (MovementHelper.AvoidWalkingInto(BlockStateInterface.Get(Ctx, into.Above(y))))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public bool SkipToAscend()
+    {
+        var into = new BetterBlockPos(Dest.X + (Dest.X - Src.X), Dest.Y, Dest.Z + (Dest.Z - Src.Z));
+        return !MovementHelper.CanWalkThrough(Ctx, into) &&
+               MovementHelper.CanWalkThrough(Ctx, into.Above()) &&
+               MovementHelper.CanWalkThrough(Ctx, into.Above(2));
     }
 }
-

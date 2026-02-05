@@ -1,7 +1,10 @@
-using MinecraftProtoNet.Commands;
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Behavior;
 using MinecraftProtoNet.Core;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State.Base;
+using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace Bot.Webcore.Services;
 
@@ -12,6 +15,7 @@ namespace Bot.Webcore.Services;
 public class BotService : IDisposable
 {
     private readonly IMinecraftClient _client;
+    private readonly IBaritoneProvider _baritoneProvider;
     private readonly System.Timers.Timer? _refreshTimer;
 
     public event Action? OnStateChanged;
@@ -22,15 +26,15 @@ public class BotService : IDisposable
         IItemRegistryService itemRegistry,
         CommandRegistry commandRegistry,
         IInventoryManager inventoryManager,
-        IPathingService pathingService,
+        IBaritoneProvider baritoneProvider,
         IContainerManager containerManager)
     {
         _client = client;
+        _baritoneProvider = baritoneProvider;
         State = state;
         ItemRegistry = itemRegistry;
         CommandRegistry = commandRegistry;
         InventoryManager = inventoryManager;
-        PathingService = pathingService;
         ContainerManager = containerManager;
         
         // Listen for disconnect events to update UI
@@ -52,8 +56,6 @@ public class BotService : IDisposable
         {
             state.Level.OnPlayersChanged += NotifyStateChanged;
         }
-        
-        pathingService.OnStateChanged += NotifyStateChanged;
 
         // Container events
         if (containerManager != null)
@@ -72,8 +74,31 @@ public class BotService : IDisposable
     public IItemRegistryService ItemRegistry { get; }
     public CommandRegistry CommandRegistry { get; }
     public IInventoryManager InventoryManager { get; }
-    public IPathingService PathingService { get; }
     public IContainerManager ContainerManager { get; }
+    
+    /// <summary>
+    /// Gets the Baritone pathing behavior for UI binding.
+    /// Returns null if Baritone is not available.
+    /// </summary>
+    public IPathingBehavior? PathingBehavior
+    {
+        get
+        {
+            try
+            {
+                var baritones = _baritoneProvider.GetAllBaritones();
+                if (baritones.Count == 0)
+                {
+                    return null;
+                }
+                return baritones[0].GetPathingBehavior();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
     
     // Expose client for command execution
     public IMinecraftClient Client => _client;
@@ -127,8 +152,6 @@ public class BotService : IDisposable
         {
             State.Level.OnPlayersChanged -= NotifyStateChanged;
         }
-        
-        PathingService.OnStateChanged -= NotifyStateChanged;
     }
 }
 

@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Components;
-using MinecraftProtoNet.State;
+using MinecraftProtoNet.Core.State;
 
 namespace Bot.Webcore.Components.Pages.Components;
 

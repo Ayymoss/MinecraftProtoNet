@@ -1,247 +1,309 @@
-using MinecraftProtoNet.Pathfinding.Calc;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.Baritone.Pathfinding.Calc;
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDiagonal.java
+ */
+
+using MinecraftProtoNet.Baritone.Api;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Baritone.Api.Utils.Input;
+using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Baritone.Utils.Pathing;
+using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Physics;
+using MinecraftProtoNet.Core.State;
+using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 
 /// <summary>
-/// Movement for diagonal movement (moving diagonally in X and Z).
-/// Based on Baritone's MovementDiagonal.java.
+/// Movement for moving diagonally between blocks.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDiagonal.java
 /// </summary>
-public class MovementDiagonal : MovementBase
+public class MovementDiagonal : Movement
 {
-    private int _ticksWithoutProgress;
+    private readonly BlockFace _face1;
+    private readonly BlockFace _face2;
 
-    public MovementDiagonal(int srcX, int srcY, int srcZ, int destX, int destY, int destZ, MoveDirection direction)
-        : base(srcX, srcY, srcZ, destX, destY, destZ, direction)
+    public MovementDiagonal(IBaritone baritone, BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
+        : base(baritone, src, GetDest(src, face1, face2, yOffset), GetToBreak(src, face1, face2, yOffset), GetToWalkOn(src, face1, face2, yOffset))
     {
+        _face1 = face1;
+        _face2 = face2;
     }
 
-    /// <summary>
-    /// Returns valid positions for diagonal movement.
-    /// Based on Baritone MovementDiagonal.calculateValidPositions() lines 99-109.
-    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementDiagonal.java
-    /// </summary>
-    public override HashSet<(int X, int Y, int Z)> GetValidPositions()
+    private static BetterBlockPos GetDest(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
     {
-        var diagA = (Source.X, Source.Y, Destination.Z);
-        var diagB = (Destination.X, Source.Y, Source.Z);
+        var pos = GetRelative(src, face1);
+        pos = GetRelative(pos, face2);
+        return new BetterBlockPos(pos.X, pos.Y + yOffset, pos.Z);
+    }
+
+    private static BetterBlockPos[] GetToBreak(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
+    {
+        var dest = GetDest(src, face1, face2, yOffset);
+        var diag1 = GetRelative(src, face1);
+        var diag2 = GetRelative(src, face2);
         
-        if (Destination.Y < Source.Y) // Descending diagonal
+        var list = new List<BetterBlockPos> { dest, dest.Above() };
+        
+        if (yOffset > 0)
         {
-            return [Source, (Destination.X, Destination.Y + 1, Destination.Z), diagA, diagB, 
-                    Destination, (diagA.X, diagA.Y - 1, diagA.Item3), (diagB.X, diagB.Y - 1, diagB.Item3)];
+            list.Add(src.Above(2));
         }
-        if (Destination.Y > Source.Y) // Ascending diagonal
+        else if (yOffset < 0)
         {
-            return [Source, (Source.X, Source.Y + 1, Source.Z), diagA, diagB, 
-                    Destination, (diagA.X, diagA.Y + 1, diagA.Item3), (diagB.X, diagB.Y + 1, diagB.Item3)];
+            list.Add(dest.Above(2));
         }
-        // Same level diagonal
-        return [Source, Destination, diagA, diagB];
+        
+        return list.ToArray();
+    }
+
+    private static BetterBlockPos? GetToWalkOn(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
+    {
+        return GetDest(src, face1, face2, yOffset).Below();
+    }
+
+    private static BetterBlockPos GetRelative(BetterBlockPos pos, BlockFace face)
+    {
+        return face switch
+        {
+            BlockFace.North => pos.North(),
+            BlockFace.South => pos.South(),
+            BlockFace.East => pos.East(),
+            BlockFace.West => pos.West(),
+            _ => pos
+        };
+    }
+
+    protected override bool SafeToCancel(MovementState state)
+    {
+        var player = Ctx.Player() as Entity;
+        if (player == null)
+        {
+            return true;
+        }
+        
+        var feet = Ctx.PlayerFeet();
+        if (feet == null)
+        {
+            return true;
+        }
+        
+        double offset = 0.25;
+        double x = player.Position.X;
+        double y = player.Position.Y - 1;
+        double z = player.Position.Z;
+        
+        if (feet.Equals(Src))
+        {
+            return true;
+        }
+        
+        // Both corners are walkable
+        if (MovementHelper.CanWalkOn(Ctx, new BetterBlockPos(Src.X, Src.Y - 1, Dest.Z)) &&
+            MovementHelper.CanWalkOn(Ctx, new BetterBlockPos(Dest.X, Src.Y - 1, Src.Z)))
+        {
+            return true;
+        }
+        
+        // We are in a likely unwalkable corner, check for a supporting block
+        var corner1 = new BetterBlockPos(Src.X, Src.Y, Dest.Z);
+        var corner2 = new BetterBlockPos(Dest.X, Src.Y, Src.Z);
+        if (feet.Equals(corner1) || feet.Equals(corner2))
+        {
+            return MovementHelper.CanWalkOn(Ctx, new BetterBlockPos((int)Math.Floor(x + offset), (int)Math.Floor(y), (int)Math.Floor(z + offset))) ||
+                   MovementHelper.CanWalkOn(Ctx, new BetterBlockPos((int)Math.Floor(x + offset), (int)Math.Floor(y), (int)Math.Floor(z - offset))) ||
+                   MovementHelper.CanWalkOn(Ctx, new BetterBlockPos((int)Math.Floor(x - offset), (int)Math.Floor(y), (int)Math.Floor(z + offset))) ||
+                   MovementHelper.CanWalkOn(Ctx, new BetterBlockPos((int)Math.Floor(x - offset), (int)Math.Floor(y), (int)Math.Floor(z - offset)));
+        }
+        return true;
     }
 
     public override double CalculateCost(CalculationContext context)
     {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcX = Source.X;
-        var srcY = Source.Y;
-        var srcZ = Source.Z;
-
-        var dy = destY - srcY;
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor)) return ActionCosts.CostInf;
-
-        // Check body and head clearance at destination
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody) || !MovementHelper.CanWalkThrough(destHead)) return ActionCosts.CostInf;
-
-        var dx = destX - srcX;
-        var dz = destZ - srcZ;
-
-        // Intermediate corner checks
-        var cornerABody = context.GetBlockState(srcX + dx, srcY, srcZ);
-        var cornerAHead = context.GetBlockState(srcX + dx, srcY + 1, srcZ);
-        var cornerBBody = context.GetBlockState(srcX, srcY, srcZ + dz);
-        var cornerBHead = context.GetBlockState(srcX, srcY + 1, srcZ + dz);
-
-        bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
-        bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
-        
-        if (!canA && !canB) return ActionCosts.CostInf;
-
-        if (dy > 0) // Ascend
+        var result = new MutableMoveResult();
+        Cost(context, Src.X, Src.Y, Src.Z, Dest.X, Dest.Z, result);
+        if (result.Y != Dest.Y)
         {
-            var srcCeil = context.GetBlockState(srcX, srcY + 2, srcZ);
-            if (!MovementHelper.CanWalkThrough(srcCeil)) return ActionCosts.CostInf;
-
-            var cornerACeil = context.GetBlockState(srcX + dx, srcY + 2, srcZ);
-            var cornerBCeil = context.GetBlockState(srcX, srcY + 2, srcZ + dz);
-            
-            bool canACeil = canA && MovementHelper.CanWalkThrough(cornerACeil);
-            bool canBCeil = canB && MovementHelper.CanWalkThrough(cornerBCeil);
-            
-            if (!canACeil && !canBCeil) return ActionCosts.CostInf;
+            return ActionCosts.CostInf; // doesn't apply to us, this position is incorrect
         }
-
-        var multiplier = context.CanSprint ? ActionCosts.SprintMultiplier : 1.0;
-        var cost = ActionCosts.WalkOneBlockCost * Math.Sqrt(2) * multiplier;
-        
-        if (dy > 0) cost += ActionCosts.JumpOneBlockCost + context.JumpPenalty;
-        if (dy < 0) cost += ActionCosts.WalkOffBlockCost + ActionCosts.GetFallCost(1) + ActionCosts.CenterAfterFallCost;
-
-        Cost = cost;
-        return Cost;
+        return result.Cost;
     }
 
-    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToBreak(CalculationContext context)
+    protected override HashSet<BetterBlockPos> CalculateValidPositions()
     {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-        var srcX = Source.X;
-        var srcY = Source.Y;
-        var srcZ = Source.Z;
-
-        var dy = destY - srcY;
-        var dx = destX - srcX;
-        var dz = destZ - srcZ;
-
-        // Destination body and head
-        var destBody = context.GetBlockState(destX, destY, destZ);
-        var destHead = context.GetBlockState(destX, destY + 1, destZ);
-        if (!MovementHelper.CanWalkThrough(destBody)) yield return (destX, destY, destZ);
-        if (!MovementHelper.CanWalkThrough(destHead)) yield return (destX, destY + 1, destZ);
-
-        // Intermediate corner checks
-        // We need EITHER corner A (Body+Head) OR corner B (Body+Head) clear
-        // If both blocked, we break one set (prefer A for simplicity or closeness)
-        
-        var cornerABody = context.GetBlockState(srcX + dx, srcY, srcZ);
-        var cornerAHead = context.GetBlockState(srcX + dx, srcY + 1, srcZ);
-        bool canA = MovementHelper.CanWalkThrough(cornerABody) && MovementHelper.CanWalkThrough(cornerAHead);
-        
-        var cornerBBody = context.GetBlockState(srcX, srcY, srcZ + dz);
-        var cornerBHead = context.GetBlockState(srcX, srcY + 1, srcZ + dz);
-        bool canB = MovementHelper.CanWalkThrough(cornerBBody) && MovementHelper.CanWalkThrough(cornerBHead);
-
-        if (!canA && !canB)
+        var diagA = new BetterBlockPos(Src.X, Src.Y, Dest.Z);
+        var diagB = new BetterBlockPos(Dest.X, Src.Y, Src.Z);
+        if (Dest.Y < Src.Y)
         {
-            // Both blocked, break A
-            if (!MovementHelper.CanWalkThrough(cornerABody)) yield return (srcX + dx, srcY, srcZ);
-            if (!MovementHelper.CanWalkThrough(cornerAHead)) yield return (srcX + dx, srcY + 1, srcZ);
+            return new HashSet<BetterBlockPos> { Src, Dest.Above(), diagA, diagB, Dest, diagA.Below(), diagB.Below() };
         }
-
-        if (dy > 0) // Ascend diagonal
+        if (Dest.Y > Src.Y)
         {
-            var srcCeil = context.GetBlockState(srcX, srcY + 2, srcZ);
-            if (!MovementHelper.CanWalkThrough(srcCeil)) yield return (srcX, srcY + 2, srcZ);
+            return new HashSet<BetterBlockPos> { Src, Src.Above(), diagA, diagB, Dest, diagA.Above(), diagB.Above() };
+        }
+        return new HashSet<BetterBlockPos> { Src, Dest, diagA, diagB };
+    }
 
-            var cornerACeil = context.GetBlockState(srcX + dx, srcY + 2, srcZ);
-            var cornerBCeil = context.GetBlockState(srcX, srcY + 2, srcZ + dz);
-            
-            bool canACeil = canA && MovementHelper.CanWalkThrough(cornerACeil);
-            bool canBCeil = canB && MovementHelper.CanWalkThrough(cornerBCeil);
-
-            if (!canACeil && !canBCeil)
+    public static void Cost(CalculationContext context, int x, int y, int z, int destX, int destZ, MutableMoveResult res)
+    {
+        if (!MovementHelper.CanWalkThrough(context, destX, y + 1, destZ))
+        {
+            return;
+        }
+        var destInto = context.Get(destX, y, destZ);
+        BlockState fromDown;
+        bool ascend = false;
+        BlockState destWalkOn;
+        bool descend = false;
+        bool frostWalker = false;
+        
+        if (!MovementHelper.CanWalkThrough(context, destX, y, destZ, destInto))
+        {
+            double cost = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, destInto, false);
+            if (cost >= ActionCosts.CostInf)
             {
-                // Both paths blocked above, break A path ceiling if we chose A, or just A ceiling
-                if (!MovementHelper.CanWalkThrough(cornerACeil)) yield return (srcX + dx, srcY + 2, srcZ);
+                return;
             }
-        }
-    }
-
-    public override IEnumerable<(int X, int Y, int Z)> GetBlocksToPlace(CalculationContext context)
-    {
-        var destX = Destination.X;
-        var destY = Destination.Y;
-        var destZ = Destination.Z;
-
-        // Check destination floor
-        var destFloor = context.GetBlockState(destX, destY - 1, destZ);
-        if (!MovementHelper.CanWalkOn(destFloor) && context.HasThrowaway && MovementHelper.IsReplaceable(destFloor))
-        {
-             yield return (destX, destY - 1, destZ);
-        }
-    }
-
-    public override MovementState UpdateState(Entity entity, Level level)
-    {
-        if (HasReachedDestination(entity))
-        {
-            State.Status = MovementStatus.Success;
-            State.ClearInputs();
-            return State;
-        }
-
-        // Clear interaction inputs for the new tick
-        State.ClearInputs();
-        State.BreakBlockTarget = null;
-        State.PlaceBlockTarget = null;
-
-        var dy = Destination.Y - Source.Y;
-        State.Status = MovementStatus.Running;
-        MoveTowards(entity);
-
-        // Clear placement targets
-        State.RightClick = false;
-        State.PlaceBlockTarget = null;
-
-        // Check for bridging
-        var destFloor = level.GetBlockAt(Destination.X, Destination.Y - 1, Destination.Z);
-        if (!MovementHelper.CanWalkOn(destFloor))
-        {
-            State.Sneak = true;
-            State.Sprint = false;
-            State.RightClick = true;
-            State.PlaceBlockTarget = (Destination.X, Destination.Y - 1, Destination.Z);
+            res.Cost += cost;
+            destWalkOn = destInto;
+            fromDown = context.Get(x, y - 1, z);
         }
         else
         {
-            // Normal movement
-            State.Sprint = true;
-        }
-
-        // Baritone line 280: Sneak on magma blocks to avoid damage
-        var feet = GetFeetPosition(entity);
-        var blockBelow = level.GetBlockAt(feet.X, feet.Y - 1, feet.Z);
-        if (blockBelow?.Name == "minecraft:magma_block")
-        {
-            State.Sneak = true;
-        }
-        else
-        {
-            State.Sprint = true;
-        }
-
-        if (dy > 0 && entity.IsOnGround)
-        {
-            // Baritone-style jump timing
-            var flatDist = Math.Sqrt(Math.Pow(entity.Position.X - (Destination.X + 0.5), 2) + Math.Pow(entity.Position.Z - (Destination.Z + 0.5), 2));
-            if (flatDist <= 1.2)
+            destWalkOn = context.Get(destX, y - 1, destZ);
+            fromDown = context.Get(x, y - 1, z);
+            bool standingOnABlock = MovementHelper.MustBeSolidToWalkOn(context, x, y - 1, z, fromDown);
+            frostWalker = standingOnABlock && MovementHelper.CanUseFrostWalker(context, destWalkOn);
+            if (!frostWalker && !MovementHelper.CanWalkOn(context, destX, y - 1, destZ, destWalkOn))
             {
-                State.Jump = true;
+                descend = true;
+                if (!context.AllowDiagonalDescend || 
+                    !MovementHelper.CanWalkOn(context, destX, y - 2, destZ) || 
+                    !MovementHelper.CanWalkThrough(context, destX, y - 1, destZ, destWalkOn))
+                {
+                    return;
+                }
+            }
+            frostWalker &= !context.AssumeWalkOnWater;
+        }
+        
+        double multiplier = ActionCosts.WalkOneBlockCost;
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:181
+        // Check for soul sand, water, frost walker
+        string destWalkOnName = destWalkOn.Name;
+        bool onSoulSand = destWalkOnName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
+        if (onSoulSand)
+        {
+            multiplier *= 2.0; // Soul sand slows movement
+        }
+        if (MovementHelper.IsWater(destInto) || MovementHelper.IsWater(destWalkOn))
+        {
+            multiplier = context.WaterWalkSpeed;
+        }
+        if (frostWalker)
+        {
+            multiplier = ActionCosts.WalkOneBlockCost; // Frost walker allows normal walking on water
+        }
+        
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:183
+        // Check for fromDown block type
+        string fromDownName = fromDown.Name;
+        bool onClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) || 
+                          fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        if (onClimbable)
+        {
+            multiplier *= 2.0; // Climbable blocks slow movement
+        }
+
+        res.Cost += multiplier * Math.Sqrt(2);
+        res.X = destX;
+        res.Y = descend ? y - 1 : (ascend ? y + 1 : y);
+        res.Z = destZ;
+    }
+
+    public override MovementState UpdateState(MovementState state)
+    {
+        base.UpdateState(state);
+        if (state.GetStatus() != MovementStatus.Running)
+        {
+            return state;
+        }
+
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && feet.Equals(Dest))
+        {
+            return state.SetStatus(MovementStatus.Success);
+        }
+        else if (!PlayerInValidPosition())
+        {
+            // Check for liquid special case
+            if (!(MovementHelper.IsLiquid(Ctx, Src) && GetValidPositions().Contains(feet?.Above() ?? Src)))
+            {
+                return state.SetStatus(MovementStatus.Unreachable);
             }
         }
 
-        _ticksWithoutProgress++;
-        if (_ticksWithoutProgress > 100)
+        if (Dest.Y > Src.Y && ((Entity)Ctx.Player()!).Position.Y < Src.Y + 0.1 && ((Entity)Ctx.Player()!).HorizontalCollision)
         {
-            State.Status = MovementStatus.Failed;
+            state.SetInput(BaritoneInput.Jump, true);
         }
 
-        return State;
+        if (Sprint())
+        {
+            state.SetInput(BaritoneInput.Sprint, true);
+        }
+
+        var player = Ctx.Player() as Entity;
+        if (player != null)
+        {
+            double diffX = player.Position.X - (Dest.X + 0.5);
+            double diffZ = player.Position.Z - (Dest.Z + 0.5);
+            double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+
+            if (feet == null || !feet.Equals(Dest) || ab > 0.25)
+            {
+                MovementHelper.MoveTowards(Ctx, state, Dest);
+            }
+        }
+        return state;
     }
 
-    public override void Reset()
+    private bool Sprint()
     {
-        base.Reset();
-        _ticksWithoutProgress = 0;
+        var feet = Ctx.PlayerFeet();
+        if (feet != null && MovementHelper.IsLiquid(Ctx, feet) && !Core.Baritone.Settings().SprintInWater.Value)
+        {
+            return false;
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            if (!MovementHelper.CanWalkThrough(Ctx, PositionsToBreak[i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    protected override bool Prepared(MovementState state)
+    {
+        return true;
     }
 }

@@ -1,94 +1,102 @@
-using MinecraftProtoNet.Pathfinding;
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/PathNode.java
+ */
+
+using MinecraftProtoNet.Baritone.Api.Pathing.Goals;
+using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
+using MinecraftProtoNet.Baritone.Api.Utils;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Calc;
 
 /// <summary>
-/// Represents a node in the A* pathfinding graph.
-/// Based on Baritone's PathNode.java.
+/// A node in the path, containing the cost and steps to get to it.
+/// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/PathNode.java
 /// </summary>
-public class PathNode
+public sealed class PathNode
 {
     /// <summary>
-    /// X coordinate of this node.
+    /// The position of this node
     /// </summary>
-    public int X { get; }
+    public readonly int X;
+    public readonly int Y;
+    public readonly int Z;
 
     /// <summary>
-    /// Y coordinate of this node.
+    /// Cached, should always be equal to goal.heuristic(pos)
     /// </summary>
-    public int Y { get; }
+    public readonly double EstimatedCostToGoal;
 
     /// <summary>
-    /// Z coordinate of this node.
+    /// Total cost of getting from start to here.
+    /// Mutable and changed by PathFinder
     /// </summary>
-    public int Z { get; }
+    public double Cost;
 
     /// <summary>
-    /// Hash code for quick lookup.
+    /// Should always be equal to estimatedCostToGoal + cost.
+    /// Mutable and changed by PathFinder
     /// </summary>
-    public long HashCode { get; }
+    public double CombinedCost;
 
     /// <summary>
-    /// The g-cost: actual cost from the start node to this node.
+    /// In the graph search, what previous node contributed to the cost.
+    /// Mutable and changed by PathFinder
     /// </summary>
-    public double Cost { get; set; } = ActionCosts.CostInf;
+    public PathNode? Previous;
 
     /// <summary>
-    /// The h-cost: estimated cost from this node to the goal.
+    /// Where is this node in the array flattenization of the binary heap? Needed for decrease-key operations.
     /// </summary>
-    public double EstimatedCostToGoal { get; set; }
+    public int HeapPosition;
 
-    /// <summary>
-    /// The f-cost: combined cost (g + h).
-    /// </summary>
-    public double CombinedCost { get; set; } = ActionCosts.CostInf;
-
-    /// <summary>
-    /// Parent node in the path.
-    /// </summary>
-    public PathNode? Previous { get; set; }
-
-    /// <summary>
-    /// Index in the binary heap for O(log n) updates.
-    /// -1 means not in the open set.
-    /// </summary>
-    public int HeapIndex { get; set; } = -1;
-
-    public PathNode(int x, int y, int z)
+    public PathNode(int x, int y, int z, Goal goal)
     {
+        Previous = null;
+        Cost = ActionCosts.CostInf;
+        EstimatedCostToGoal = goal.Heuristic(x, y, z);
+        if (double.IsNaN(EstimatedCostToGoal))
+        {
+            throw new InvalidOperationException(
+                $"{goal} calculated implausible heuristic NaN at {x} {y} {z}");
+        }
+        HeapPosition = -1;
         X = x;
         Y = y;
         Z = z;
-        HashCode = CalculateHash(x, y, z);
     }
 
-    /// <summary>
-    /// Returns whether this node is currently in the open set.
-    /// </summary>
-    public bool IsOpen() => HeapIndex >= 0;
-
-    /// <summary>
-    /// Calculates a unique hash for the given coordinates.
-    /// Uses long to ensure unique values for all possible Minecraft coordinates.
-    /// </summary>
-    public static long CalculateHash(int x, int y, int z)
+    public bool IsOpen()
     {
-        // Pack coordinates into a long (Minecraft's BetterBlockPos.longHash approach)
-        // Y is limited to 0-319 (or -64 to 320 with 1.18+), so 10 bits is enough
-        // X and Z can be +/- 30 million, so need 26 bits each
-        return ((long)(uint)(x + 30000000) << 36) | ((long)(uint)(z + 30000000) << 10) | (uint)(y + 64);
+        return HeapPosition != -1;
+    }
+
+    public override int GetHashCode()
+    {
+        return (int)BetterBlockPos.LongHash(X, Y, Z);
     }
 
     public override bool Equals(object? obj)
     {
-        if (obj is PathNode other)
+        if (obj is not PathNode other)
         {
-            return X == other.X && Y == other.Y && Z == other.Z;
+            return false;
         }
-        return false;
+        return X == other.X && Y == other.Y && Z == other.Z;
     }
-
-    public override int GetHashCode() => (int)HashCode;
-
-    public override string ToString() => $"PathNode({X}, {Y}, {Z}, cost={Cost:F2})";
 }
+

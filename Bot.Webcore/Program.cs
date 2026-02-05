@@ -1,11 +1,10 @@
 using Bot.Webcore.Components;
 using Bot.Webcore.Services;
-using MinecraftProtoNet.Services;
-using MinecraftProtoNet.State;
-using MinecraftProtoNet.Utilities;
-using MinecraftProtoNet.Baritone.Infrastructure;
-using MinecraftProtoNet.Baritone.Pathfinding;
-using MinecraftProtoNet.Commands;
+using MinecraftProtoNet.Baritone.Utilities;
+using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Services;
+using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.Utilities;
 
 namespace Bot.Webcore;
 
@@ -40,9 +39,16 @@ public class Program
         // Set static registry in EntityInventory
         EntityInventory.SetRegistryService(registryService);
         
+        // Set static registry in Baritone
+        MinecraftProtoNet.Baritone.Core.Baritone.SetItemRegistryService(registryService);
+        
+        // Ensure BaritoneGameLoopHook is constructed to attach the hook
+        // This forces the singleton to be created and hook to the game loop
+        app.Services.GetRequiredService<MinecraftProtoNet.Baritone.Utilities.ServiceCollectionExtensions.BaritoneGameLoopHook>();
+        
         // Register Baritone commands
         var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
-        commandRegistry.AutoRegisterCommands(app.Services, typeof(PathingService).Assembly);
+        commandRegistry.AutoRegisterCommands(app.Services, typeof(MinecraftProtoNet.Baritone.Commands.BaritoneCommand).Assembly);
 
         // Configure the HTTP request pipeline
         if (!app.Environment.IsDevelopment())
