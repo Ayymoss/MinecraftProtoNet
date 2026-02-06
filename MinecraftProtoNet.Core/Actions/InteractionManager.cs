@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Data;
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Packets.Base.Definitions;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace MinecraftProtoNet.Core.Actions;
 
@@ -21,6 +24,13 @@ public class InteractionManager : IInteractionManager
     private bool _isBreakingBlock;
     private long _startBreakingTick;
     private double _totalBreakingTicks;
+    
+    /// <summary>
+    /// The last held slot index that was sent to the server.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:81
+    /// Java field: private int carriedIndex;
+    /// </summary>
+    private short _lastSentCarriedSlot = -1;
 
     public InteractionManager(IMinecraftClient client, ILogger<InteractionManager> logger)
     {
@@ -32,6 +42,10 @@ public class InteractionManager : IInteractionManager
     {
         if (!_client.State.LocalPlayer.HasEntity) return false;
         var entity = _client.State.LocalPlayer.Entity;
+        
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:221
+        // Java calls ensureHasSentCarriedItem() in continueDestroyBlock
+        await EnsureHasSentCarriedItemAsync();
 
         var tick = _client.State.Level.ClientTickCounter;
 
@@ -80,7 +94,11 @@ public class InteractionManager : IInteractionManager
 
         _logger.LogInformation("Digging block at {Pos} (Face={Face}) started", pos, face);
         
-        // Calculate mining time
+        // Calculate mining time using the same formula as Java client
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/state/BlockBehaviour.java:328-336
+        // getDestroyProgress = playerDestroySpeed / blockDestroySpeed / modifier
+        // modifier = 30 if correct tool, 100 otherwise
+        // ticks to break = 1.0 / getDestroyProgress
         var block = _client.State.Level.GetBlockAt(pos.X, pos.Y, pos.Z);
         if (block == null) return false;
 
@@ -91,9 +109,15 @@ public class InteractionManager : IInteractionManager
             return false;
         }
 
-        // TODO: Get tool speed from registry
-        double toolSpeed = 1.0; 
-        _totalBreakingTicks = (hardness * 1.5) / toolSpeed * 20.0;
+        // Get player's held item to determine tool speed
+        Slot heldItem = entity.Inventory.GetSlot(entity.HeldSlotWithOffset);
+        double destroyProgress = CalculateDestroyProgress(heldItem, block);
+        _totalBreakingTicks = destroyProgress > 0 ? Math.Ceiling(1.0 / destroyProgress) : 0;
+        
+        string? heldItemName = null;
+        if (heldItem.ItemId.HasValue) ClientState.ItemRegistry?.TryGetValue(heldItem.ItemId.Value, out heldItemName);
+        _logger.LogDebug("Mining {Block} (hardness={Hardness}) with {Tool} (slot={Slot}): destroyProgress={Progress:F6}/tick, totalTicks={Ticks}",
+            block.Name, hardness, heldItemName ?? "empty hand", entity.HeldSlot, destroyProgress, _totalBreakingTicks);
 
         _isBreakingBlock = true;
         _breakingBlockPosition = pos;
@@ -124,6 +148,95 @@ public class InteractionManager : IInteractionManager
         }
         
         return true;
+    }
+
+    /// <summary>
+    /// Calculates the per-tick destroy progress for a block, matching Java's getDestroyProgress.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/state/BlockBehaviour.java:328-336
+    /// Formula: playerDestroySpeed / blockDestroySpeed / modifier
+    ///   - modifier = 30 if player has correct tool for drops, 100 otherwise
+    ///   - Returns a fraction per tick; ticks to break = ceil(1.0 / result)
+    /// </summary>
+    private static double CalculateDestroyProgress(Slot heldItem, BlockState blockState)
+    {
+        float blockDestroySpeed = blockState.DestroySpeed;
+        if (blockDestroySpeed == -1.0f)
+        {
+            return 0.0; // Unbreakable
+        }
+        
+        if (blockDestroySpeed == 0.0f)
+        {
+            return 1.0; // Instant break (e.g. tall grass)
+        }
+
+        // Get player's destroy speed (tool effectiveness)
+        float playerSpeed = GetPlayerDestroySpeed(heldItem, blockState);
+        
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:hasCorrectToolForDrops
+        // player.hasCorrectToolForDrops(state) = !state.requiresCorrectToolForDrops() || item.isCorrectToolForDrops(state)
+        bool hasCorrectTool = !blockState.RequiresCorrectToolForDrops || IsCorrectToolForDrops(heldItem, blockState);
+        int modifier = hasCorrectTool ? 30 : 100;
+
+        return playerSpeed / blockDestroySpeed / modifier;
+    }
+
+    /// <summary>
+    /// Gets the player's mining speed for a given block, based on the held item.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:getDestroySpeed
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/DiggerItem.java:getDestroySpeed
+    /// </summary>
+    private static float GetPlayerDestroySpeed(Slot item, BlockState state)
+    {
+        if (item.ItemId == null || item.ItemCount <= 0)
+        {
+            return 1.0f;
+        }
+        
+        string? itemName = null;
+        ClientState.ItemRegistry?.TryGetValue(item.ItemId.Value, out itemName);
+        
+        if (string.IsNullOrEmpty(itemName))
+        {
+            return 1.0f;
+        }
+        
+        var toolType = ToolData.GetToolType(itemName);
+        if (toolType == ToolData.ToolType.None)
+        {
+            return 1.0f;
+        }
+        
+        if (!ToolData.IsCorrectTool(toolType, state))
+        {
+            return 1.0f;
+        }
+        
+        var tier = ToolData.GetToolTier(itemName);
+        return ToolData.GetSpeed(tier);
+    }
+
+    /// <summary>
+    /// Checks if the held item is the correct tool for obtaining drops from the block.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java:isCorrectToolForDrops
+    /// </summary>
+    private static bool IsCorrectToolForDrops(Slot item, BlockState state)
+    {
+        if (item.ItemId == null || item.ItemCount <= 0)
+        {
+            return false;
+        }
+        
+        string? itemName = null;
+        ClientState.ItemRegistry?.TryGetValue(item.ItemId.Value, out itemName);
+        
+        if (string.IsNullOrEmpty(itemName))
+        {
+            return false;
+        }
+        
+        var toolType = ToolData.GetToolType(itemName);
+        return toolType != ToolData.ToolType.None && ToolData.IsCorrectTool(toolType, state);
     }
 
     public async Task<bool> PlaceBlockAsync(Hand hand = Hand.MainHand)
@@ -258,6 +371,10 @@ public class InteractionManager : IInteractionManager
     {
         if (!_client.State.LocalPlayer.HasEntity) return false;
         var entity = _client.State.LocalPlayer.Entity;
+
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:309,371,420,426
+        // Java calls ensureHasSentCarriedItem() before ALL interactions (useItemOn, useItem, interact, interactAt, attack)
+        await EnsureHasSentCarriedItemAsync();
 
         // 1. Try Entity Interaction
         // We replicate existing logic: Find entity in look direction.
@@ -508,15 +625,32 @@ public class InteractionManager : IInteractionManager
             windowId, slotId, clickType, mouseButton);
     }
 
-    public async Task SyncHeldItemAsync()
+    /// <summary>
+    /// Ensures the server knows which hotbar slot is currently selected.
+    /// Only sends a packet when the slot has actually changed since last sent.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:299-306
+    /// Java method: private void ensureHasSentCarriedItem()
+    /// </summary>
+    public async Task EnsureHasSentCarriedItemAsync()
     {
         if (!_client.State.LocalPlayer.HasEntity) return;
         var entity = _client.State.LocalPlayer.Entity;
-
-        // Synchronize the currently held slot with the server
-        // Equivalent to Java's callSyncCurrentPlayItem() - ensures server knows what item we're holding
-        await _client.SendPacketAsync(new SetCarriedItemPacket { Slot = entity.HeldSlot });
-        _logger.LogDebug("Synchronized held item (slot: {Slot})", entity.HeldSlot);
+        
+        short currentSlot = entity.HeldSlot;
+        if (currentSlot != _lastSentCarriedSlot)
+        {
+            _lastSentCarriedSlot = currentSlot;
+            await _client.SendPacketAsync(new SetCarriedItemPacket { Slot = currentSlot });
+            _logger.LogDebug("Synced carried item to server (slot: {Slot})", currentSlot);
+        }
+    }
+    
+    /// <summary>
+    /// Backwards-compatible wrapper. Prefer EnsureHasSentCarriedItemAsync for Java parity.
+    /// </summary>
+    public async Task SyncHeldItemAsync()
+    {
+        await EnsureHasSentCarriedItemAsync();
     }
 
     public void SetHittingBlock(bool hittingBlock)

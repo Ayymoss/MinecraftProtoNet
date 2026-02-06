@@ -108,6 +108,15 @@ public interface IInteractionManager
     /// Used by Baritone to ensure the server knows what item is currently held after block breaking.
     /// </summary>
     Task SyncHeldItemAsync();
+    
+    /// <summary>
+    /// Ensures the server has been informed of the currently selected hotbar slot.
+    /// Only sends a SetCarriedItemPacket when the slot has changed since last sent.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:299-306
+    /// Java method: private void ensureHasSentCarriedItem()
+    /// Called every tick and before all interactions.
+    /// </summary>
+    Task EnsureHasSentCarriedItemAsync();
 
     /// <summary>
     /// Sets the hitting block state (whether we're currently breaking a block).

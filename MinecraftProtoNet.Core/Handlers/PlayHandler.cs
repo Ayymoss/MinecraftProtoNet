@@ -54,26 +54,9 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                 if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
                 var entity = client.State.LocalPlayer.Entity;
 
-                entity.HasPendingTeleport = true;
-                entity.TeleportYawPitch = playerPositionPacket.YawPitch;
-                
-                // CRITICAL: Initialize LastSentYawPitch to current rotation to prevent false rotation changes
-                // This ensures rotation packets are only sent when rotation actually changes
-                entity.LastSentYawPitch = entity.YawPitch;
-
-                await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
-                if (!_playerLoaded)
-                {
-                    await client.SendPacketAsync(new PlayerLoadedPacket());
-
-                    // Start the game loop (physics tick loop)
-                    // Note: Baritone hook should already be attached via BaritoneGameLoopHook singleton
-                    gameLoop.Start(client);
-
-                    _playerLoaded = true;
-                }
-
-                // --- Position update ---
+                // --- Apply position/velocity/rotation from packet FIRST ---
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
+                // Java order: setValuesFromPositionPacket() → send AcceptTeleportation → send PosRot confirmation
                 var flags = playerPositionPacket.Flags;
                 
                 // Update position
@@ -92,11 +75,53 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                 var yaw = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y_ROT) ? entity.YawPitch.X + playerPositionPacket.YawPitch.X : playerPositionPacket.YawPitch.X;
                 var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
                 entity.YawPitch = new Vector2<float>(yaw, pitch);
+                
+                entity.IsOnGround = false; // Reset on-ground state until next physics tick
 
                 logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
                     playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
-                entity.IsOnGround = false; // Reset on-ground state until next physics tick
+
+                // --- Send AcceptTeleportation THEN position confirmation (matching Java exactly) ---
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:751-752
+                // Java sends BOTH packets immediately in the handler:
+                //   this.connection.send(new ServerboundAcceptTeleportationPacket(packet.id()));
+                //   this.connection.send(new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), 
+                //                        player.getYRot(), player.getXRot(), false, false));
+                await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
+                await client.SendPacketAsync(new MovePlayerPositionRotationPacket
+                {
+                    X = entity.Position.X,
+                    Y = entity.Position.Y,
+                    Z = entity.Position.Z,
+                    Yaw = entity.YawPitch.X,
+                    Pitch = entity.YawPitch.Y,
+                    Flags = Enums.MovementFlags.None // Java passes false, false (not on ground, no horizontal collision)
+                });
+
+                // Sync "last sent" tracking to the teleported position so SendPositionAsync
+                // doesn't re-send a duplicate or stale position on the next tick.
+                entity.LastSentPosition = entity.Position;
+                entity.LastSentYawPitch = entity.YawPitch;
+                entity.LastSentOnGround = entity.IsOnGround;
+                entity.LastSentHorizontalCollision = false;
+                entity.PositionReminder = 0;
                 
+                // Mark teleport as pending so physics skips the next tick
+                // (the entity must remain at the exact teleported position for one tick)
+                entity.HasPendingTeleport = true;
+                entity.TeleportYawPitch = playerPositionPacket.YawPitch;
+
+                if (!_playerLoaded)
+                {
+                    await client.SendPacketAsync(new PlayerLoadedPacket());
+
+                    // Start the game loop (physics tick loop)
+                    // Note: Baritone hook should already be attached via BaritoneGameLoopHook singleton
+                    gameLoop.Start(client);
+
+                    _playerLoaded = true;
+                }
+
                 // Notify listeners (pathfinding) that server sent a teleport packet
                 entity.NotifyServerTeleport(entity.Position);
                 break;

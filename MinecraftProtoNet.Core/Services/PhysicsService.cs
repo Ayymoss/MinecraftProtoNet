@@ -28,6 +28,29 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null)
     {
+        // ===== TELEPORT GUARD =====
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
+        // When a server teleport is received, the handler already sent AcceptTeleportation + PosRot confirmation.
+        // On the FIRST physics tick after that, we must NOT apply any movement/gravity.
+        // The entity must remain at the exact teleported position so the server accepts our confirmation.
+        // We clear the flag and skip all physics for this tick. On the NEXT tick, normal physics resume.
+        if (entity.HasPendingTeleport)
+        {
+            entity.HasPendingTeleport = false;
+            
+            _logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
+                entity.Position, entity.Velocity);
+            
+            // Still invoke the pre-physics callback so Baritone can observe the new position,
+            // but we do NOT apply any movement or send position packets this tick.
+            prePhysicsCallback?.Invoke(entity);
+            
+            // Send position from the teleported state (no movement applied).
+            // This ensures the server sees us at the exact teleported position on the next game tick.
+            await SendPositionAsync(entity, packetSender);
+            return;
+        }
+        
         // Invoke pre-physics callback (e.g., for pathfinding input)
         prePhysicsCallback?.Invoke(entity);
 
@@ -99,8 +122,6 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
         // Send position updates to server
         await SendPositionAsync(entity, packetSender);
-
-        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -442,7 +463,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         double velocityYAfterMoveRelative = entity.Velocity.Y;
 
         // Handle climbable (ladder) logic
-        entity.Velocity = HandleOnClimbable(entity, entity.Velocity);
+        entity.Velocity = HandleOnClimbable(entity, level, entity.Velocity);
 
         // Store velocity before Move() to track what was actually applied
         var velocityBeforeMove = entity.Velocity;
@@ -712,18 +733,36 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     /// Handles velocity when on climbable (ladder/vine).
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2532-2547
     /// </summary>
-    private Vector3<double> HandleOnClimbable(Entity entity, Vector3<double> delta)
+    private Vector3<double> HandleOnClimbable(Entity entity, Level level, Vector3<double> delta)
     {
-        if (IsOnClimbable(entity, null))
+        if (IsOnClimbable(entity, level))
         {
+            // Note: Java resets fallDistance here (entity.resetFallDistance())
+            // but our Entity doesn't track FallDistance yet - not critical for physics
+            
             // Clamp horizontal velocity to max climb speed
-            const float maxClimbSpeed = 0.15f;
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2535-2538
+            const double maxClimbSpeed = 0.15000000596046448;
             double xd = Math.Clamp(delta.X, -maxClimbSpeed, maxClimbSpeed);
             double zd = Math.Clamp(delta.Z, -maxClimbSpeed, maxClimbSpeed);
             double yd = Math.Max(delta.Y, -maxClimbSpeed);
 
-            // TODO: Handle scaffolding and suppress sliding down logic when implemented
-            // For now, just clamp the velocity
+            // Suppress sliding down ladder when sneaking (Player only)
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2539-2541
+            // Java: if (yd < 0.0 && !getInBlockState().is(Blocks.SCAFFOLDING) && isSuppressingSlidingDownLadder() && this instanceof Player)
+            //   isSuppressingSlidingDownLadder() = isShiftKeyDown() = sneaking
+            if (yd < 0.0 && entity.IsSneaking)
+            {
+                // Check block at feet isn't scaffolding (scaffolding allows sliding even when sneaking)
+                int bx = (int)Math.Floor(entity.Position.X);
+                int by = (int)Math.Floor(entity.Position.Y);
+                int bz = (int)Math.Floor(entity.Position.Z);
+                var blockAtFeet = level.GetBlockAt(bx, by, bz);
+                if (blockAtFeet == null || !blockAtFeet.Name.Equals("minecraft:scaffolding", StringComparison.OrdinalIgnoreCase))
+                {
+                    yd = 0.0;
+                }
+            }
 
             return new Vector3<double>(xd, yd, zd);
         }
@@ -732,14 +771,44 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     }
 
     /// <summary>
+    /// Set of block names that are in the BlockTags.CLIMBABLE tag.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/data/tags/VanillaBlockTagsProvider.java:64
+    /// Tag: BlockTags.CLIMBABLE = ladder, vine, scaffolding, weeping_vines, weeping_vines_plant,
+    ///   twisting_vines, twisting_vines_plant, cave_vines, cave_vines_plant
+    /// </summary>
+    private static readonly HashSet<string> ClimbableBlocks = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "minecraft:ladder",
+        "minecraft:vine",
+        "minecraft:scaffolding",
+        "minecraft:weeping_vines",
+        "minecraft:weeping_vines_plant",
+        "minecraft:twisting_vines",
+        "minecraft:twisting_vines_plant",
+        "minecraft:cave_vines",
+        "minecraft:cave_vines_plant"
+    };
+
+    /// <summary>
     /// Checks if entity is on a climbable block (ladder, vine, etc.).
-    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:onClimbable()
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1636-1651
+    /// Java: onClimbable() checks getInBlockState().is(BlockTags.CLIMBABLE) at blockPosition()
+    /// blockPosition() = (floor(x), floor(y), floor(z))
     /// </summary>
     private bool IsOnClimbable(Entity entity, Level? level)
     {
-        // TODO: Implement proper climbable detection when block state system supports it
-        // For now, return false - this will be implemented when ladder support is added
-        return false;
+        if (level == null) return false;
+        
+        // Get block at entity's feet position (floor of entity position)
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:3721-3722
+        int bx = (int)Math.Floor(entity.Position.X);
+        int by = (int)Math.Floor(entity.Position.Y);
+        int bz = (int)Math.Floor(entity.Position.Z);
+        
+        var blockState = level.GetBlockAt(bx, by, bz);
+        if (blockState == null) return false;
+        
+        return ClimbableBlocks.Contains(blockState.Name);
     }
 
     /// <summary>
@@ -929,6 +998,8 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             bb.MinY,
             bb.MaxZ - 1.0E-7 + deltaZ);
         // noCollision = no blocks in the box = player would fall
+        // Note: Ladders have no collision shape (like vanilla), so they don't provide ground support.
+        // The solid ground blocks below ladders provide the support instead.
         return !level.GetCollidingBlockAABBs(checkBox).Any();
     }
 

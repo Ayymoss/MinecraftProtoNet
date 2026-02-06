@@ -23,7 +23,6 @@ using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Pathing.Path;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Behaviors;
-using MinecraftProtoNet.Baritone.Pathfinding.Goals;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 using MinecraftProtoNet.Baritone.Utils;
@@ -38,14 +37,13 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Path;
 /// Behavior to execute a precomputed path.
 /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/path/PathExecutor.java
 /// </summary>
-public class PathExecutor : IPathExecutor
+public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
 {
     private const double MaxMaxDistFromPath = 3;
     private const double MaxDistFromPath = 2;
     private const double MaxTicksAway = 200;
 
-    private readonly IPath _path;
-    private int _pathPosition;
+    private int _pathPosition = 0;
     private int _ticksAway;
     private int _ticksOnCurrent;
     private double? _currentMovementOriginalCostEstimate;
@@ -56,32 +54,23 @@ public class PathExecutor : IPathExecutor
     private HashSet<(int X, int Y, int Z)> _toPlace = new();
     private HashSet<(int X, int Y, int Z)> _toWalkInto = new();
 
-    private readonly PathingBehavior _behavior;
-    private readonly IPlayerContext _ctx;
-    private IBaritone Baritone => _behavior.Baritone;
+    private readonly IPlayerContext _ctx = behavior.Ctx;
+    private IBaritone Baritone => behavior.Baritone;
 
     private bool _sprintNextTick;
 
-    public PathExecutor(PathingBehavior behavior, IPath path)
-    {
-        _behavior = behavior;
-        _ctx = behavior.Ctx;
-        _path = path;
-        _pathPosition = 0;
-    }
-
     public bool OnTick()
     {
-        var context = _behavior.SecretInternalGetCalculationContext() ?? new CalculationContext(Baritone);
+        var context = behavior.SecretInternalGetCalculationContext() ?? new CalculationContext(Baritone);
         bool canCancelResult = true;
 
         int iterations = 0;
         while (iterations++ < 100)
         {
-            if (_pathPosition == _path.Length() - 1) _pathPosition++;
-            if (_pathPosition >= _path.Length()) { ClearKeys(); return true; }
+            if (_pathPosition == path.Length() - 1) _pathPosition++;
+            if (_pathPosition >= path.Length()) { ClearKeys(); return true; }
 
-            var movement = (MovementType)_path.Movements()[_pathPosition];
+            var movement = (MovementType)path.Movements()[_pathPosition];
             var whereAmI = _ctx.PlayerFeet();
             if (whereAmI == null) return false;
 
@@ -90,11 +79,11 @@ public class PathExecutor : IPathExecutor
                 bool foundLagPos = false;
                 for (int i = _pathPosition - 1; i >= 0; i--)
                 {
-                    if (((MovementType)_path.Movements()[i]).GetValidPositions().Contains(whereAmI))
+                    if (((MovementType)path.Movements()[i]).GetValidPositions().Contains(whereAmI))
                     {
                         int previousPos = _pathPosition;
                         _pathPosition = i;
-                        for (int j = _pathPosition; j <= previousPos; j++) _path.Movements()[j].Reset();
+                        for (int j = _pathPosition; j <= previousPos; j++) path.Movements()[j].Reset();
                         OnChangeInPathPosition();
                         Baritone.GetGameEventHandler().LogDirect($"Lag rewind: {previousPos} -> {i}");
                         foundLagPos = true;
@@ -104,9 +93,9 @@ public class PathExecutor : IPathExecutor
                 if (foundLagPos) continue;
 
                 bool foundSkipPos = false;
-                for (int i = _pathPosition + 3; i < _path.Length() - 1; i++)
+                for (int i = _pathPosition + 3; i < path.Length() - 1; i++)
                 {
-                    if (((MovementType)_path.Movements()[i]).GetValidPositions().Contains(whereAmI))
+                    if (((MovementType)path.Movements()[i]).GetValidPositions().Contains(whereAmI))
                     {
                         _pathPosition = i - 1;
                         OnChangeInPathPosition();
@@ -117,7 +106,7 @@ public class PathExecutor : IPathExecutor
                 if (foundSkipPos) continue;
             }
 
-            var status = ClosestPathPos(_path);
+            var status = ClosestPathPos(path);
             if (PossiblyOffPath(status, MaxDistFromPath))
             {
                 _ticksAway++;
@@ -130,8 +119,8 @@ public class PathExecutor : IPathExecutor
             var bsi = context.Bsi;
             for (int i = _pathPosition - 10; i < _pathPosition + 10; i++)
             {
-                if (i < 0 || i >= _path.Movements().Count) continue;
-                var m = (MovementType)_path.Movements()[i];
+                if (i < 0 || i >= path.Movements().Count) continue;
+                var m = (MovementType)path.Movements()[i];
                 var prevBreak = m.ToBreak(bsi);
                 var prevPlace = m.ToPlace(bsi, context);
                 var prevWalkInto = m.ToWalkInto(bsi);
@@ -146,9 +135,9 @@ public class PathExecutor : IPathExecutor
                 var newBreak = new HashSet<(int X, int Y, int Z)>();
                 var newPlace = new HashSet<(int X, int Y, int Z)>();
                 var newWalkInto = new HashSet<(int X, int Y, int Z)>();
-                for (int i = _pathPosition; i < _path.Movements().Count; i++)
+                for (int i = _pathPosition; i < path.Movements().Count; i++)
                 {
-                    var m = (MovementType)_path.Movements()[i];
+                    var m = (MovementType)path.Movements()[i];
                     foreach (var pos in m.ToBreak(bsi)) newBreak.Add((pos.X, pos.Y, pos.Z));
                     foreach (var pos in m.ToPlace(bsi, context)) newPlace.Add((pos.X, pos.Y, pos.Z));
                     foreach (var pos in m.ToWalkInto(bsi)) newWalkInto.Add((pos.X, pos.Y, pos.Z));
@@ -161,9 +150,9 @@ public class PathExecutor : IPathExecutor
             {
                 _costEstimateIndex = _pathPosition;
                 _currentMovementOriginalCostEstimate = movement.GetCost();
-                for (int i = 1; i < BaritoneSettings.Settings().CostVerificationLookahead.Value && _pathPosition + i < _path.Length() - 1; i++)
+                for (int i = 1; i < BaritoneSettings.Settings().CostVerificationLookahead.Value && _pathPosition + i < path.Length() - 1; i++)
                 {
-                    var futureMovement = (MovementType)_path.Movements()[_pathPosition + i];
+                    var futureMovement = (MovementType)path.Movements()[_pathPosition + i];
                     if (futureMovement.CalculateCost(context) >= ActionCosts.CostInf && canCancel) { Cancel(); return true; }
                 }
             }
@@ -203,20 +192,20 @@ public class PathExecutor : IPathExecutor
 
     private SkipResult CheckSkip(CalculationContext context)
     {
-        bool requested = _behavior.Baritone.GetInputOverrideHandler().IsInputForcedDown(Api.Utils.Input.Input.Sprint);
-        _behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Sprint, false);
+        bool requested = behavior.Baritone.GetInputOverrideHandler().IsInputForcedDown(Api.Utils.Input.Input.Sprint);
+        behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Sprint, false);
         if (!context.CanSprint) return SkipResult.NoSprint;
 
-        var current = _path.Movements()[_pathPosition];
-        if (current is MovementTraverse traverse && _pathPosition < _path.Length() - 3)
+        var current = path.Movements()[_pathPosition];
+        if (current is MovementTraverse traverse && _pathPosition < path.Length() - 3)
         {
-            var next = _path.Movements()[_pathPosition + 1];
-            if (next is MovementAscend ascend && SprintableAscend(traverse, ascend, _path.Movements()[_pathPosition + 2], context))
+            var next = path.Movements()[_pathPosition + 1];
+            if (next is MovementAscend ascend && SprintableAscend(traverse, ascend, path.Movements()[_pathPosition + 2], context))
             {
                 if (SkipNow(current, context))
                 {
                     _pathPosition++; OnChangeInPathPosition();
-                    _behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, true);
+                    behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, true);
                     return SkipResult.Skipped;
                 }
             }
@@ -226,9 +215,9 @@ public class PathExecutor : IPathExecutor
 
         if (current is MovementDescend descend)
         {
-            if (_pathPosition < _path.Length() - 2)
+            if (_pathPosition < path.Length() - 2)
             {
-                var next = _path.Movements()[_pathPosition + 1];
+                var next = path.Movements()[_pathPosition + 1];
                 if (MovementHelper.CanUseFrostWalker(context, next.GetDest().Below()))
                 {
                     if (next is MovementTraverse || next is MovementParkour)
@@ -240,9 +229,9 @@ public class PathExecutor : IPathExecutor
             }
             if (descend.SafeMode() && !descend.SkipToAscend()) return SkipResult.NoSprint;
 
-            if (_pathPosition < _path.Length() - 2)
+            if (_pathPosition < path.Length() - 2)
             {
-                var next = _path.Movements()[_pathPosition + 1];
+                var next = path.Movements()[_pathPosition + 1];
                 if (next is MovementAscend && current.GetDirection().X == next.GetDirection().X && current.GetDirection().Z == next.GetDirection().Z)
                 {
                     _pathPosition++; OnChangeInPathPosition(); return SkipResult.Skipped;
@@ -260,13 +249,13 @@ public class PathExecutor : IPathExecutor
 
         if (current is MovementAscend && _pathPosition != 0)
         {
-            var prev = _path.Movements()[_pathPosition - 1];
+            var prev = path.Movements()[_pathPosition - 1];
             if (prev is MovementDescend && prev.GetDirection().X == current.GetDirection().X && prev.GetDirection().Z == current.GetDirection().Z)
             {
                 var center = current.GetSrc().Above();
                 if (((Entity)_ctx.Player()!).Position.Y >= center.Y - 0.07)
                 {
-                    _behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, false);
+                    behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, false);
                     return SkipResult.Sprint;
                 }
             }
@@ -279,7 +268,7 @@ public class PathExecutor : IPathExecutor
             {
                 if (_ctx.PlayerFeet()?.Equals(data.Value.Pos) == true)
                 {
-                    _pathPosition = _path.Positions().ToList().IndexOf(data.Value.Pos);
+                    _pathPosition = path.Positions().ToList().IndexOf(data.Value.Pos);
                     OnChangeInPathPosition(); return SkipResult.Skipped;
                 }
                 ClearKeys();
@@ -288,7 +277,7 @@ public class PathExecutor : IPathExecutor
                 {
                     Baritone.GetLookBehavior().UpdateTarget(RotationUtils.CalcRotationFromVec3d(playerHead, data.Value.Vec, playerRot), false);
                 }
-                _behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.MoveForward, true);
+                behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.MoveForward, true);
                 return SkipResult.Sprint;
             }
         }
@@ -303,9 +292,9 @@ public class PathExecutor : IPathExecutor
         if (movement.ToBreakAll().Any(p => !MovementHelper.CanWalkThrough(context, p.X, p.Y, p.Z))) return null;
 
         var flatDirX = dir.X; var flatDirZ = dir.Z; int i;
-        for (i = _pathPosition + 1; i < _path.Length() - 1 && i < _pathPosition + 3; i++)
+        for (i = _pathPosition + 1; i < path.Length() - 1 && i < _pathPosition + 3; i++)
         {
-            var next = _path.Movements()[i];
+            var next = path.Movements()[i];
             if (next is not MovementTraverse || next.GetDirection().X != flatDirX || next.GetDirection().Z != flatDirZ) break;
             bool allPassable = true;
             for (int y = next.GetDest().Y; y <= movement.GetSrc().Y + 1; y++)
@@ -365,7 +354,7 @@ public class PathExecutor : IPathExecutor
 
     private void OnChangeInPathPosition() { ClearKeys(); _ticksOnCurrent = 0; }
     private void ClearKeys() { Baritone.GetInputOverrideHandler().ClearAllKeys(); }
-    private void Cancel() { ClearKeys(); _pathPosition = _path.Length() + 3; _failed = true; }
+    private void Cancel() { ClearKeys(); _pathPosition = path.Length() + 3; _failed = true; }
 
     private (double Distance, BetterBlockPos? Pos) ClosestPathPos(IPath path)
     {
@@ -384,7 +373,7 @@ public class PathExecutor : IPathExecutor
 
     private bool ShouldPause()
     {
-        var current = _behavior.GetInProgress();
+        var current = behavior.GetInProgress();
         if (current == null) return false;
         var player = _ctx.Player() as Entity;
         if (player != null && !player.IsOnGround) return false;
@@ -401,7 +390,7 @@ public class PathExecutor : IPathExecutor
     {
         if (status.Distance > leniency)
         {
-            if (_pathPosition < _path.Movements().Count && _path.Movements()[_pathPosition] is MovementFall) return false;
+            if (_pathPosition < path.Movements().Count && path.Movements()[_pathPosition] is MovementFall) return false;
             return true;
         }
         return false;
@@ -411,16 +400,16 @@ public class PathExecutor : IPathExecutor
     {
         var playerFeet = _ctx.PlayerFeet();
         if (playerFeet == null) return false;
-        int index = _path.Positions().ToList().FindIndex(p => p.Equals(playerFeet));
+        int index = path.Positions().ToList().FindIndex(p => p.Equals(playerFeet));
         if (index == -1) return false;
         _pathPosition = index; ClearKeys(); return true;
     }
 
     public int GetPosition() => _pathPosition;
     public IPathExecutor? TrySplice(IPathExecutor? next) => this;
-    public IPath GetPath() => _path;
+    public IPath GetPath() => path;
     public bool Failed() => _failed;
-    public bool Finished() => _pathPosition >= _path.Length();
+    public bool Finished() => _pathPosition >= path.Length();
     public IReadOnlySet<(int X, int Y, int Z)> ToBreak() => _toBreak;
     public IReadOnlySet<(int X, int Y, int Z)> ToPlace() => _toPlace;
     public IReadOnlySet<(int X, int Y, int Z)> ToWalkInto() => _toWalkInto;

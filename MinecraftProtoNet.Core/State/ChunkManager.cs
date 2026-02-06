@@ -77,7 +77,12 @@ public class ChunkManager : IChunkManager
                 for (var z = minBz; z <= maxBz; z++)
                 {
                     var blockState = GetBlockAt(x, y, z);
-                    if (blockState is not { BlocksMotion: true }) continue;
+                    if (blockState == null) continue;
+                    // BlocksMotion check filters out non-solid blocks (air, ladders, vines, etc.)
+                    // Ladders/vines have HasCollision=false and NO collision shape in vanilla.
+                    // Climbing works through the wall behind them, not through ladder collision.
+                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/LadderBlock.java
+                    if (!blockState.BlocksMotion) continue;
 
                     var shape = _blockShapeRegistry.GetShape(blockState);
                     if (!shape.IsEmpty())

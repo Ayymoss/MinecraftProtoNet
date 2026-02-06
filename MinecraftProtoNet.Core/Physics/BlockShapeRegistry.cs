@@ -14,6 +14,11 @@ public class BlockShapeRegistry : IBlockShapeRegistry
 
     public VoxelShape GetShape(BlockState blockState)
     {
+        // Ladders have NO collision shape in vanilla - they are passable blocks.
+        // Climbing works through: entity walks INTO the ladder block, hits the WALL behind it,
+        // which triggers HorizontalCollision, then IsOnClimbable + HorizontalCollision → Y boost to 0.2.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/LadderBlock.java
+        // LadderBlock has hasCollision=false → getCollisionShape() returns Shapes.empty()
         if (!blockState.BlocksMotion || blockState.IsAir || blockState.IsLiquid)
         {
             return Shapes.Shapes.Empty();

@@ -66,6 +66,7 @@ public sealed class AStarPathFinder : AbstractNodeCostSearch
         var res = new MutableMoveResult();
         var worldBorder = new BetterWorldBorder(_calcContext.World.WorldBorder);
         long startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        
         bool slowPath = Core.Baritone.Settings().SlowPath.Value;
         if (slowPath)
         {

@@ -43,11 +43,11 @@ public class InventoryHandler(ILogger<InventoryHandler> logger) : IPacketHandler
                 break;
 
             case BlockChangedAcknowledgementPacket:
-                entity.HeldItem.ItemCount -= 1;
-                if (entity.HeldItem.ItemCount <= 0)
-                {
-                    entity.Inventory.SetSlot(entity.HeldSlotWithOffset, new Slot());
-                }
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java
+                // This packet simply acknowledges that the server processed a block state prediction.
+                // The server sends ContainerSetSlotPacket to update inventory (tool durability, item consumption).
+                // We must NOT modify inventory here - the previous code was incorrectly decrementing
+                // the held item count on every acknowledgement, which destroyed tools after one use.
                 break;
 
             case SetCursorItemPacket setCursorItemPacket:

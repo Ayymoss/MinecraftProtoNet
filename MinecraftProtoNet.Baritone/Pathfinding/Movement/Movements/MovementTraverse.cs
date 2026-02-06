@@ -139,7 +139,6 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 double placeCost = context.CostOfPlacingAt(destX, y - 1, destZ, destOn);
                 if (placeCost >= ActionCosts.CostInf)
                 {
-                    Console.WriteLine($"[DEBUG] Traverse: Failed to bridge - CostOfPlacingAt returned CostInf at {destX},{y-1},{destZ}");
                     return ActionCosts.CostInf;
                 }
                 double hardness1 = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, pb1, false);
@@ -175,7 +174,6 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 
                 if (onSoulSand || (onSlab && (!srcDown.Properties.TryGetValue("type", out var type) || type != "double")))
                 {
-                    Console.WriteLine("[DEBUG] Traverse: Failed backplace - Invalid block to stand on (Soul Sand or Slab)");
                     return ActionCosts.CostInf;
                 }
                 
@@ -188,7 +186,6 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 wc = wc * (ActionCosts.SneakOneBlockCost / ActionCosts.WalkOneBlockCost);
                 return wc + placeCost + hardness1 + hardness2;
             }
-            Console.WriteLine($"[DEBUG] Traverse: Failed to bridge - Destination block not replaceable ({destX},{y-1},{destZ}) Name={destOn.Name} IsAir={destOn.IsAir}");
             return ActionCosts.CostInf;
         }
     }

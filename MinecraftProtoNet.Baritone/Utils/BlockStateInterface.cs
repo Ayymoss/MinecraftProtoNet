@@ -91,10 +91,6 @@ public class BlockStateInterface
         // Fall back to cached world
         if (_worldData == null)
         {
-            if (y == 92 && x >= 11 && x <= 15 && z >= -22 && z <= -18)
-            {
-                Console.WriteLine($"[DEBUG] BSI Get0({x},{y},{z}): WorldData is null, returning Air");
-            }
             return Air;
         }
 
@@ -104,10 +100,6 @@ public class BlockStateInterface
             var region = _worldData.Cache.GetRegion(x >> 9, z >> 9);
             if (region == null)
             {
-                if (y == 92 && x >= 11 && x <= 15 && z >= -22 && z <= -18)
-                {
-                    Console.WriteLine($"[DEBUG] BSI Get0({x},{y},{z}): Region is null, returning Air");
-                }
                 return Air;
             }
             _prevCached = (CachedRegion)region;
@@ -117,10 +109,6 @@ public class BlockStateInterface
         var blockState = cached.GetBlock(x & 511, y, z & 511);
         if (blockState == null)
         {
-            if (y == 92 && x >= 11 && x <= 15 && z >= -22 && z <= -18)
-            {
-                Console.WriteLine($"[DEBUG] BSI Get0({x},{y},{z}): Cached block is null, returning Air");
-            }
             return Air;
         }
         return blockState as BlockState ?? Air;

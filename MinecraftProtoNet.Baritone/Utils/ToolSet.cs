@@ -22,6 +22,7 @@ using MinecraftProtoNet.Core.Data;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Packets.Base.Definitions;
 using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 using BaritoneSettings = MinecraftProtoNet.Baritone.Core.Baritone;
 
 namespace MinecraftProtoNet.Baritone.Utils;
@@ -266,6 +267,8 @@ public class ToolSet
 
     /// <summary>
     /// Gets item destroy speed against a block.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/Item.java:191-194
+    /// Java: item.getDestroySpeed(state) → returns tool speed if effective, else 1.0
     /// </summary>
     private static float GetItemDestroySpeed(Slot item, BlockState state)
     {
@@ -274,17 +277,39 @@ public class ToolSet
             return 1.0f;
         }
 
-        // Get item name from registry if available
-        // For now, we'll use a simplified approach
-        // TODO: Implement proper item name lookup when registry is available
+        // Resolve item name from the protocol ID using the static item registry
+        string? itemName = null;
+        if (item.ItemId.HasValue)
+        {
+            ClientState.ItemRegistry?.TryGetValue(item.ItemId.Value, out itemName);
+        }
         
-        // Use ToolData to determine tool effectiveness
-        // This is a simplified version - full implementation would use item registry
-        return 1.0f; // Default speed
+        if (string.IsNullOrEmpty(itemName))
+        {
+            return 1.0f;
+        }
+        
+        // Determine tool type and tier from item name
+        var toolType = ToolData.GetToolType(itemName);
+        if (toolType == ToolData.ToolType.None)
+        {
+            return 1.0f; // Not a tool
+        }
+        
+        // Check if this tool type is effective against the target block
+        if (!ToolData.IsCorrectTool(toolType, state))
+        {
+            return 1.0f; // Tool doesn't apply speed bonus to this block
+        }
+        
+        // Return the tool tier's mining speed multiplier
+        var tier = ToolData.GetToolTier(itemName);
+        return ToolData.GetSpeed(tier);
     }
 
     /// <summary>
     /// Checks if item is correct tool for drops.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java:isCorrectToolForDrops
     /// </summary>
     private static bool IsCorrectToolForDrops(Slot item, BlockState state)
     {
@@ -293,9 +318,19 @@ public class ToolSet
             return false;
         }
 
-        // TODO: Implement proper tool checking when item registry is available
-        // For now, return false (hand mining)
-        return false;
+        string? itemName = null;
+        if (item.ItemId.HasValue)
+        {
+            ClientState.ItemRegistry?.TryGetValue(item.ItemId.Value, out itemName);
+        }
+        
+        if (string.IsNullOrEmpty(itemName))
+        {
+            return false;
+        }
+        
+        var toolType = ToolData.GetToolType(itemName);
+        return toolType != ToolData.ToolType.None && ToolData.IsCorrectTool(toolType, state);
     }
 
     /// <summary>
@@ -310,6 +345,11 @@ public class ToolSet
     /// Evaluate the material cost of a possible tool.
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:107-113
     /// </summary>
+    /// <summary>
+    /// Evaluate the material cost of a possible tool.
+    /// Lower cost = prefer this tool (preserve expensive tools).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:107-113
+    /// </summary>
     private int GetMaterialCost(Slot itemStack)
     {
         if (IsEmpty(itemStack))
@@ -317,10 +357,24 @@ public class ToolSet
             return -1;
         }
 
-        // TODO: Get item name from registry and determine tier
-        // For now, return a default value
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:108-112
-        return int.MaxValue; // Unknown material
+        string? itemName = null;
+        if (itemStack.ItemId.HasValue)
+        {
+            ClientState.ItemRegistry?.TryGetValue(itemStack.ItemId.Value, out itemName);
+        }
+        
+        if (string.IsNullOrEmpty(itemName))
+        {
+            return int.MaxValue;
+        }
+        
+        var tier = ToolData.GetToolTier(itemName);
+        // Return index in priority list (lower = cheaper = preferred)
+        for (int i = 0; i < MaterialTagsPriorityList.Length; i++)
+        {
+            if (MaterialTagsPriorityList[i] == tier) return i;
+        }
+        return int.MaxValue;
     }
 
     /// <summary>

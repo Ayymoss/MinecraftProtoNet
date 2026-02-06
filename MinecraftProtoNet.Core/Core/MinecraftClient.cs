@@ -243,6 +243,12 @@ public class MinecraftClient : IMinecraftClient
                 this,
                 prePhysicsCallback);
 
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:284-285
+            // Java calls ensureHasSentCarriedItem() every tick in MultiPlayerGameMode.tick()
+            // This ensures the server always knows which hotbar slot is selected, even when
+            // Baritone changes it without going through the InteractionManager.
+            await InteractionManager.EnsureHasSentCarriedItemAsync();
+            
             // Handle input clicks (Baritone integration)
             var entity = State.LocalPlayer.Entity;
             if (entity.Input.ClickRight)

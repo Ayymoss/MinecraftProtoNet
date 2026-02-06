@@ -158,31 +158,63 @@ public static class MovementHelper
         return GetMiningDurationTicks(context, x, y, z, state, includeWontBeBreaking);
     }
 
-    public static double GetMiningDurationTicks(CalculationContext context, int x, int y, int z, BlockState state, bool includeWontBeBreaking)
+    /// <summary>
+    /// Calculates the mining duration in ticks for a block at the given position.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:589-622
+    /// </summary>
+    public static double GetMiningDurationTicks(CalculationContext context, int x, int y, int z, BlockState state, bool includeFalling)
     {
-        if (state == null || state.IsAir) return 0;
+        if (state == null) return 0;
         
-        if (state.DestroySpeed < 0) return ActionCosts.CostInf;
-        
-        if (!context.AllowBreak && !context.AllowBreakAnyway.Contains(state.Name))
+        // Reference: MovementHelper.java:595 - Only compute mining cost for blocks we CANT walk through
+        if (!CanWalkThrough(context, x, y, z, state))
         {
-            return includeWontBeBreaking ? 0 : ActionCosts.CostInf;
+            // Reference: MovementHelper.java:596-598 - Can't mine fluids
+            if (state.IsLiquid)
+            {
+                return ActionCosts.CostInf;
+            }
+            
+            // Reference: MovementHelper.java:599-601 - Break cost multiplier (handles AllowBreak and protection)
+            double mult = context.BreakCostMultiplierAt(x, y, z, state);
+            if (mult >= ActionCosts.CostInf)
+            {
+                return ActionCosts.CostInf;
+            }
+            
+            // Reference: MovementHelper.java:603-605 - Avoid breaking certain blocks
+            if (AvoidBreaking(context.Bsi, x, y, z, state))
+            {
+                return ActionCosts.CostInf;
+            }
+            
+            // Reference: MovementHelper.java:606-610
+            // getStrVsBlock returns 1/(time in ticks), so 1/strVsBlock = time in ticks
+            double strVsBlock = context.ToolSet.GetStrVsBlock(state);
+            if (strVsBlock <= 0)
+            {
+                return ActionCosts.CostInf;
+            }
+            
+            double result = 1.0 / strVsBlock;
+            result += context.BreakBlockAdditionalCost;
+            result *= mult;
+            
+            // Reference: MovementHelper.java:613-617 - Add cost for falling blocks above
+            if (includeFalling)
+            {
+                var above = context.Get(x, y + 1, z);
+                if (above != null && above.Name.Contains("sand", StringComparison.OrdinalIgnoreCase) 
+                    || (above != null && above.Name.Contains("gravel", StringComparison.OrdinalIgnoreCase)))
+                {
+                    result += GetMiningDurationTicks(context, x, y + 1, z, above, true);
+                }
+            }
+            
+            return result;
         }
-
-        if (context.IsPossiblyProtected(x, y, z))
-        {
-            return ActionCosts.CostInf;
-        }
-
-        double speed = context.ToolSet.GetStrVsBlock(state);
-        if (speed <= 0) return ActionCosts.CostInf;
-
-        double hardness = state.DestroySpeed;
-        double ticks = (hardness * 1.5) / speed;
         
-        if (ticks > 12000) return ActionCosts.CostInf; 
-
-        return ticks + context.BreakBlockAdditionalCost;
+        return 0; // We won't actually mine it, so don't check fallings above
     }
 
     public static bool IsWater(BlockState state)
