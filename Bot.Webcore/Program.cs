@@ -19,7 +19,7 @@ public class Program
             .AddInteractiveServerComponents();
 
         // Add MinecraftClient services from core library
-        builder.Services.AddMinecraftClient();
+        builder.Services.AddMinecraftClient(builder.Configuration);
         
         // Add Baritone pathfinding and physics
         builder.Services.AddBaritone();

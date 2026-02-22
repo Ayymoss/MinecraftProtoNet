@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
@@ -22,7 +23,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Adds all Minecraft client services to the service collection.
     /// </summary>
-    public static IServiceCollection AddMinecraftClient(this IServiceCollection services)
+    public static IServiceCollection AddMinecraftClient(this IServiceCollection services, IConfiguration configuration)
     {
         // Shared state (must be registered before services that depend on it)
         services.AddSingleton<ClientState>();
@@ -38,9 +39,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WebcoreChatSink>();
         
         // Refit API clients
-        // The base URL should ideally be from configuration
+        var webcoreUrl = configuration["Webcore:BaseUrl"] ?? "http://localhost:5000";
         services.AddRefitClient<IWebcoreChatApi>()
-            .ConfigureHttpClient(c => c.BaseAddress = new Uri("http://localhost:5000"));
+            .ConfigureHttpClient(c => c.BaseAddress = new Uri(webcoreUrl));
 
         // Game services
         services.AddSingleton<IClientStateAccessor, ClientStateAccessor>();
