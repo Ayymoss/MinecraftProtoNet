@@ -4,6 +4,8 @@ using FluentAssertions;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Abstractions.Api;
+using MinecraftProtoNet.Core.Dtos;
 
 namespace MinecraftProtoNet.Tests.Core;
 
@@ -37,6 +39,24 @@ public class ChatSinkTests
         // Assert
         mockSender.Verify(x => x.SendPacketAsync(
             It.Is<ChatPacket>(p => p.Message == message), 
+            It.IsAny<CancellationToken>()), 
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task WebcoreChatSink_EmitAsync_ShouldPostToApi()
+    {
+        // Arrange
+        var mockApi = new Mock<IWebcoreChatApi>();
+        var sink = new WebcoreChatSink(mockApi.Object);
+        var message = "Test Message";
+        
+        // Act
+        await sink.EmitAsync(message, CancellationToken.None);
+        
+        // Assert
+        mockApi.Verify(x => x.PostRedirectedChatAsync(
+            It.Is<ChatRedirectRequest>(r => r.Message == message), 
             It.IsAny<CancellationToken>()), 
             Times.Once);
     }
