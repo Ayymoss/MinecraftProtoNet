@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
 using MinecraftProtoNet.Core.Auth;
@@ -13,12 +14,14 @@ using MinecraftProtoNet.Core.Packets.Status.Serverbound;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State.Base;
 using MinecraftProtoNet.Core.Utilities;
+using MinecraftProtoNet.Core.Abstractions;
 
 namespace MinecraftProtoNet.Core.Core;
 
 public class MinecraftClient : IMinecraftClient
 {
-    private readonly Connection _connection;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IPacketSender _connection;
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -41,12 +44,13 @@ public class MinecraftClient : IMinecraftClient
     public MinecraftClient(
         IServiceProvider serviceProvider,
         ClientState state,
-        Connection connection, 
+        IPacketSender connection, 
         IPacketService packetService,
         IPhysicsService physicsService,
         CommandRegistry commandRegistry,
         ILogger<MinecraftClient> logger)
     {
+        _serviceProvider = serviceProvider;
         State = state;
         _connection = connection;
         _packetService = packetService;
@@ -89,19 +93,28 @@ public class MinecraftClient : IMinecraftClient
 
     public void EnableEncryption(byte[] sharedSecret)
     {
-        _connection.EnableEncryption(sharedSecret);
+        if (_connection is Connection conn)
+        {
+            conn.EnableEncryption(sharedSecret);
+        }
     }
 
     public void EnableCompression(int threshold)
     {
-        _connection.EnableCompression(threshold);
+        if (_connection is Connection conn)
+        {
+            conn.EnableCompression(threshold);
+        }
     }
 
     public async Task ConnectAsync(string host, int port, bool isSnapshot = false)
     {
         _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
-        await _connection.ConnectAsync(host, port);
+        if (_connection is Connection conn)
+        {
+            await conn.ConnectAsync(host, port);
+        }
         IsConnected = true;
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
@@ -147,7 +160,21 @@ public class MinecraftClient : IMinecraftClient
     {
         IsConnected = false;
         await _cancellationTokenSource.CancelAsync();
-        _connection.Dispose();
+        if (_connection is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task SendChatMessageAsync(string message, CancellationToken ct = default)
+    {
+        // Resolve sinks from the service provider
+        IChatSink sink = State.BotSettings.RedirectChat
+            ? _serviceProvider.GetRequiredService<WebcoreChatSink>()
+            : _serviceProvider.GetRequiredService<DefaultChatSink>();
+
+        await sink.EmitAsync(message, ct);
     }
 
     public async Task SendPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken = default)
@@ -161,7 +188,16 @@ public class MinecraftClient : IMinecraftClient
         {
             try
             {
-                var packetBuffer = await _connection.ReadPacketBytesAsync(cancellationToken);
+                byte[] packetBuffer;
+                if (_connection is Connection conn)
+                {
+                    packetBuffer = await conn.ReadPacketBytesAsync(cancellationToken);
+                }
+                else
+                {
+                    _logger.LogError("ReadPacketBytesAsync is only supported with Connection implementation");
+                    break;
+                }
                 var reader = new PacketBufferReader(packetBuffer);
                 var packetId = reader.ReadVarInt();
                 var packet = _packetService.CreateIncomingPacket(ProtocolState, packetId);

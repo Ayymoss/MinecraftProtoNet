@@ -50,6 +50,11 @@ public class ClientState
     public ServerSettings ServerSettings { get; } = new();
 
     /// <summary>
+    /// Bot-specific configuration settings.
+    /// </summary>
+    public BotSettings BotSettings { get; } = new();
+
+    /// <summary>
     /// Gets the camera entity (the entity used for rendering/view calculations).
     /// Typically the same as LocalPlayer.Entity, but can differ (e.g., spectator mode).
     /// Equivalent to Java's Minecraft.getCameraEntity().

@@ -23,26 +23,11 @@ public class ActionContext(IMinecraftClient client, ClientState state, AuthResul
     }
 
     /// <summary>
-    /// Sends a chat message. Automatically uses signed or unsigned chat based on server configuration.
+    /// Sends a chat message. Automatically handles redirection if configured in bot settings.
     /// </summary>
     /// <param name="message">The message to send.</param>
     public async Task SendChatAsync(string message)
     {
-        // Check if server enforces secure chat
-        if (State.ServerSettings.EnforcesSecureChat)
-        {
-            var packet = ChatSigning.CreateSignedChatPacket(AuthResult, message);
-            if (packet == null)
-            {
-                Log.Warning("[WARN] Server requires signed chat but signing failed. Attempting unsigned");
-                packet = new ChatPacket(message);
-            }
-            await SendPacketAsync(packet);
-        }
-        else
-        {
-            // Server doesn't require signed chat - use unsigned
-            await SendPacketAsync(new ChatPacket(message));
-        }
+        await Client.SendChatMessageAsync(message);
     }
 }

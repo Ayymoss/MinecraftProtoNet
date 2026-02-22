@@ -33,6 +33,14 @@ public interface IMinecraftClient : IPacketSender
     Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
 
+    /// <summary>
+    /// Sends a chat message, optionally redirecting it based on bot settings.
+    /// </summary>
+    /// <param name="message">The message to send.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SendChatMessageAsync(string message, CancellationToken ct = default);
+
     Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage);
 
     /// <summary>

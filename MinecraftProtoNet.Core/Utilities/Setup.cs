@@ -8,6 +8,9 @@ using MinecraftProtoNet.Core.Handlers;
 using MinecraftProtoNet.Core.Handlers.Base;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Core.Abstractions.Api;
+using Refit;
 
 namespace MinecraftProtoNet.Core.Utilities;
 
@@ -29,6 +32,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketSender>(sp => sp.GetRequiredService<Connection>());
         services.AddSingleton<IPacketService, PacketService>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
+
+        // Chat redirection sinks
+        services.AddSingleton<DefaultChatSink>();
+        services.AddSingleton<WebcoreChatSink>();
+        
+        // Refit API clients
+        // The base URL should ideally be from configuration
+        services.AddRefitClient<IWebcoreChatApi>()
+            .ConfigureHttpClient(c => c.BaseAddress = new Uri("http://localhost:5000"));
 
         // Game services
         services.AddSingleton<IClientStateAccessor, ClientStateAccessor>();
