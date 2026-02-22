@@ -1,0 +1,85 @@
+@inject BotService Bot
+@using Bot.Webcore.Services
+@using MinecraftProtoNet.Core.Dtos
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <i class="ph-duotone ph-chats text-2xl text-emerald-400"></i>
+            <h2 class="text-xl font-semibold text-gray-100">Chat Redirection</h2>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-800 rounded-full px-3 py-1 border border-slate-700">
+            <span class="text-xs text-gray-400">Redirect</span>
+            <input type="checkbox" @bind="Bot.State.BotSettings.RedirectChat" class="form-checkbox h-4 w-4 text-emerald-500 rounded border-slate-600 bg-slate-700" />
+        </div>
+    </div>
+
+    @if (!Bot.IsConnected)
+    {
+        <div class="text-center py-6 text-gray-500">
+            <i class="ph-duotone ph-chat-centered-dots text-4xl mb-2 block"></i>
+            <p>Connect to review redirected chat</p>
+        </div>
+    }
+    else if (Bot.PendingRedirectedChat.IsEmpty)
+    {
+        <div class="text-center py-6 text-gray-500 italic">
+            <p>No pending messages for review.</p>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+            @foreach (var msg in Bot.PendingRedirectedChat.ToList())
+            {
+                <div class="p-3 bg-slate-800/80 rounded-lg border border-slate-700/50 flex flex-col gap-2">
+                    <div class="text-sm text-gray-200 break-words">
+                        @msg.Message
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] text-gray-500">
+                        <span>@DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp).LocalDateTime.ToString("T")</span>
+                        <div class="flex gap-2">
+                            <button @onclick="() => Dismiss(msg)" 
+                                    class="px-2 py-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded border border-red-700/30 transition-colors">
+                                Dismiss
+                            </button>
+                            <button @onclick="() => Send(msg)" 
+                                    class="px-2 py-1 bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 rounded border border-emerald-700/30 transition-colors">
+                                Send to Minecraft
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Bot.OnStateChanged += OnBotStateChanged;
+    }
+
+    private void OnBotStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Send(ChatRedirectRequest msg)
+    {
+        await Bot.SendRedirectedChatAsync(msg);
+        Bot.DismissRedirectedChat(msg);
+    }
+
+    private void Dismiss(ChatRedirectRequest msg)
+    {
+        Bot.DismissRedirectedChat(msg);
+    }
+
+    public void Dispose()
+    {
+        Bot.OnStateChanged -= OnBotStateChanged;
+    }
+}

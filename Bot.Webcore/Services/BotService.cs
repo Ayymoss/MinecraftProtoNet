@@ -73,11 +73,32 @@ public class BotService : IDisposable
     }
 
     /// <summary>
-    /// Adds a redirected chat message to the queue and notifies UI.
+    /// Sends a redirected chat message to the server (manual override).
     /// </summary>
-    public void AddRedirectedChat(ChatRedirectRequest request)
+    public async Task SendRedirectedChatAsync(ChatRedirectRequest request)
     {
-        PendingRedirectedChat.Enqueue(request);
+        // To avoid infinite recursion, we temporarily disable redirection or call a direct method
+        var previousRedirect = State.BotSettings.RedirectChat;
+        try
+        {
+            State.BotSettings.RedirectChat = false;
+            await _client.SendChatMessageAsync(request.Message);
+        }
+        finally
+        {
+            State.BotSettings.RedirectChat = previousRedirect;
+        }
+    }
+
+    /// <summary>
+    /// Clears a message from the pending queue.
+    /// </summary>
+    public void DismissRedirectedChat(ChatRedirectRequest request)
+    {
+        // Simplified dismissal - in a real app we might use IDs
+        var remaining = PendingRedirectedChat.Where(x => x != request).ToList();
+        PendingRedirectedChat.Clear();
+        foreach (var msg in remaining) PendingRedirectedChat.Enqueue(msg);
         NotifyStateChanged();
     }
 
