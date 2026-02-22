@@ -66,6 +66,13 @@ public class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
+        // Chat redirection endpoint
+        app.MapPost("/api/chat/redirect", (MinecraftProtoNet.Core.Dtos.ChatRedirectRequest request, BotService botService) =>
+        {
+            botService.AddRedirectedChat(request);
+            return Results.Ok();
+        });
+
         await app.RunAsync();
     }
 }

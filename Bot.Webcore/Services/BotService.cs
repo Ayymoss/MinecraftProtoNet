@@ -3,8 +3,10 @@ using MinecraftProtoNet.Baritone.Api.Behavior;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Dtos;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State.Base;
+using System.Collections.Concurrent;
 
 namespace Bot.Webcore.Services;
 
@@ -19,6 +21,11 @@ public class BotService : IDisposable
     private readonly System.Timers.Timer? _refreshTimer;
 
     public event Action? OnStateChanged;
+
+    /// <summary>
+    /// Pending chat messages redirected for review.
+    /// </summary>
+    public ConcurrentQueue<ChatRedirectRequest> PendingRedirectedChat { get; } = new();
 
     public BotService(
         IMinecraftClient client, 
@@ -63,6 +70,15 @@ public class BotService : IDisposable
             containerManager.OnContainerOpened += _ => NotifyStateChanged();
             containerManager.OnContainerClosed += NotifyStateChanged;
         }
+    }
+
+    /// <summary>
+    /// Adds a redirected chat message to the queue and notifies UI.
+    /// </summary>
+    public void AddRedirectedChat(ChatRedirectRequest request)
+    {
+        PendingRedirectedChat.Enqueue(request);
+        NotifyStateChanged();
     }
 
     // Delegate to core client
