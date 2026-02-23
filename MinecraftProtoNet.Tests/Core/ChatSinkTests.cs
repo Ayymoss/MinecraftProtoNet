@@ -21,10 +21,10 @@ public class ChatSinkTests
         // Arrange
         var mockSink = new Mock<IChatSink>();
         var message = "Hello, Minecraft!";
-        
+
         // Act
         await mockSink.Object.EmitAsync(message, CancellationToken.None);
-        
+
         // Assert
         mockSink.Verify(x => x.EmitAsync(message, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -37,14 +37,14 @@ public class ChatSinkTests
         mockClient.Setup(x => x.State).Returns(new ClientState());
         var sink = new DefaultChatSink(mockClient.Object);
         var message = "Test Message";
-        
+
         // Act
         await sink.EmitAsync(message, CancellationToken.None);
-        
+
         // Assert
         mockClient.Verify(x => x.SendPacketAsync(
-            It.Is<ChatPacket>(p => p.Message == message), 
-            It.IsAny<CancellationToken>()), 
+                It.Is<ChatPacket>(p => p.Message == message),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -53,16 +53,17 @@ public class ChatSinkTests
     {
         // Arrange
         var mockApi = new Mock<IWebcoreChatApi>();
-        var sink = new WebcoreChatSink(mockApi.Object);
+        var mockLogger = new Mock<ILogger<WebcoreChatSink>>();
+        var sink = new WebcoreChatSink(mockApi.Object, mockLogger.Object);
         var message = "Test Message";
-        
+
         // Act
         await sink.EmitAsync(message, CancellationToken.None);
-        
+
         // Assert
         mockApi.Verify(x => x.PostRedirectedChatAsync(
-            It.Is<ChatRedirectRequest>(r => r.Message == message), 
-            It.IsAny<CancellationToken>()), 
+                It.Is<ChatRedirectRequest>(r => r.Message == message),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -72,11 +73,12 @@ public class ChatSinkTests
         // Arrange
         var mockServiceProvider = new Mock<IServiceProvider>();
         var mockApi = new Mock<IWebcoreChatApi>();
-        var webcoreSinkImpl = new WebcoreChatSink(mockApi.Object);
-        
+        var mockLogger = new Mock<ILogger<WebcoreChatSink>>();
+        var webcoreSinkImpl = new WebcoreChatSink(mockApi.Object, mockLogger.Object);
+
         mockServiceProvider.Setup(x => x.GetService(typeof(WebcoreChatSink))).Returns(webcoreSinkImpl);
         mockServiceProvider.Setup(x => x.GetService(typeof(ILogger<CommandRegistry>))).Returns(new Mock<ILogger<CommandRegistry>>().Object);
-        
+
         var state = new ClientState();
         state.BotSettings.RedirectChat = true;
 
@@ -97,8 +99,8 @@ public class ChatSinkTests
 
         // Assert
         mockApi.Verify(x => x.PostRedirectedChatAsync(
-            It.Is<ChatRedirectRequest>(r => r.Message == message), 
-            It.IsAny<CancellationToken>()), 
+                It.Is<ChatRedirectRequest>(r => r.Message == message),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

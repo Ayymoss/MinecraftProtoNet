@@ -73,6 +73,15 @@ public class BotService : IDisposable
     }
 
     /// <summary>
+    /// Adds a redirected chat message to the pending queue.
+    /// </summary>
+    public void AddRedirectedChat(ChatRedirectRequest request)
+    {
+        PendingRedirectedChat.Enqueue(request);
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// Sends a redirected chat message to the server (manual override).
     /// </summary>
     public async Task SendRedirectedChatAsync(ChatRedirectRequest request)
