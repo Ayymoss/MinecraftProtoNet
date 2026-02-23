@@ -231,11 +231,10 @@ public static class BlockPhysicsData
         {
             state.HasCollision = false;
         }
-        // Carpet
-        else if (name.EndsWith("_carpet", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
+        // Carpet — HAS collision (1/16 block height). Do NOT set HasCollision=false.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/CarpetBlock.java
+        // Carpets have VoxelShape = Block.column(16, 0, 1) → Box(0, 0, 0, 1, 0.0625, 1)
+        // The correct shape is already in BlockShapeRegistry.GetShape().
         // Coral fans
         else if (name.Contains("_coral_fan", StringComparison.OrdinalIgnoreCase))
         {

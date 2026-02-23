@@ -16,8 +16,8 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddBaritone(this IServiceCollection services)
     {
-        // Register BaritoneProvider as singleton
-        services.AddSingleton<IBaritoneProvider, BaritoneProvider>();
+        // Register BaritoneProvider as singleton using the global instance from BaritoneAPI
+        services.AddSingleton<IBaritoneProvider>(_ => BaritoneAPI.GetProvider());
         
         // Hook Baritone to game loop after services are built
         services.AddSingleton<BaritoneGameLoopHook>();

@@ -71,6 +71,9 @@ public class BotService : IDisposable
             containerManager.OnContainerOpened += _ => NotifyStateChanged();
             containerManager.OnContainerClosed += NotifyStateChanged;
         }
+
+        // Ensure Baritone is initialized for this client early
+        _baritoneProvider.CreateBaritone(_client);
     }
 
     /// <summary>
@@ -133,8 +136,7 @@ public class BotService : IDisposable
         {
             try
             {
-                var baritones = _baritoneProvider.GetAllBaritones();
-                return baritones.Count > 0 ? baritones[0].GetFollowProcess() : null;
+                return _baritoneProvider.CreateBaritone(_client).GetFollowProcess();
             }
             catch { return null; }
         }
@@ -150,17 +152,9 @@ public class BotService : IDisposable
         {
             try
             {
-                var baritones = _baritoneProvider.GetAllBaritones();
-                if (baritones.Count == 0)
-                {
-                    return null;
-                }
-                return baritones[0].GetPathingBehavior();
+                return _baritoneProvider.CreateBaritone(_client).GetPathingBehavior();
             }
-            catch
-            {
-                return null;
-            }
+            catch { return null; }
         }
     }
     

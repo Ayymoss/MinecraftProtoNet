@@ -463,10 +463,14 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         double velocityYAfterMoveRelative = entity.Velocity.Y;
 
         // Handle climbable (ladder) logic
+        var velBeforeClimbable = entity.Velocity;
         entity.Velocity = HandleOnClimbable(entity, level, entity.Velocity);
+        bool onClimbable = IsOnClimbable(entity, level);
 
         // Store velocity before Move() to track what was actually applied
         var velocityBeforeMove = entity.Velocity;
+        var posBeforeMove = entity.Position;
+        bool onGroundBeforeMove = entity.IsOnGround;
 
         // Apply movement with collision (this moves the entity and may modify velocity)
         Move(entity, level, velocityBeforeMove);
@@ -482,8 +486,27 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
             movement = new Vector3<double>(movement.X, 0.2, movement.Z);
         }
 
+        // Ladder diagnostics: log when on a climbable block
+        if (onClimbable)
+        {
+            int bx = (int)Math.Floor(entity.Position.X);
+            int by = (int)Math.Floor(entity.Position.Y);
+            int bz = (int)Math.Floor(entity.Position.Z);
+            var blockName = level.GetBlockAt(bx, by, bz)?.Name ?? "unknown";
+            _logger.LogWarning(
+                "[Ladder] Block={Block} at ({Bx},{By},{Bz}), Sneak={Sneak}, OnGround={OnGround}->{OnGroundAfter}, " +
+                "VelY: {VelBefore:F4}->{VelAfterClimb:F4}->{VelAfterMove:F4}, " +
+                "HorizCol={HCol}, Pos={PosX:F3},{PosY:F3},{PosZ:F3}, Speed={Speed:F4}",
+                blockName, bx, by, bz,
+                entity.IsSneaking, onGroundBeforeMove, entity.IsOnGround,
+                velBeforeClimbable.Y, velocityBeforeMove.Y, movement.Y,
+                entity.HorizontalCollision,
+                entity.Position.X, entity.Position.Y, entity.Position.Z,
+                speed);
+        }
+
         // Debug logging: Only log when falling and there's significant change
-        if (isFalling && Math.Abs(movement.Y - velocityYBeforeMoveRelative) > 0.001)
+        if (!onClimbable && isFalling && Math.Abs(movement.Y - velocityYBeforeMoveRelative) > 0.001)
         {
             _logger.LogDebug(
                 "[Physics] HandleRelativeFriction - EntityId={EntityId}, " +
@@ -824,7 +847,18 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
 
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:763
         // Back off from edge when sneaking to prevent falling off blocks
+        var deltaBeforeEdge = delta;
         delta = MaybeBackOffFromEdge(entity, level, delta);
+
+        // Log when edge prevention clamps movement on/near a climbable
+        if (IsOnClimbable(entity, level) && (Math.Abs(delta.X - deltaBeforeEdge.X) > 1e-7 || Math.Abs(delta.Z - deltaBeforeEdge.Z) > 1e-7))
+        {
+            _logger.LogWarning(
+                "[Ladder/Edge] MaybeBackOffFromEdge clamped: dX {BeforeX:F6}->{AfterX:F6}, dZ {BeforeZ:F6}->{AfterZ:F6}, " +
+                "OnGround={OG}, IsAboveGround={AG}",
+                deltaBeforeEdge.X, delta.X, deltaBeforeEdge.Z, delta.Z,
+                entity.IsOnGround, IsAboveGround(entity, level, PhysicsConstants.DefaultStepHeight));
+        }
 
         // Collide movement
         var movement = Collide(entity, level, delta);

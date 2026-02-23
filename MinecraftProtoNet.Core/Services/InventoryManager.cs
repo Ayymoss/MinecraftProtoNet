@@ -244,13 +244,13 @@ public class InventoryManager(
             inventory.SetSlot((short)fromSlot, toItem);
             inventory.SetSlot((short)toSlot, fromItem);
 
-            // Build changedSlots by diffing
+            // Build changedSlots by diffing — both slots changed
+            // Reference: MultiPlayerGameMode.handleContainerInput() diffs ALL slots
             var changedSlots = new Dictionary<short, Slot>();
             if (!Slot.Matches(fromItem, toItem)) // If they're the same, nothing changed
             {
                 changedSlots[(short)fromSlot] = toItem;
-                // Note: hotbar slot changes are also tracked in the window
-                // For window 0 (player inventory), slot indices are the same
+                changedSlots[(short)toSlot] = fromItem;
             }
 
             await packetSender.SendPacketAsync(new ClickContainerPacket

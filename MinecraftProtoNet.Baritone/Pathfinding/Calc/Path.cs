@@ -165,9 +165,14 @@ internal class Path : IPath
 
         if (failed) // at least one movement became impossible during calculation
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/calc/Path.java:147
-            // CutoffPath res = new CutoffPath(this, Movements().Count);
-            // For now, return this path (cutoff path implementation can be added later)
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/calc/Path.java:154
+            // Java creates: new CutoffPath(this, movements().size())
+            // We truncate _path in-place to match _movements.Count + 1 (positions = movements + 1)
+            int cutoffLength = _movements.Count + 1;
+            if (cutoffLength < _path.Count)
+            {
+                _path.RemoveRange(cutoffLength, _path.Count - cutoffLength);
+            }
             SanityCheck();
             return this;
         }
@@ -191,9 +196,11 @@ internal class Path : IPath
 
     public int GetNumNodesConsidered() => _numNodes;
 
-    public BetterBlockPos GetSrc() => _start;
+    // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/calc/IPath.java
+    // getSrc() and getDest() derive from positions() in Java, supporting CutoffPath truncation
+    public BetterBlockPos GetSrc() => _path[0];
 
-    public BetterBlockPos GetDest() => _end;
+    public BetterBlockPos GetDest() => _path[^1];
 
     public int Length() => _path.Count;
 
@@ -227,20 +234,22 @@ internal class Path : IPath
 
     public void SanityCheck()
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/calc/Path.java:196
-        // Sanity check path validity
-        // Basic checks: path should have at least start and end
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/calc/IPath.java:150
         if (_path.Count < 2)
         {
             throw new InvalidOperationException("Path must have at least 2 positions");
         }
-        if (!_path[0].Equals(_start))
+        if (!GetSrc().Equals(_path[0]))
         {
-            throw new InvalidOperationException("Path start does not match");
+            throw new InvalidOperationException("Start node does not equal first path element");
         }
-        if (!_path[_path.Count - 1].Equals(_end))
+        if (!GetDest().Equals(_path[^1]))
         {
-            throw new InvalidOperationException("Path end does not match");
+            throw new InvalidOperationException("End node does not equal last path element");
+        }
+        if (_path.Count != _movements.Count + 1)
+        {
+            throw new InvalidOperationException($"Size of path array is unexpected: {_path.Count} positions vs {_movements.Count} movements");
         }
     }
 }

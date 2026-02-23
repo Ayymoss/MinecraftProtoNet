@@ -124,8 +124,27 @@ public partial class InventoryView
         }
         else if (DragState.SourceSlot != targetSlot)
         {
-            // Dropping within inventory - use existing swap
-            await Bot.InventoryManager.SwapItems(DragState.SourceSlot!.Value, targetSlot);
+            // Dropping within inventory
+            if (Bot.ContainerManager?.IsContainerOpen == true)
+            {
+                // When a container is open, inventory slots are part of the container window.
+                // Must route through ContainerManager with mapped window slot indices.
+                // Reference: vanilla client sends all clicks through the active container window
+                var container = Bot.ContainerManager.CurrentContainer!;
+                var containerSlotCount = container.Type.GetContainerSlotCount();
+
+                short mappedSource = (short)(containerSlotCount + DragState.SourceSlot!.Value - 9);
+                short mappedTarget = (short)(containerSlotCount + targetSlot - 9);
+
+                // Pickup from source, place at target
+                await Bot.ContainerManager.ClickSlotAsync(mappedSource);
+                await Bot.ContainerManager.ClickSlotAsync(mappedTarget);
+            }
+            else
+            {
+                // No container open — use player inventory window (WindowId=0)
+                await Bot.InventoryManager.SwapItems(DragState.SourceSlot!.Value, targetSlot);
+            }
             Bot.NotifyStateChanged();
         }
 

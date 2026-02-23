@@ -29,7 +29,10 @@ using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
 using MinecraftProtoNet.Baritone.Pathfinding.Precompute;
 using static MinecraftProtoNet.Baritone.Pathfinding.Precompute.Ternary;
+using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Packets.Base.Definitions;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
 
@@ -339,14 +342,81 @@ public static class MovementHelper
         return name.Contains("fire") || name.Contains("cactus") || name.Contains("magma") || name.Contains("berry_bush");
     }
 
+    /// <summary>
+    /// Switches to the best tool for breaking the given block.
+    /// First checks hotbar (like vanilla Baritone), then scans main inventory
+    /// and swaps the best tool to the current hotbar slot if needed.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java
+    /// </summary>
     public static void SwitchToBestToolFor(IPlayerContext ctx, BlockState state)
     {
         var player = ctx.Player() as Entity;
         if (player == null) return;
 
         var toolSet = new ToolSet(player);
-        int bestSlot = toolSet.GetBestSlot(state.Name, false);
-        player.HeldSlot = (short)bestSlot;
+        int bestHotbarSlot = toolSet.GetBestSlot(state.Name, false);
+
+        // Check if the hotbar tool is actually effective
+        int bestContainerSlot = bestHotbarSlot + 36;
+        var bestItem = player.Inventory.GetSlot((short)bestContainerSlot);
+        double hotbarSpeed = ToolSet.CalculateSpeedVsBlock(bestItem, state);
+
+        // Scan main inventory (slots 9-35) for a better tool
+        // This extends vanilla Baritone behavior to handle tools not yet in hotbar
+        int bestInvSlot = -1;
+        double bestInvSpeed = hotbarSpeed;
+
+        for (int i = 9; i <= 35; i++)
+        {
+            var item = player.Inventory.GetSlot((short)i);
+            if (item.ItemId == null || item.ItemCount <= 0) continue;
+
+            double speed = ToolSet.CalculateSpeedVsBlock(item, state);
+            if (speed > bestInvSpeed)
+            {
+                bestInvSpeed = speed;
+                bestInvSlot = i;
+            }
+        }
+
+        if (bestInvSlot >= 0)
+        {
+            // Found a better tool in main inventory — swap it to the current hotbar slot
+            // using a number-key swap (Mode 2). Fire-and-forget; the packet sender is async
+            // but EnsureHasSentCarriedItemAsync on the next tick will sync held slot.
+            int targetHotbarSlot = player.HeldSlot;
+            int targetContainerSlot = targetHotbarSlot + 36;
+
+            // Swap inventory slot with hotbar slot locally
+            var invItem = player.Inventory.GetSlot((short)bestInvSlot);
+            var hotbarItem = player.Inventory.GetSlot((short)targetContainerSlot);
+            player.Inventory.SetSlot((short)bestInvSlot, hotbarItem);
+            player.Inventory.SetSlot((short)targetContainerSlot, invItem);
+
+            // Send the swap packet (fire-and-forget from sync context)
+            var client = (IPacketSender)ctx.Minecraft();
+            _ = client.SendPacketAsync(new ClickContainerPacket
+            {
+                WindowId = 0,
+                StateId = player.Inventory.StateId,
+                Slot = (short)bestInvSlot,
+                Button = (sbyte)targetHotbarSlot,
+                Mode = ClickContainerMode.Swap,
+                ChangedSlots = new Dictionary<short, Slot>
+                {
+                    [(short)bestInvSlot] = hotbarItem,
+                    [(short)targetContainerSlot] = invItem
+                },
+                CarriedItem = player.Inventory.CursorItem
+            });
+
+            // Keep held slot the same — tool is now there
+        }
+        else
+        {
+            // Best tool is already in hotbar — just switch to it
+            player.HeldSlot = (short)bestHotbarSlot;
+        }
     }
 
     public static bool MustBeSolidToWalkOn(CalculationContext context, int x, int y, int z, BlockState state)
