@@ -36,4 +36,15 @@ public class RegistryDataLoader : IRegistryDataLoader
         return registry["minecraft:item"].Entries
             .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
     }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, string>> LoadEntityTypesAsync()
+    {
+        var filePath = Path.Combine(_staticFilesPath, RegistriesFileName);
+        var json = await File.ReadAllTextAsync(filePath);
+        var registry = JsonSerializer.Deserialize<Dictionary<string, RegistryRoot>>(json) ?? [];
+
+        return registry["minecraft:entity_type"].Entries
+            .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
+    }
 }

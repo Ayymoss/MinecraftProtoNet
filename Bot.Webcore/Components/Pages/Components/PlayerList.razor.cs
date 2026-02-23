@@ -1,7 +1,11 @@
-﻿namespace Bot.Webcore.Components.Pages.Components;
+using MinecraftProtoNet.Core.State;
+
+namespace Bot.Webcore.Components.Pages.Components;
 
 public partial class PlayerList
 {
+    private bool IsFollowing => Bot.FollowProcess?.Following().Count > 0;
+
     protected override void OnInitialized()
     {
         Bot.OnStateChanged += HandleStateChanged;
@@ -15,6 +19,20 @@ public partial class PlayerList
     public void Dispose()
     {
         Bot.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void FollowPlayer(Player player)
+    {
+        if (player.Entity == null) return;
+        var targetEntityId = player.Entity.EntityId;
+        Bot.FollowProcess?.Follow(e => e is Entity entity && entity.EntityId == targetEntityId);
+        Bot.NotifyStateChanged();
+    }
+
+    private void StopFollowing()
+    {
+        Bot.FollowProcess?.Cancel();
+        Bot.NotifyStateChanged();
     }
 
     private int GetOtherPlayerCount()

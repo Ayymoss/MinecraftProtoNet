@@ -1,5 +1,6 @@
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Behavior;
+using MinecraftProtoNet.Baritone.Api.Process;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Core;
@@ -122,6 +123,23 @@ public class BotService : IDisposable
     public IInventoryManager InventoryManager { get; }
     public IContainerManager ContainerManager { get; }
     
+    /// <summary>
+    /// Gets the Baritone follow process for UI binding.
+    /// Returns null if Baritone is not available.
+    /// </summary>
+    public IFollowProcess? FollowProcess
+    {
+        get
+        {
+            try
+            {
+                var baritones = _baritoneProvider.GetAllBaritones();
+                return baritones.Count > 0 ? baritones[0].GetFollowProcess() : null;
+            }
+            catch { return null; }
+        }
+    }
+
     /// <summary>
     /// Gets the Baritone pathing behavior for UI binding.
     /// Returns null if Baritone is not available.

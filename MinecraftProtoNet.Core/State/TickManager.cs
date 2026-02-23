@@ -69,4 +69,23 @@ public class TickManager : ITickManager
         const double epsilon = 1e-9;
         return TickInterval > epsilon ? 1000.0 / TickInterval : 0.0;
     }
+
+    public bool IsFrozen { get; private set; }
+
+    public void SetTickRate(float tickRate)
+    {
+        lock (_tickLock)
+        {
+            tickRate = Math.Max(tickRate, 1.0f);
+            TickInterval = 1000.0 / tickRate;
+        }
+    }
+
+    public void SetFrozen(bool frozen)
+    {
+        lock (_tickLock)
+        {
+            IsFrozen = frozen;
+        }
+    }
 }

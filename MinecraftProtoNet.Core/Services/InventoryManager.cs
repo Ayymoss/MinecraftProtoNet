@@ -218,6 +218,11 @@ public class InventoryManager(
         if (inventory != null) inventory.HeldSlot = (short)hotbarSlot;
     }
 
+    /// <summary>
+    /// Swaps items between two inventory slots with proper client-side prediction.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java handleContainerInput()
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/inventory/AbstractContainerMenu.java doClick()
+    /// </summary>
     public async Task SwapItems(int fromSlot, int toSlot)
     {
         var inventory = state.LocalPlayer?.Entity?.Inventory;
@@ -226,10 +231,28 @@ public class InventoryManager(
         logger.LogInformation("[InventoryManager] Swapping slots {From} and {To}", fromSlot, toSlot);
 
         // If 'toSlot' is in the hotbar (36-44), we can use Mode 2 (Swap)
+        // Reference: AbstractContainerMenu.java doClick() — SWAP branch
         if (toSlot >= 36 && toSlot <= 44 && (fromSlot < 36 || fromSlot > 44))
         {
             int hotbarIndex = toSlot - 36;
-            
+
+            // Snapshot before
+            var fromItem = inventory.GetSlot((short)fromSlot).Clone();
+            var toItem = inventory.GetSlot((short)toSlot).Clone();
+
+            // Predict: swap the two slots
+            inventory.SetSlot((short)fromSlot, toItem);
+            inventory.SetSlot((short)toSlot, fromItem);
+
+            // Build changedSlots by diffing
+            var changedSlots = new Dictionary<short, Slot>();
+            if (!Slot.Matches(fromItem, toItem)) // If they're the same, nothing changed
+            {
+                changedSlots[(short)fromSlot] = toItem;
+                // Note: hotbar slot changes are also tracked in the window
+                // For window 0 (player inventory), slot indices are the same
+            }
+
             await packetSender.SendPacketAsync(new ClickContainerPacket
             {
                 WindowId = 0,
@@ -237,44 +260,65 @@ public class InventoryManager(
                 Slot = (short)fromSlot,
                 Button = (sbyte)hotbarIndex,
                 Mode = ClickContainerMode.Swap,
-                ChangedSlots = new(),
-                CarriedItem = Slot.Empty
+                ChangedSlots = changedSlots,
+                CarriedItem = inventory.CursorItem // Swap doesn't change cursor
             });
-            
+
             return;
         }
 
-        // General Swap (Drag and Drop style): 
-        // 1. Click 'fromSlot' to pick up
-        // 2. Click 'toSlot' to place/swap
-        
-        // Pick up
+        // General Swap (two Pickup clicks):
+        // Reference: Vanilla client does this as two separate handleContainerInput() calls
+        // 1. Click 'fromSlot' to pick up → cursor becomes fromItem
+        // 2. Click 'toSlot' to place/swap → cursor becomes toItem (or empty)
+
+        var fromItemBefore = inventory.GetSlot((short)fromSlot).Clone();
+        var toItemBefore = inventory.GetSlot((short)toSlot).Clone();
+
+        // --- First click: pick up from 'fromSlot' ---
+        // Predict: slot becomes empty, cursor becomes fromItem
+        var changedSlots1 = new Dictionary<short, Slot>();
+        if (!fromItemBefore.IsEmpty)
+        {
+            changedSlots1[(short)fromSlot] = Slot.Empty;
+        }
+
         await packetSender.SendPacketAsync(new ClickContainerPacket
         {
             WindowId = 0,
             StateId = inventory.StateId,
             Slot = (short)fromSlot,
-            Button = 0, // Left click
+            Button = 0,
             Mode = ClickContainerMode.Pickup,
-            ChangedSlots = new(),
-            CarriedItem = Slot.Empty
+            ChangedSlots = changedSlots1,
+            CarriedItem = fromItemBefore // post-click cursor = picked up item
         });
 
-        // Small delay to let server process? Usually not needed if we track state correctly, 
-        // but since we aren't predicting state changes yet, we might need to wait for the next packet.
-        // However, for immediate UI response, we just fire and forget the second click with the same/incremented state.
-        
-        // Place down / Swap with target
+        // Apply intermediate prediction locally
+        inventory.SetSlot((short)fromSlot, Slot.Empty);
+        inventory.CursorItem = fromItemBefore;
+
+        // --- Second click: place at 'toSlot' (swap if occupied) ---
+        // Predict: slot becomes fromItem, cursor becomes toItem (or empty)
+        var changedSlots2 = new Dictionary<short, Slot>();
+        changedSlots2[(short)toSlot] = fromItemBefore;
+
+        var newCursor = toItemBefore.IsEmpty ? Slot.Empty : toItemBefore;
+
         await packetSender.SendPacketAsync(new ClickContainerPacket
         {
             WindowId = 0,
-            StateId = inventory.StateId, // Ideally this should be StateId + 1 if we are predicting
+            StateId = inventory.StateId, // Vanilla client also uses same stateId for rapid clicks
             Slot = (short)toSlot,
-            Button = 0, // Left click
+            Button = 0,
             Mode = ClickContainerMode.Pickup,
-            ChangedSlots = new(),
-            CarriedItem = inventory.GetSlot((short)fromSlot) // Emulate carried item
+            ChangedSlots = changedSlots2,
+            CarriedItem = newCursor // post-click cursor = what was in target slot
         });
+
+        // Apply final prediction locally
+        inventory.SetSlot((short)toSlot, fromItemBefore);
+        inventory.CursorItem = newCursor;
     }
 
     public float GetDigSpeed(BlockState block)

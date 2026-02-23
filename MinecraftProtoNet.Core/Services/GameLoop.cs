@@ -57,27 +57,32 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 
                     try
                     {
+                        // Increment tick counter FIRST (matches vanilla Minecraft.java:1740)
+                        client.State.Level.IncrementClientTickCounter();
+
                         // Invoke pre-tick hook for external systems (e.g., Baritone)
                         if (PreTick != null)
                         {
                             // Log occasionally to verify it's being called (every 100 ticks = ~5 seconds)
                             if (client.State.Level.ClientTickCounter % 100 == 0)
                             {
-                                logger.LogWarning("GameLoop: Invoking PreTick event (subscribers: {Count}, tick: {Tick})", 
+                                logger.LogWarning("GameLoop: Invoking PreTick event (subscribers: {Count}, tick: {Tick})",
                                     PreTick.GetInvocationList().Length, client.State.Level.ClientTickCounter);
                             }
                             PreTick.Invoke(client);
                         }
-                        
+
                         await client.PhysicsTickAsync(entity => PhysicsTick?.Invoke(entity));
-                        client.State.Level.IncrementClientTickCounter();
-                        
+
                         // Invoke post-tick hook for external systems (e.g., Baritone)
                         if (PostTick != null)
                         {
                             logger.LogTrace("GameLoop: Invoking PostTick event (subscribers: {Count})", PostTick.GetInvocationList().Length);
                             PostTick.Invoke(client);
                         }
+
+                        // Send ClientTickEndPacket at end of tick BEFORE sleep (matches vanilla Minecraft.java:1864)
+                        await client.SendPacketAsync(new ClientTickEndPacket());
                     }
                     catch (Exception ex)
                     {
@@ -99,8 +104,6 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
                     {
                         await Task.Yield();
                     }
-
-                    await client.SendPacketAsync(new ClientTickEndPacket());
                 }
             }
             catch (OperationCanceledException)

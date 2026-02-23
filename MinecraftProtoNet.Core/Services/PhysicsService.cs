@@ -1195,9 +1195,9 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         bool move = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ) > PositionUpdateThreshold ||
                     entity.PositionReminder >= PositionReminderInterval;
         
-        // Use a small threshold for rotation updates to avoid spamming tiny jitter
-        const float rotationThreshold = 0.001f;
-        bool rot = Math.Abs(deltaYRot) > rotationThreshold || Math.Abs(deltaXRot) > rotationThreshold;
+        // Match vanilla exactly: any non-zero rotation change triggers a rotation packet
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:258
+        bool rot = deltaYRot != 0.0 || deltaXRot != 0.0;
 
         var flags = MovementFlags.None;
         if (entity.IsOnGround) flags |= MovementFlags.OnGround;
@@ -1238,11 +1238,9 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                  entity.HorizontalCollision != entity.LastSentHorizontalCollision)
         {
             // Status-only packet (no position/rotation change)
-            await packetSender.SendPacketAsync(new MovePlayerPositionPacket
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:265-266
+            await packetSender.SendPacketAsync(new MovePlayerStatusOnlyPacket
             {
-                X = entity.LastSentPosition.X,
-                Y = entity.LastSentPosition.Y,
-                Z = entity.LastSentPosition.Z,
                 Flags = flags
             });
         }

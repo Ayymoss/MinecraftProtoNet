@@ -70,6 +70,7 @@ public class ClientState
     public static FrozenDictionary<int, BlockState> BlockStateRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, Biome> BiomeRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, string> ItemRegistry { get; private set; } = null!;
+    public static FrozenDictionary<int, string> EntityTypeRegistry { get; private set; } = null!;
 
     public static void InitializeBlockStateRegistry(Dictionary<int, BlockState> blockStates)
     {
@@ -84,5 +85,10 @@ public class ClientState
     public static void InitialiseItemRegistry(Dictionary<int, string> registry)
     {
         ItemRegistry = registry.ToFrozenDictionary();
+    }
+
+    public static void InitializeEntityTypeRegistry(Dictionary<int, string> registry)
+    {
+        EntityTypeRegistry = registry.ToFrozenDictionary();
     }
 }

@@ -10,6 +10,14 @@
         {
             <span class="ml-auto text-sm text-gray-500">@GetOtherPlayerCount() online</span>
         }
+        @if (IsFollowing)
+        {
+            <button @onclick="StopFollowing"
+                    class="ml-2 flex items-center gap-1 px-2 py-1 text-xs bg-red-600/60 hover:bg-red-600 text-white rounded-md transition-all border border-red-500/50">
+                <i class="ph ph-stop text-xs"></i>
+                Stop Follow
+            </button>
+        }
     </div>
 
     @if (!Bot.IsConnected)
@@ -25,7 +33,7 @@
         var players = Bot.State.Level.GetAllPlayers()
             .Where(p => p.Uuid != localUuid)
             .ToList();
-        
+
         @if (players.Count == 0)
         {
             <div class="text-center py-8 text-gray-500">
@@ -44,26 +52,26 @@
                         <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
                             <i class="ph-duotone ph-user text-lg text-slate-400"></i>
                         </div>
-                        
+
                         <!-- Player info -->
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse flex-shrink-0"></span>
                                 <span class="font-medium text-gray-100 truncate">@(player.Username ?? "Unknown")</span>
                             </div>
-                            
+
                             @if (entity != null)
                             {
                                 <!-- Health bar -->
                                 <div class="flex items-center gap-2 mt-1">
                                     <i class="ph ph-heart text-red-400 text-xs"></i>
                                     <div class="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                        <div class="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all" 
+                                        <div class="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all"
                                              style="width: @(Math.Clamp(entity.Health / 20f * 100, 0, 100))%"></div>
                                     </div>
                                     <span class="text-[10px] text-gray-500 w-8">@entity.Health.ToString("F0")/20</span>
                                 </div>
-                                
+
                                 <!-- Position and held item -->
                                 <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
                                     <span title="Position">
@@ -80,6 +88,17 @@
                                 </div>
                             }
                         </div>
+
+                        <!-- Follow button -->
+                        @if (entity != null)
+                        {
+                            <button @onclick="() => FollowPlayer(player)"
+                                    class="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600/60 hover:bg-blue-600 text-white rounded-md transition-all border border-blue-500/50 flex-shrink-0"
+                                    title="Follow this player">
+                                <i class="ph ph-footprints text-xs"></i>
+                                Follow
+                            </button>
+                        }
                     </div>
                 }
             </div>

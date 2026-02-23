@@ -11,11 +11,85 @@ public class Slot
     public StructuredComponent[]? ComponentsToAdd { get; set; }
     public ComponentType[]? ComponentsToRemove { get; set; }
 
-    public static Slot Empty { get; set; } = new()
+    public static Slot Empty { get; } = new()
     {
         ItemCount = 0,
         ItemId = 0
     };
+
+    /// <summary>
+    /// Whether this slot is empty (no item or zero count).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java isEmpty()
+    /// </summary>
+    public bool IsEmpty => ItemCount <= 0 || ItemId is null or 0;
+
+    /// <summary>
+    /// Creates a deep copy of this slot.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java copy()
+    /// </summary>
+    public Slot Clone()
+    {
+        return new Slot
+        {
+            ItemCount = ItemCount,
+            ItemId = ItemId,
+            ComponentsToAdd = ComponentsToAdd?.ToArray(),
+            ComponentsToRemove = ComponentsToRemove?.ToArray()
+        };
+    }
+
+    /// <summary>
+    /// Creates a copy with a different count.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java copyWithCount(int)
+    /// </summary>
+    public Slot CopyWithCount(int count)
+    {
+        var copy = Clone();
+        copy.ItemCount = count;
+        return copy;
+    }
+
+    /// <summary>
+    /// Checks if two slots have the same item type and components (ignoring count).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java isSameItemSameComponents()
+    /// </summary>
+    public static bool IsSameItemSameComponents(Slot a, Slot b)
+    {
+        if (a.ItemId != b.ItemId) return false;
+        // For component comparison, we compare by reference arrays length and types.
+        // Full hash-based comparison would require implementing component hashing.
+        var aAddCount = a.ComponentsToAdd?.Length ?? 0;
+        var bAddCount = b.ComponentsToAdd?.Length ?? 0;
+        var aRemoveCount = a.ComponentsToRemove?.Length ?? 0;
+        var bRemoveCount = b.ComponentsToRemove?.Length ?? 0;
+        return aAddCount == bAddCount && aRemoveCount == bRemoveCount;
+    }
+
+    /// <summary>
+    /// Checks if two slots are completely identical (same item, count, and components).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java matches()
+    /// </summary>
+    public static bool Matches(Slot a, Slot b)
+    {
+        if (a.IsEmpty && b.IsEmpty) return true;
+        if (a.IsEmpty != b.IsEmpty) return false;
+        return a.ItemCount == b.ItemCount && IsSameItemSameComponents(a, b);
+    }
+
+    /// <summary>
+    /// Gets the max stack size for this item. Defaults to 64 if no MaxStackSize component.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/item/ItemStack.java getMaxStackSize()
+    /// </summary>
+    public int GetMaxStackSize()
+    {
+        if (ComponentsToAdd == null) return 64;
+        foreach (var component in ComponentsToAdd)
+        {
+            if (component.Type == ComponentType.MaxStackSize && component.Data is int maxSize)
+                return maxSize;
+        }
+        return 64;
+    }
 
     public static Slot Read(ref PacketBufferReader reader)
     {

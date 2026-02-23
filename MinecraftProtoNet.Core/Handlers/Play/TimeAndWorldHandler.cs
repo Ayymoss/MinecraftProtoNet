@@ -34,6 +34,8 @@ public class TimeAndWorldHandler(ILogger<TimeAndWorldHandler> logger) : IPacketH
             case TickingStatePacket tickingStatePacket:
                 logger.LogDebug("Ticking state: TickRate={TickRate}, Frozen={IsFrozen}",
                     tickingStatePacket.TickRate, tickingStatePacket.IsFrozen);
+                client.State.Level.SetTickRate(tickingStatePacket.TickRate);
+                client.State.Level.SetFrozen(tickingStatePacket.IsFrozen);
                 break;
 
             case TickingStepPacket tickingStepPacket:

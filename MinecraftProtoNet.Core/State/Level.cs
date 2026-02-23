@@ -54,6 +54,14 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
     public double GetCurrentServerTps()
         => tickManager.GetCurrentServerTps();
 
+    public bool IsFrozen => tickManager.IsFrozen;
+
+    public void SetTickRate(float tickRate)
+        => tickManager.SetTickRate(tickRate);
+
+    public void SetFrozen(bool frozen)
+        => tickManager.SetFrozen(frozen);
+
     // ==== Player Registry Delegation ====
 
     public Task<Player> AddPlayerAsync(Guid uuid, string username)

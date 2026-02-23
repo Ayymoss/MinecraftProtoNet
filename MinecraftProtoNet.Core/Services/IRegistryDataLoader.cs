@@ -18,4 +18,10 @@ public interface IRegistryDataLoader
     /// </summary>
     /// <returns>A dictionary mapping protocol IDs to item names.</returns>
     Task<Dictionary<int, string>> LoadItemsAsync();
+
+    /// <summary>
+    /// Loads entity type registry from static files.
+    /// </summary>
+    /// <returns>A dictionary mapping protocol IDs to entity type names.</returns>
+    Task<Dictionary<int, string>> LoadEntityTypesAsync();
 }

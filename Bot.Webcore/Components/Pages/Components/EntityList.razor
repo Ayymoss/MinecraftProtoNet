@@ -1,0 +1,94 @@
+@inject BotService Bot
+@using Bot.Webcore.Services
+@implements IDisposable
+
+<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl h-full">
+    <div class="flex items-center gap-3 mb-6">
+        <i class="ph-duotone ph-paw-print text-2xl text-amber-400"></i>
+        <h2 class="text-xl font-semibold text-gray-100">Entities</h2>
+        @if (Bot.IsConnected)
+        {
+            <span class="ml-auto text-sm text-gray-500">@Bot.State.WorldEntities.GetAllEntities().Count nearby</span>
+        }
+    </div>
+
+    @if (!Bot.IsConnected)
+    {
+        <div class="text-center py-8 text-gray-500">
+            <i class="ph-duotone ph-ghost text-4xl mb-2 block"></i>
+            <p>Connect to view entities</p>
+        </div>
+    }
+    else
+    {
+        <!-- Search filter -->
+        <div class="mb-4">
+            <div class="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
+                <i class="ph ph-magnifying-glass text-gray-500"></i>
+                <input type="text" @bind="_searchFilter" @bind:event="oninput"
+                       class="bg-transparent border-none outline-none text-gray-100 w-full text-sm"
+                       placeholder="Filter by type (e.g. villager, zombie)..." />
+            </div>
+        </div>
+
+        var entities = GetFilteredEntities();
+
+        @if (entities.Count == 0)
+        {
+            <div class="text-center py-8 text-gray-500">
+                <i class="ph-duotone ph-ghost text-4xl mb-2 block"></i>
+                <p>No entities found</p>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                @foreach (var entity in entities)
+                {
+                    var typeName = GetEntityTypeName(entity.EntityType);
+                    <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/30 hover:border-slate-600/50 transition-all">
+                        <!-- Entity type icon -->
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-600/30 to-amber-700/30 flex items-center justify-center flex-shrink-0">
+                            <i class="ph-duotone ph-paw-print text-lg text-amber-400"></i>
+                        </div>
+
+                        <!-- Entity info -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-gray-100 truncate">@typeName</span>
+                                <span class="text-[10px] text-gray-600">#@entity.EntityId</span>
+                            </div>
+
+                            <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                <span title="Position">
+                                    <i class="ph ph-map-pin mr-0.5"></i>
+                                    @FormatPosition(entity)
+                                </span>
+                                <span title="Distance" class="text-cyan-400">
+                                    <i class="ph ph-ruler mr-0.5"></i>
+                                    @FormatDistance(entity)
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Action buttons -->
+                        <div class="flex gap-1 flex-shrink-0">
+                            <button @onclick="() => LookAtEntity(entity)"
+                                    class="flex items-center gap-1 px-2 py-1 text-xs bg-cyan-600/60 hover:bg-cyan-600 text-white rounded-md transition-all border border-cyan-500/50"
+                                    title="Look at this entity">
+                                <i class="ph ph-eye text-xs"></i>
+                                Look
+                            </button>
+                            <button @onclick="() => InteractWithEntity(entity)"
+                                    class="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600/60 hover:bg-amber-600 text-white rounded-md transition-all border border-amber-500/50"
+                                    title="Interact with this entity">
+                                <i class="ph ph-hand-pointing text-xs"></i>
+                                Interact
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>

@@ -74,6 +74,7 @@ public class ConfigurationHandler(
         await InitializeBlockStatesAsync();
         InitializeBiomesFromServerRegistry(client);
         await InitializeItemsAsync();
+        await InitializeEntityTypesAsync();
 
         // 1. Send client information (required during configuration)
         await client.SendPacketAsync(new ClientInformationPacket());
@@ -107,6 +108,12 @@ public class ConfigurationHandler(
     {
         var items = await registryDataLoader.LoadItemsAsync();
         ClientState.InitialiseItemRegistry(items);
+    }
+
+    private async Task InitializeEntityTypesAsync()
+    {
+        var entityTypes = await registryDataLoader.LoadEntityTypesAsync();
+        ClientState.InitializeEntityTypeRegistry(entityTypes);
     }
 
     private static void HandleRegistryData(IMinecraftClient client, RegistryDataPacket registryDataPacket)

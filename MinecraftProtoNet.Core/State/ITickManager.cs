@@ -51,4 +51,21 @@ public interface ITickManager
     /// Gets the current server TPS (ticks per second).
     /// </summary>
     double GetCurrentServerTps();
+
+    /// <summary>
+    /// Whether the game is frozen (ticking paused by server).
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/TickRateManager.java
+    /// </summary>
+    bool IsFrozen { get; }
+
+    /// <summary>
+    /// Sets the tick rate from a server TickingState packet.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/TickRateManager.java:22-25
+    /// </summary>
+    void SetTickRate(float tickRate);
+
+    /// <summary>
+    /// Sets the frozen state from a server TickingState packet.
+    /// </summary>
+    void SetFrozen(bool frozen);
 }
