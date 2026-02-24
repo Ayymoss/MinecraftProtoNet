@@ -88,6 +88,7 @@ public class ChatSinkTests
             new Mock<IPacketSender>().Object,
             new Mock<IPacketService>().Object,
             new Mock<IPhysicsService>().Object,
+            new Mock<IGameLoop>().Object,
             new Mock<CommandRegistry>().Object,
             new Mock<ILogger<MinecraftClient>>().Object
         );

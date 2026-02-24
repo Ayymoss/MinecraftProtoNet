@@ -37,6 +37,12 @@ public class ClientState
     public Level Level { get; set; } = new();
     public Player LocalPlayer { get; set; } = new() { Entity = new Entity() };
     public ConcurrentDictionary<string, Dictionary<string, NbtTag?>> Registry { get; set; } = [];
+
+    /// <summary>
+    /// Ordered list of entry keys per registry, preserving protocol-order indices.
+    /// Used to resolve registry IDs (e.g., DamageEventPacket.SourceTypeId) to entry names.
+    /// </summary>
+    public ConcurrentDictionary<string, List<string>> RegistryKeyOrder { get; set; } = [];
     
     /// <summary>
     /// Registry for non-player entities (mobs, villagers, NPCs, etc.).

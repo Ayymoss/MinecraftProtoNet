@@ -84,10 +84,31 @@ public static class ToolData
     /// Determines if a tool is "effective" (correct tool) for a given block.
     /// This is a simplified lookup. Ideally, this would be data-driven or tag-based.
     /// </summary>
+    /// <summary>
+    /// Strips variant suffixes (_stairs, _slab, _wall, _fence, _fence_gate, _button, _pressure_plate)
+    /// to get the base material name for tool matching.
+    /// e.g. "minecraft:brick_stairs" → "minecraft:brick", "minecraft:oak_stairs" → "minecraft:oak"
+    /// </summary>
+    private static string GetBaseMaterial(string name)
+    {
+        // Order matters: check longer suffixes first
+        string[] suffixes = ["_stairs", "_slab", "_wall", "_fence_gate", "_fence", "_button", "_pressure_plate"];
+        foreach (var suffix in suffixes)
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return name[..^suffix.Length];
+            }
+        }
+        return name;
+    }
+
     public static bool IsCorrectTool(ToolType tool, BlockState block)
     {
         // Material checks based on block names/types
         var name = block.Name;
+        // Also check the base material for variant blocks (stairs, slabs, walls, etc.)
+        var baseName = GetBaseMaterial(name);
 
         if (block.IsExhaustinglyDifficultToBreak) return false; // Bedrock etc.
 
@@ -96,11 +117,20 @@ public static class ToolData
         {
             if (name.Contains("stone") || name.Contains("cobblestone") || name.Contains("andesite") ||
                 name.Contains("granite") || name.Contains("diorite") || name.Contains("ore") ||
-                name.Contains("block") && (name.Contains("iron") || name.Contains("gold") || name.Contains("diamond")) ||
+                (name.Contains("block") && (name.Contains("iron") || name.Contains("gold") || name.Contains("diamond"))) ||
                 name.Contains("brick") || name.Contains("concrete") || name.Contains("terracotta") ||
                 name.Contains("furnace") || name.Contains("anvil") || name.Contains("rail") ||
                 name.Contains("obsidian") || name.Contains("spawner") || name.Contains("prismarine") ||
-                name.Contains("lantern") || name.Contains("cauldron") || name.Contains("hopper"))
+                name.Contains("lantern") || name.Contains("cauldron") || name.Contains("hopper") ||
+                name.Contains("sandstone") || name.Contains("deepslate") || name.Contains("copper") ||
+                name.Contains("blackstone") || name.Contains("basalt") || name.Contains("tuff") ||
+                name.Contains("calcite") || name.Contains("dripstone") || name.Contains("amethyst") ||
+                name.Contains("purpur") || name.Contains("quartz") || name.Contains("end_stone"))
+            {
+                return true;
+            }
+            // Check base material for variants (e.g. "minecraft:brick" from "minecraft:brick_stairs")
+            if (baseName != name && IsCorrectTool(tool, new BlockState(0, baseName)))
             {
                 return true;
             }
@@ -113,7 +143,13 @@ public static class ToolData
                 name.Contains("chest") || name.Contains("barrel") || name.Contains("fence") ||
                 name.Contains("gate") || name.Contains("sign") || name.Contains("banner") ||
                 name.Contains("bookshelf") || name.Contains("loom") || name.Contains("composter") ||
-                name.Contains("crafting_table"))
+                name.Contains("crafting_table") || name.Contains("bamboo") || name.Contains("stem") ||
+                name.Contains("hyphae") || name.Contains("mushroom_block"))
+            {
+                return true;
+            }
+            // Check base material for variants (e.g. "minecraft:oak" from "minecraft:oak_stairs")
+            if (baseName != name && IsCorrectTool(tool, new BlockState(0, baseName)))
             {
                 return true;
             }
@@ -122,7 +158,9 @@ public static class ToolData
         // Shovel
         if (tool == ToolType.Shovel)
         {
-            if (name.Contains("dirt") || name.Contains("grass") || name.Contains("sand") ||
+            // "sand" must not match "sandstone" — sandstone is a pickaxe block
+            if (name.Contains("dirt") || name.Contains("grass") ||
+                (name.Contains("sand") && !name.Contains("sandstone")) ||
                 name.Contains("gravel") || name.Contains("clay") || name.Contains("snow") ||
                 name.Contains("mud") || name.Contains("soul_sand") || name.Contains("soul_soil") ||
                 name.Contains("concrete_powder"))

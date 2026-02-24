@@ -24,7 +24,8 @@ public class MinecraftClient : IMinecraftClient
     private readonly IPacketSender _connection;
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService;
-    private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private readonly IGameLoop _gameLoop;
+    private CancellationTokenSource _cancellationTokenSource = new();
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
     private readonly Thread? _mainThread;
@@ -44,9 +45,10 @@ public class MinecraftClient : IMinecraftClient
     public MinecraftClient(
         IServiceProvider serviceProvider,
         ClientState state,
-        IPacketSender connection, 
+        IPacketSender connection,
         IPacketService packetService,
         IPhysicsService physicsService,
+        IGameLoop gameLoop,
         CommandRegistry commandRegistry,
         ILogger<MinecraftClient> logger)
     {
@@ -55,7 +57,7 @@ public class MinecraftClient : IMinecraftClient
         _connection = connection;
         _packetService = packetService;
         _physicsService = physicsService;
-        _commandRegistry = commandRegistry;
+        _gameLoop = gameLoop;
         _commandRegistry = commandRegistry;
         _logger = logger;
         
@@ -111,6 +113,9 @@ public class MinecraftClient : IMinecraftClient
     {
         _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
+        // Create a fresh CancellationTokenSource for this connection session
+        _cancellationTokenSource = new CancellationTokenSource();
+
         if (_connection is Connection conn)
         {
             await conn.ConnectAsync(host, port);
@@ -159,11 +164,22 @@ public class MinecraftClient : IMinecraftClient
     public async Task DisconnectAsync()
     {
         IsConnected = false;
+
+        // Stop the game loop FIRST so it stops sending packets
+        await _gameLoop.StopAsync();
+
+        // Cancel packet listener
         await _cancellationTokenSource.CancelAsync();
-        if (_connection is IDisposable disposable)
+        _cancellationTokenSource.Dispose();
+
+        // Disconnect (not dispose) the connection so it can be reused for reconnection
+        if (_connection is Connection conn)
         {
-            disposable.Dispose();
+            conn.Disconnect();
         }
+
+        // Reset protocol state for next connection
+        ProtocolState = ProtocolState.Handshaking;
     }
 
     /// <inheritdoc />

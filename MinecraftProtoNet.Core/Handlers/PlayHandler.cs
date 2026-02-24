@@ -15,7 +15,6 @@ namespace MinecraftProtoNet.Core.Handlers;
 [HandlesPacket(typeof(PlayerPositionPacket))]
 public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPacketHandler
 {
-    private bool _playerLoaded;
 
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
@@ -121,15 +120,13 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                     entity.StateLock.Release();
                 }
 
-                if (!_playerLoaded)
+                if (!gameLoop.IsRunning)
                 {
                     await client.SendPacketAsync(new PlayerLoadedPacket());
 
                     // Start the game loop (physics tick loop)
                     // Note: Baritone hook should already be attached via BaritoneGameLoopHook singleton
                     gameLoop.Start(client);
-
-                    _playerLoaded = true;
                 }
 
                 // Notify listeners (pathfinding) that server sent a teleport packet

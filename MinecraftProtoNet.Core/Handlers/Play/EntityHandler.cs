@@ -27,6 +27,23 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(DamageEventPacket))]
 public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physicsService) : IPacketHandler
 {
+    /// <summary>
+    /// Damage types that should NOT apply knockback.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/data/minecraft/tags/damage_type/no_knockback.json
+    /// </summary>
+    private static readonly HashSet<string> NoKnockbackDamageTypes =
+    [
+        "minecraft:explosion", "minecraft:player_explosion", "minecraft:bad_respawn_point",
+        "minecraft:in_fire", "minecraft:lightning_bolt", "minecraft:on_fire",
+        "minecraft:lava", "minecraft:hot_floor", "minecraft:in_wall",
+        "minecraft:cramming", "minecraft:drown", "minecraft:starve",
+        "minecraft:cactus", "minecraft:fall", "minecraft:ender_pearl",
+        "minecraft:fly_into_wall", "minecraft:out_of_world", "minecraft:generic",
+        "minecraft:magic", "minecraft:wither", "minecraft:dragon_breath",
+        "minecraft:dry_out", "minecraft:sweet_berry_bush", "minecraft:freeze",
+        "minecraft:stalagmite", "minecraft:outside_border", "minecraft:generic_kill",
+        "minecraft:campfire", "minecraft:spear"
+    ];
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(EntityHandler));
 
@@ -178,6 +195,21 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
             case DamageEventPacket damageEventPacket:
                 // Apply knockback when entity takes damage
                 // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1197-1215
+
+                // Check NO_KNOCKBACK tag — many damage types (fall, fire, drown, etc.) should not cause knockback
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1197
+                // Java: if (!source.is(DamageTypeTags.NO_KNOCKBACK))
+                if (client.State.RegistryKeyOrder.TryGetValue("minecraft:damage_type", out var damageTypes) &&
+                    damageEventPacket.SourceTypeId >= 0 && damageEventPacket.SourceTypeId < damageTypes.Count)
+                {
+                    var damageTypeName = damageTypes[damageEventPacket.SourceTypeId];
+                    if (NoKnockbackDamageTypes.Contains(damageTypeName))
+                    {
+                        logger.LogDebug("DamageEventPacket: Skipping knockback for NO_KNOCKBACK damage type {DamageType}", damageTypeName);
+                        break;
+                    }
+                }
+
                 // Try to get entity - check local player first, then Level registry
                 Entity? damagedEntity = null;
                 if (client.State.LocalPlayer.HasEntity && 

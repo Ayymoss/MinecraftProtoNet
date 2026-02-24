@@ -14,8 +14,9 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 {
     private CancellationTokenSource? _cts;
     private Thread? _gameLoopThread;
+    private volatile bool _isRunning;
 
-    public bool IsRunning => _gameLoopThread?.IsAlive ?? false;
+    public bool IsRunning => _isRunning;
     public event Action<Entity>? PhysicsTick;
     
     /// <summary>
@@ -44,6 +45,7 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
+        _isRunning = true;
         _gameLoopThread = new Thread(async () =>
         {
             logger.LogInformation("Game loop started");
@@ -84,6 +86,11 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
                         // Send ClientTickEndPacket at end of tick BEFORE sleep (matches vanilla Minecraft.java:1864)
                         await client.SendPacketAsync(new ClientTickEndPacket());
                     }
+                    catch (ObjectDisposedException)
+                    {
+                        logger.LogWarning("Connection disposed during physics tick, stopping game loop");
+                        break;
+                    }
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Error in physics tick");
@@ -112,6 +119,7 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
             }
             finally
             {
+                _isRunning = false;
                 logger.LogInformation("Game loop stopped");
             }
         })
@@ -125,17 +133,18 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 
     public async Task StopAsync()
     {
-        if (_cts == null || !IsRunning)
+        if (_cts == null || !_isRunning)
         {
             return;
         }
 
         logger.LogInformation("Stopping game loop...");
         await _cts.CancelAsync();
-        
-        // Give the thread a moment to clean up
-        await Task.Delay(100);
-        
+
+        // Give the loop a moment to observe cancellation and exit
+        await Task.Delay(200);
+
+        _isRunning = false;
         _cts.Dispose();
         _cts = null;
         _gameLoopThread = null;

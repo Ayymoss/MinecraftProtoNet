@@ -116,8 +116,8 @@ public class InteractionManager : IInteractionManager
         
         string? heldItemName = null;
         if (heldItem.ItemId.HasValue) ClientState.ItemRegistry?.TryGetValue(heldItem.ItemId.Value, out heldItemName);
-        _logger.LogDebug("Mining {Block} (hardness={Hardness}) with {Tool} (slot={Slot}): destroyProgress={Progress:F6}/tick, totalTicks={Ticks}",
-            block.Name, hardness, heldItemName ?? "empty hand", entity.HeldSlot, destroyProgress, _totalBreakingTicks);
+        _logger.LogInformation("[Mining] Block={Block} at ({X},{Y},{Z}), Tool={Tool} (slot={Slot}), Hardness={Hardness}, Ticks={Ticks}",
+            block.Name, pos.X, pos.Y, pos.Z, heldItemName ?? "empty hand", entity.HeldSlot, hardness, _totalBreakingTicks);
 
         _isBreakingBlock = true;
         _breakingBlockPosition = pos;

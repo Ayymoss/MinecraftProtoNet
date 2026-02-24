@@ -21,7 +21,7 @@ public sealed class Connection : IPacketSender, IDisposable
     private const int MaxUncompressedPacketSize = 8 * 1024 * 1024;
 
     // --- Network ---
-    private readonly TcpClient _client = new();
+    private TcpClient _client = new();
     private readonly ILogger<Connection> _logger = LoggingConfiguration.CreateLogger<Connection>();
     private NetworkStream? _rawStream;
     private bool _useEncryption;
@@ -365,7 +365,34 @@ public sealed class Connection : IPacketSender, IDisposable
 
     #endregion
 
-    #region Disposal
+    #region Disconnect & Disposal
+
+    /// <summary>
+    /// Closes the current connection and resets state so the Connection object can be reused
+    /// for a new connection. Unlike Dispose(), this does not permanently invalidate the object.
+    /// </summary>
+    public void Disconnect()
+    {
+        _logger.LogInformation("Disconnecting connection (resettable)");
+        _decryptStream?.Dispose();
+        _encryptStream?.Dispose();
+        _decryptTransform?.Dispose();
+        _encryptTransform?.Dispose();
+        _rawStream?.Dispose();
+        _client.Dispose();
+
+        _rawStream = null;
+        _decryptStream = null;
+        _encryptStream = null;
+        _decryptTransform = null;
+        _encryptTransform = null;
+        _useEncryption = false;
+        _compressionThreshold = -1;
+
+        // Create a fresh TcpClient for the next connection
+        _client = new TcpClient();
+        _disposed = false;
+    }
 
     public void Dispose()
     {

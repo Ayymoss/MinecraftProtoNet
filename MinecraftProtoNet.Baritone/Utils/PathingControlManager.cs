@@ -203,7 +203,7 @@ public class PathingControlManager : IPathingControlManager
 
     private PathingCommand? ExecuteProcesses()
     {
-        foreach (var process in _processes)
+        foreach (var process in _processes.ToList())
         {
             if (process.IsActive())
             {
@@ -220,7 +220,9 @@ public class PathingControlManager : IPathingControlManager
         
         _active.Sort((a, b) => b.Priority().CompareTo(a.Priority()));
         
-        foreach (var proc in _active)
+        // Snapshot to avoid "collection modified during enumeration" — proc.OnTick() or OnLostControl()
+        // can cause processes to activate/deactivate, modifying _active indirectly.
+        foreach (var proc in _active.ToList())
         {
             var pathingBehavior = (Behaviors.PathingBehavior)_baritone.GetPathingBehavior();
             var exec = proc.OnTick(

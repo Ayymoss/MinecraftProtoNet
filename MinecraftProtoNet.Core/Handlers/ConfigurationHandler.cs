@@ -130,5 +130,12 @@ public class ConfigurationHandler(
 
                 return existingTags;
             });
+
+        // Store ordered key list for index-based lookups (e.g., DamageEventPacket.SourceTypeId)
+        var orderedKeys = registryDataPacket.Tags.Keys.ToList();
+        client.State.RegistryKeyOrder.AddOrUpdate(
+            registryDataPacket.RegistryId,
+            orderedKeys,
+            (_, _) => orderedKeys);
     }
 }

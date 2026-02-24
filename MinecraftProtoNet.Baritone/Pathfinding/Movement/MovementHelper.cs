@@ -29,7 +29,10 @@ using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
 using MinecraftProtoNet.Baritone.Pathfinding.Precompute;
 using static MinecraftProtoNet.Baritone.Pathfinding.Precompute.Ternary;
+using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Core.Abstractions;
+using MinecraftProtoNet.Core.State.Base;
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Packets.Base.Definitions;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
@@ -42,6 +45,7 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
 /// </summary>
 public static class MovementHelper
 {
+    private static readonly ILogger _logger = LoggingConfiguration.CreateLogger("MovementHelper");
     public static readonly BlockFace[] HorizontalsButAlsoDown = 
     {
         BlockFace.North, BlockFace.South, BlockFace.East, BlockFace.West, BlockFace.Bottom
@@ -379,6 +383,11 @@ public static class MovementHelper
             }
         }
 
+        // Resolve item names for logging
+        string? hotbarItemName = null;
+        if (bestItem.ItemId.HasValue)
+            ClientState.ItemRegistry?.TryGetValue(bestItem.ItemId.Value, out hotbarItemName);
+
         if (bestInvSlot >= 0)
         {
             // Found a better tool in main inventory — swap it to the current hotbar slot
@@ -392,6 +401,12 @@ public static class MovementHelper
             var hotbarItem = player.Inventory.GetSlot((short)targetContainerSlot);
             player.Inventory.SetSlot((short)bestInvSlot, hotbarItem);
             player.Inventory.SetSlot((short)targetContainerSlot, invItem);
+
+            string? invItemName = null;
+            if (invItem.ItemId.HasValue)
+                ClientState.ItemRegistry?.TryGetValue(invItem.ItemId.Value, out invItemName);
+            _logger.LogInformation("[ToolSwitch] Block={Block}, Swapping {InvTool} (inv slot {InvSlot}) to hotbar slot {HotbarSlot} (speed {Speed:F3} > hotbar best {HotbarSpeed:F3} with {HotbarTool})",
+                state.Name, invItemName ?? "unknown", bestInvSlot, targetHotbarSlot, bestInvSpeed, hotbarSpeed, hotbarItemName ?? "empty");
 
             // Send the swap packet (fire-and-forget from sync context)
             var client = (IPacketSender)ctx.Minecraft();
@@ -415,6 +430,11 @@ public static class MovementHelper
         else
         {
             // Best tool is already in hotbar — just switch to it
+            if (bestHotbarSlot != player.HeldSlot)
+            {
+                _logger.LogInformation("[ToolSwitch] Block={Block}, Switching to hotbar slot {Slot} ({Tool}, speed {Speed:F3})",
+                    state.Name, bestHotbarSlot, hotbarItemName ?? "empty hand", hotbarSpeed);
+            }
             player.HeldSlot = (short)bestHotbarSlot;
         }
     }

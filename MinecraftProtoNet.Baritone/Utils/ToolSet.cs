@@ -194,6 +194,13 @@ public class ToolSet
             return -1;
         }
 
+        // Instant-break blocks: any tool works equally, so return a fixed value
+        // to prevent division by zero (Infinity) which breaks tool comparison
+        if (hardness == 0.0f)
+        {
+            return IsEmpty(item) ? 0.0 : 1.0;
+        }
+
         // Get item destroy speed
         float speed = GetItemDestroySpeed(item, state);
         if (speed > 1)
@@ -255,8 +262,9 @@ public class ToolSet
             return 0.5f;
         }
 
-        // Soft blocks
-        if (name.Contains("air", StringComparison.OrdinalIgnoreCase))
+        // Air blocks (exact match to avoid matching "stairs" etc.)
+        if (name.Equals("minecraft:air", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("_air", StringComparison.OrdinalIgnoreCase))
         {
             return 0.0f;
         }
