@@ -162,26 +162,6 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             if (ShouldPause()) { ClearKeys(); return true; }
 
             var movementStatus = movement.Update();
-            // Ladder diagnostics: log active movement type, state, and positions when near climbable blocks
-            {
-                var player = _ctx.Player() as Entity;
-                if (player != null)
-                {
-                    int bx = (int)Math.Floor(player.Position.X);
-                    int by = (int)Math.Floor(player.Position.Y);
-                    int bz = (int)Math.Floor(player.Position.Z);
-                    var feetBlock = bsi.Get0(bx, by, bz);
-                    if (feetBlock.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                        feetBlock.Name.Contains("vine", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Baritone.GetGameEventHandler().LogDirect(
-                            $"[Ladder/Path] Move={movement.GetType().Name}, Status={movementStatus}, " +
-                            $"Src=({movement.GetSrc()}), Dest=({movement.GetDest()}), " +
-                            $"Pos=({player.Position.X:F2},{player.Position.Y:F2},{player.Position.Z:F2}), " +
-                            $"Sneak={player.IsSneaking}, OnGround={player.IsOnGround}, HCol={player.HorizontalCollision}");
-                    }
-                }
-            }
             if (movementStatus == MovementStatus.Unreachable || movementStatus == MovementStatus.Failed) { Cancel(); return true; }
             if (movementStatus == MovementStatus.Success)
             {

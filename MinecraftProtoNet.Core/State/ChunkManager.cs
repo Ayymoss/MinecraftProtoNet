@@ -77,21 +77,13 @@ public class ChunkManager : IChunkManager
                 for (var z = minBz; z <= maxBz; z++)
                 {
                     var blockState = GetBlockAt(x, y, z);
-                    if (blockState == null) continue;
-                    // BlocksMotion check filters out non-solid blocks (air, ladders, vines, etc.)
-                    // Ladders/vines have HasCollision=false and NO collision shape in vanilla.
-                    // Climbing works through the wall behind them, not through ladder collision.
-                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/LadderBlock.java
-                    if (!blockState.BlocksMotion) continue;
+                    if (blockState == null || blockState.IsAir || blockState.IsLiquid) continue;
 
                     var shape = _blockShapeRegistry.GetShape(blockState);
                     if (!shape.IsEmpty())
                     {
                         var offsetShape = shape.Move(x, y, z);
-                        // Check bounds intersection optimization?
-                        // VoxelShape.Bounds() is relative to origin. Move works.
-                        // We yield it.
-                         yield return offsetShape;
+                        yield return offsetShape;
                     }
                 }
             }

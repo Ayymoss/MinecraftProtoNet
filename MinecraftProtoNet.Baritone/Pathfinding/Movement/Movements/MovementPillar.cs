@@ -22,6 +22,7 @@ using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.State;
 using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
@@ -234,7 +235,24 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
         
         if (ladder)
         {
-            BetterBlockPos? against = GetAgainst(new CalculationContext(Baritone), Src);
+            BetterBlockPos? against = null;
+            if (vine)
+            {
+                against = GetAgainst(new CalculationContext(Baritone), Src);
+            }
+            else if (fromDown.Properties.TryGetValue("facing", out var facing))
+            {
+                against = facing.ToLower() switch
+                {
+                    "north" => Src.South(),
+                    "south" => Src.North(),
+                    "east" => Src.West(),
+                    "west" => Src.East(),
+                    _ => null
+                };
+                
+            }
+
             if (against == null)
             {
                 return state.SetStatus(MovementStatus.Unreachable);
@@ -251,7 +269,19 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
             {
                 state.SetInput(BaritoneInput.Jump, true);
             }
-            MovementHelper.MoveTowards(Ctx, state, against);
+
+            // Move towards the center of the ladder block.
+            // With the correct collision model in Core, hitting the ladder will naturally trigger HorizontalCollision.
+            var playerHeadClimb = Ctx.PlayerHead();
+            var playerRotClimb = Ctx.PlayerRotations();
+            if (playerHeadClimb != null && playerRotClimb != null)
+            {
+                var ladderTarget = new Vector3<double>(Src.X + 0.5, Src.Y + 0.5, Src.Z + 0.5);
+                var rotClimb = RotationUtils.CalcRotationFromVec3d(playerHeadClimb, ladderTarget, playerRotClimb).WithPitch(playerRotClimb.GetPitch());
+                state.SetTarget(new MovementState.MovementTarget(rotClimb, false));
+                state.SetInput(BaritoneInput.MoveForward, true);
+            }
+
             return state;
         }
         else
@@ -315,12 +345,12 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
         if (feet != null && (feet.Equals(Src) || feet.Equals(Src.Below())))
         {
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementPillar.java:200
-            // Check for ladder/vine and set sneak
-            var srcState = BlockStateInterface.Get(Ctx, Src);
-            string srcName = srcState.Name;
-            bool isClimbable = srcName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                              srcName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbable)
+            // Check for ladder/vine BELOW and set sneak
+            var belowState = BlockStateInterface.Get(Ctx, Src.Below());
+            string belowName = belowState.Name;
+            bool isClimbableBelow = belowName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                                   belowName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+            if (isClimbableBelow)
             {
                 state.SetInput(BaritoneInput.Sneak, true);
             }

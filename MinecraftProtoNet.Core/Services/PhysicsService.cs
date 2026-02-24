@@ -28,100 +28,108 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         IPacketSender packetSender,
         Action<Entity>? prePhysicsCallback = null)
     {
-        // ===== TELEPORT GUARD =====
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
-        // When a server teleport is received, the handler already sent AcceptTeleportation + PosRot confirmation.
-        // On the FIRST physics tick after that, we must NOT apply any movement/gravity.
-        // The entity must remain at the exact teleported position so the server accepts our confirmation.
-        // We clear the flag and skip all physics for this tick. On the NEXT tick, normal physics resume.
-        if (entity.HasPendingTeleport)
+        await entity.StateLock.WaitAsync();
+        try
         {
-            entity.HasPendingTeleport = false;
-            
-            _logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
-                entity.Position, entity.Velocity);
-            
-            // Still invoke the pre-physics callback so Baritone can observe the new position,
-            // but we do NOT apply any movement or send position packets this tick.
+            // ===== TELEPORT GUARD =====
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
+            // When a server teleport is received, the handler already sent AcceptTeleportation + PosRot confirmation.
+            // On the FIRST physics tick after that, we must NOT apply any movement/gravity.
+            // The entity must remain at the exact teleported position so the server accepts our confirmation.
+            // We clear the flag and skip all physics for this tick. On the NEXT tick, normal physics resume.
+            if (entity.HasPendingTeleport)
+            {
+                entity.HasPendingTeleport = false;
+
+                _logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
+                    entity.Position, entity.Velocity);
+
+                // Still invoke the pre-physics callback so Baritone can observe the new position,
+                // but we do NOT apply any movement or send position packets this tick.
+                prePhysicsCallback?.Invoke(entity);
+
+                // Send position from the teleported state (no movement applied).
+                // This ensures the server sees us at the exact teleported position on the next game tick.
+                await SendPositionAsync(entity, packetSender);
+                return;
+            }
+
+            // Invoke pre-physics callback (e.g., for pathfinding input)
             prePhysicsCallback?.Invoke(entity);
-            
-            // Send position from the teleported state (no movement applied).
-            // This ensures the server sees us at the exact teleported position on the next game tick.
+
+            // Update fluid state
+            UpdateFluidState(entity, level);
+
+            // TODO: REMOVE
+            var tick = level.ClientTickCounter;
+            if (tick % 20 == 0)
+            {
+                var state = new
+                {
+                    entity.Forward,
+                    entity.Backward,
+                    entity.Left,
+                    entity.Right,
+                    entity.IsJumping,
+                    entity.IsSprinting,
+                    entity.Velocity,
+                    entity.Position,
+                    entity.YawPitch,
+                    entity.IsOnGround,
+                };
+
+                _logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
+            }
+
+            // Handle jump input BEFORE travel (matches Java: jump happens before travel)
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2909-2934
+            // IMPORTANT: noJumpDelay is decremented BEFORE the jump check, not in the else branch.
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2903-2905
+            if (entity.JumpCooldown > 0)
+            {
+                entity.JumpCooldown--;
+            }
+
+            if (entity.IsJumping)
+            {
+                if (entity.IsInWater || entity.IsInLava)
+                {
+                    HandleJumpInFluid(entity);
+                }
+                else if (entity.IsOnGround && entity.JumpCooldown == 0)
+                {
+                    JumpFromGround(entity);
+                    entity.JumpCooldown = 10; // noJumpDelay = 10
+                }
+            }
+            else
+            {
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2932
+                // When not jumping, reset cooldown immediately
+                entity.JumpCooldown = 0;
+            }
+
+            // Handle entity-to-entity pushing/collisions
+            PushEntities(entity, level);
+
+            // Sync entity.IsSprinting from input state BEFORE travel.
+            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
+            // In Java, aiStep() determines sprint state before travel() and sendPosition().
+            // entity.IsSprinting drives speed calculations in GetFrictionInfluencedSpeed and JumpFromGround.
+            entity.IsSprinting = entity.InputState.Current.Sprint;
+
+            // Calculate movement based on travel method
+            // Travel applies movement internally and updates velocity for next tick
+            var input = ConvertInputToVector3(entity);
+            Travel(entity, level, input);
+
+            // Send position updates to server
             await SendPositionAsync(entity, packetSender);
-            return;
         }
-        
-        // Invoke pre-physics callback (e.g., for pathfinding input)
-        prePhysicsCallback?.Invoke(entity);
-
-        // Update fluid state
-        UpdateFluidState(entity, level);
-
-        // TODO: REMOVE
-        var tick = level.ClientTickCounter;
-        if (tick % 20 == 0)
+        finally
         {
-            var state = new
-            {
-                entity.Forward,
-                entity.Backward,
-                entity.Left,
-                entity.Right,
-                entity.IsJumping,
-                entity.IsSprinting,
-                entity.Velocity,
-                entity.Position,
-                entity.YawPitch,
-                entity.IsOnGround,
-            };
-
-            _logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
+            entity.StateLock.Release();
         }
-
-        // Handle jump input BEFORE travel (matches Java: jump happens before travel)
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2909-2934
-        // IMPORTANT: noJumpDelay is decremented BEFORE the jump check, not in the else branch.
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2903-2905
-        if (entity.JumpCooldown > 0)
-        {
-            entity.JumpCooldown--;
-        }
-        
-        if (entity.IsJumping)
-        {
-            if (entity.IsInWater || entity.IsInLava)
-            {
-                HandleJumpInFluid(entity);
-            }
-            else if (entity.IsOnGround && entity.JumpCooldown == 0)
-            {
-                JumpFromGround(entity);
-                entity.JumpCooldown = 10; // noJumpDelay = 10
-            }
-        }
-        else
-        {
-            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2932
-            // When not jumping, reset cooldown immediately
-            entity.JumpCooldown = 0;
-        }
-
-        // Handle entity-to-entity pushing/collisions
-        PushEntities(entity, level);
-
-        // Sync entity.IsSprinting from input state BEFORE travel.
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
-        // In Java, aiStep() determines sprint state before travel() and sendPosition().
-        // entity.IsSprinting drives speed calculations in GetFrictionInfluencedSpeed and JumpFromGround.
-        entity.IsSprinting = entity.InputState.Current.Sprint;
-
-        // Calculate movement based on travel method
-        // Travel applies movement internally and updates velocity for next tick
-        var input = ConvertInputToVector3(entity);
-        Travel(entity, level, input);
-
-        // Send position updates to server
-        await SendPositionAsync(entity, packetSender);
     }
 
     /// <summary>
@@ -483,26 +491,7 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2510-2511
         if ((entity.HorizontalCollision || entity.IsJumping) && IsOnClimbable(entity, level))
         {
-            movement = new Vector3<double>(movement.X, 0.2, movement.Z);
-        }
-
-        // Ladder diagnostics: log when on a climbable block
-        if (onClimbable)
-        {
-            int bx = (int)Math.Floor(entity.Position.X);
-            int by = (int)Math.Floor(entity.Position.Y);
-            int bz = (int)Math.Floor(entity.Position.Z);
-            var blockName = level.GetBlockAt(bx, by, bz)?.Name ?? "unknown";
-            _logger.LogWarning(
-                "[Ladder] Block={Block} at ({Bx},{By},{Bz}), Sneak={Sneak}, OnGround={OnGround}->{OnGroundAfter}, " +
-                "VelY: {VelBefore:F4}->{VelAfterClimb:F4}->{VelAfterMove:F4}, " +
-                "HorizCol={HCol}, Pos={PosX:F3},{PosY:F3},{PosZ:F3}, Speed={Speed:F4}",
-                blockName, bx, by, bz,
-                entity.IsSneaking, onGroundBeforeMove, entity.IsOnGround,
-                velBeforeClimbable.Y, velocityBeforeMove.Y, movement.Y,
-                entity.HorizontalCollision,
-                entity.Position.X, entity.Position.Y, entity.Position.Z,
-                speed);
+            movement = new Vector3<double>(movement.X, PhysicsConstants.ClimbUpSpeed, movement.Z);
         }
 
         // Debug logging: Only log when falling and there's significant change
@@ -850,16 +839,6 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         var deltaBeforeEdge = delta;
         delta = MaybeBackOffFromEdge(entity, level, delta);
 
-        // Log when edge prevention clamps movement on/near a climbable
-        if (IsOnClimbable(entity, level) && (Math.Abs(delta.X - deltaBeforeEdge.X) > 1e-7 || Math.Abs(delta.Z - deltaBeforeEdge.Z) > 1e-7))
-        {
-            _logger.LogWarning(
-                "[Ladder/Edge] MaybeBackOffFromEdge clamped: dX {BeforeX:F6}->{AfterX:F6}, dZ {BeforeZ:F6}->{AfterZ:F6}, " +
-                "OnGround={OG}, IsAboveGround={AG}",
-                deltaBeforeEdge.X, delta.X, deltaBeforeEdge.Z, delta.Z,
-                entity.IsOnGround, IsAboveGround(entity, level, PhysicsConstants.DefaultStepHeight));
-        }
-
         // Collide movement
         var movement = Collide(entity, level, delta);
         var movementLengthSqr = movement.LengthSquared();
@@ -878,6 +857,22 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         bool xCollision = Math.Abs(delta.X - movement.X) > 1.0E-7;
         bool zCollision = Math.Abs(delta.Z - movement.Z) > 1.0E-7;
         entity.HorizontalCollision = xCollision || zCollision;
+
+        // DEVIATION FROM VANILLA: Force HorizontalCollision on climbable blocks.
+        // In vanilla, ladders have hasCollision=false (no collision shape), so the player walks through
+        // the ladder and hits the solid wall behind it, which triggers HorizontalCollision naturally.
+        // We intentionally give ladders thin collision shapes in BlockShapeRegistry so the bot collides
+        // with the ladder itself (without needing to reach the wall). This means HorizontalCollision
+        // may not trigger via normal collision, so we force it when movement is reduced on a climbable.
+        // This complements the ladder collision shapes in BlockShapeRegistry.
+        if (!entity.HorizontalCollision && IsOnClimbable(entity, level))
+        {
+            // If we are moving towards a block and our velocity is very low or blocked, count it as collision
+            if (delta.LengthSquared() > 1e-9 && movement.LengthSquared() < delta.LengthSquared() * 0.95)
+            {
+                entity.HorizontalCollision = true;
+            }
+        }
 
         bool yCollision = Math.Abs(delta.Y - movement.Y) > 1.0E-7;
         bool verticalCollisionBelow = yCollision && delta.Y < 0.0;

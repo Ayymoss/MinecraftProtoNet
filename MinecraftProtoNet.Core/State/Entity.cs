@@ -24,6 +24,12 @@ public class Entity
     public int EntityId { get; set; }
 
     /// <summary>
+    /// Semaphore for synchronizing access to entity state (position, velocity, etc.)
+    /// between the physics thread and packet handlers.
+    /// </summary>
+    public SemaphoreSlim StateLock { get; } = new(1, 1);
+
+    /// <summary>
     /// Event fired when health, hunger, or saturation changes.
     /// </summary>
     public event Action? OnStatsChanged;

@@ -54,62 +54,72 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                 if (!client.State.LocalPlayer.HasEntity) throw new InvalidOperationException("Local player entity not found.");
                 var entity = client.State.LocalPlayer.Entity;
 
-                // --- Apply position/velocity/rotation from packet FIRST ---
-                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
-                // Java order: setValuesFromPositionPacket() → send AcceptTeleportation → send PosRot confirmation
-                var flags = playerPositionPacket.Flags;
-                
-                // Update position
-                var posX = flags.HasFlag(PlayerPositionPacket.PositionFlags.X) ? entity.Position.X + playerPositionPacket.Position.X : playerPositionPacket.Position.X;
-                var posY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y) ? entity.Position.Y + playerPositionPacket.Position.Y : playerPositionPacket.Position.Y;
-                var posZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Z) ? entity.Position.Z + playerPositionPacket.Position.Z : playerPositionPacket.Position.Z;
-                entity.Position = new Vector3<double>(posX, posY, posZ);
-
-                // Update velocity 
-                var velX = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_X) ? entity.Velocity.X + playerPositionPacket.Velocity.X : playerPositionPacket.Velocity.X;
-                var velY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Y) ? entity.Velocity.Y + playerPositionPacket.Velocity.Y : playerPositionPacket.Velocity.Y;
-                var velZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Z) ? entity.Velocity.Z + playerPositionPacket.Velocity.Z : playerPositionPacket.Velocity.Z;
-                entity.Velocity = new Vector3<double>(velX, velY, velZ);
-
-                // Update Rotation
-                var yaw = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y_ROT) ? entity.YawPitch.X + playerPositionPacket.YawPitch.X : playerPositionPacket.YawPitch.X;
-                var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
-                entity.YawPitch = new Vector2<float>(yaw, pitch);
-                
-                entity.IsOnGround = false; // Reset on-ground state until next physics tick
-
-                logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
-                    playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
-
-                // --- Send AcceptTeleportation THEN position confirmation (matching Java exactly) ---
-                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:751-752
-                // Java sends BOTH packets immediately in the handler:
-                //   this.connection.send(new ServerboundAcceptTeleportationPacket(packet.id()));
-                //   this.connection.send(new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), 
-                //                        player.getYRot(), player.getXRot(), false, false));
-                await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
-                await client.SendPacketAsync(new MovePlayerPositionRotationPacket
+                // --- Use StateLock to ensure atomicity of position update and confirmation ---
+                // This prevents the physics loop from moving the entity BETWEEN the update and confirmation.
+                await entity.StateLock.WaitAsync();
+                try
                 {
-                    X = entity.Position.X,
-                    Y = entity.Position.Y,
-                    Z = entity.Position.Z,
-                    Yaw = entity.YawPitch.X,
-                    Pitch = entity.YawPitch.Y,
-                    Flags = Enums.MovementFlags.None // Java passes false, false (not on ground, no horizontal collision)
-                });
+                    // --- Apply position/velocity/rotation from packet FIRST ---
+                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
+                    // Java order: setValuesFromPositionPacket() → send AcceptTeleportation → send PosRot confirmation
+                    var flags = playerPositionPacket.Flags;
 
-                // Sync "last sent" tracking to the teleported position so SendPositionAsync
-                // doesn't re-send a duplicate or stale position on the next tick.
-                entity.LastSentPosition = entity.Position;
-                entity.LastSentYawPitch = entity.YawPitch;
-                entity.LastSentOnGround = entity.IsOnGround;
-                entity.LastSentHorizontalCollision = false;
-                entity.PositionReminder = 0;
-                
-                // Mark teleport as pending so physics skips the next tick
-                // (the entity must remain at the exact teleported position for one tick)
-                entity.HasPendingTeleport = true;
-                entity.TeleportYawPitch = playerPositionPacket.YawPitch;
+                    // Update position
+                    var posX = flags.HasFlag(PlayerPositionPacket.PositionFlags.X) ? entity.Position.X + playerPositionPacket.Position.X : playerPositionPacket.Position.X;
+                    var posY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y) ? entity.Position.Y + playerPositionPacket.Position.Y : playerPositionPacket.Position.Y;
+                    var posZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Z) ? entity.Position.Z + playerPositionPacket.Position.Z : playerPositionPacket.Position.Z;
+                    entity.Position = new Vector3<double>(posX, posY, posZ);
+
+                    // Update velocity 
+                    var velX = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_X) ? entity.Velocity.X + playerPositionPacket.Velocity.X : playerPositionPacket.Velocity.X;
+                    var velY = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Y) ? entity.Velocity.Y + playerPositionPacket.Velocity.Y : playerPositionPacket.Velocity.Y;
+                    var velZ = flags.HasFlag(PlayerPositionPacket.PositionFlags.Delta_Z) ? entity.Velocity.Z + playerPositionPacket.Velocity.Z : playerPositionPacket.Velocity.Z;
+                    entity.Velocity = new Vector3<double>(velX, velY, velZ);
+
+                    // Update Rotation
+                    var yaw = flags.HasFlag(PlayerPositionPacket.PositionFlags.Y_ROT) ? entity.YawPitch.X + playerPositionPacket.YawPitch.X : playerPositionPacket.YawPitch.X;
+                    var pitch = flags.HasFlag(PlayerPositionPacket.PositionFlags.X_ROT) ? entity.YawPitch.Y + playerPositionPacket.YawPitch.Y : playerPositionPacket.YawPitch.Y;
+                    entity.YawPitch = new Vector2<float>(yaw, pitch);
+
+                    entity.IsOnGround = false; // Reset on-ground state until next physics tick
+
+                    logger.LogDebug("Applied teleport: TeleportId={TeleportId}, Position={Position}, Velocity={Velocity}, Flags={Flags}",
+                        playerPositionPacket.TeleportId, entity.Position, entity.Velocity, flags);
+
+                    // --- Send AcceptTeleportation THEN position confirmation (matching Java exactly) ---
+                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:751-752
+                    // Java sends BOTH packets immediately in the handler:
+                    //   this.connection.send(new ServerboundAcceptTeleportationPacket(packet.id()));
+                    //   this.connection.send(new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), 
+                    //                        player.getYRot(), player.getXRot(), false, false));
+                    await client.SendPacketAsync(new AcceptTeleportationPacket { TeleportId = playerPositionPacket.TeleportId });
+                    await client.SendPacketAsync(new MovePlayerPositionRotationPacket
+                    {
+                        X = entity.Position.X,
+                        Y = entity.Position.Y,
+                        Z = entity.Position.Z,
+                        Yaw = entity.YawPitch.X,
+                        Pitch = entity.YawPitch.Y,
+                        Flags = Enums.MovementFlags.None // Java passes false, false (not on ground, no horizontal collision)
+                    });
+
+                    // Sync "last sent" tracking to the teleported position so SendPositionAsync
+                    // doesn't re-send a duplicate or stale position on the next tick.
+                    entity.LastSentPosition = entity.Position;
+                    entity.LastSentYawPitch = entity.YawPitch;
+                    entity.LastSentOnGround = entity.IsOnGround;
+                    entity.LastSentHorizontalCollision = false;
+                    entity.PositionReminder = 0;
+
+                    // Mark teleport as pending so physics skips the next tick
+                    // (the entity must remain at the exact teleported position for one tick)
+                    entity.HasPendingTeleport = true;
+                    entity.TeleportYawPitch = playerPositionPacket.YawPitch;
+                }
+                finally
+                {
+                    entity.StateLock.Release();
+                }
 
                 if (!_playerLoaded)
                 {

@@ -502,12 +502,12 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
         if (feet != null && (feet.Equals(Src) || feet.Equals(Src.Below())))
         {
             // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:218
-            // Check for ladder/vine and set sneak
-            var srcState = BlockStateInterface.Get(Ctx, Src);
-            string srcName = srcState.Name;
-            bool isClimbable = srcName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                              srcName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbable)
+            // Check for ladder/vine BELOW and set sneak
+            var belowState = BlockStateInterface.Get(Ctx, Src.Below());
+            string belowName = belowState.Name;
+            bool isClimbableBelow = belowName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+                                   belowName.Contains("vine", StringComparison.OrdinalIgnoreCase);
+            if (isClimbableBelow)
             {
                 state.SetInput(Input.Sneak, true);
             }

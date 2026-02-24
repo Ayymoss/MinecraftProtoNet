@@ -14,11 +14,25 @@ public class BlockShapeRegistry : IBlockShapeRegistry
 
     public VoxelShape GetShape(BlockState blockState)
     {
-        // Ladders have NO collision shape in vanilla - they are passable blocks.
-        // Climbing works through: entity walks INTO the ladder block, hits the WALL behind it,
-        // which triggers HorizontalCollision, then IsOnClimbable + HorizontalCollision → Y boost to 0.2.
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/LadderBlock.java
-        // LadderBlock has hasCollision=false → getCollisionShape() returns Shapes.empty()
+        // DEVIATION FROM VANILLA: In vanilla, ladders have hasCollision=false (no collision shape).
+        // The player walks through the ladder and hits the solid wall behind it, which triggers
+        // HorizontalCollision and enables the 0.2 Y climb boost.
+        // We intentionally add thin collision shapes here so the bot gets HorizontalCollision
+        // from colliding with the ladder itself, without needing to reach the wall behind it.
+        // This is complemented by forced HorizontalCollision logic in PhysicsService.Move().
+        if (blockState.Name.Equals("minecraft:ladder", StringComparison.OrdinalIgnoreCase))
+        {
+            var facing = blockState.Properties.GetValueOrDefault("facing", "north");
+            return facing.ToLower() switch
+            {
+                "north" => Shapes.Shapes.Box(0, 0, 0.8125, 1, 1, 1),
+                "south" => Shapes.Shapes.Box(0, 0, 0, 1, 1, 0.1875),
+                "west" => Shapes.Shapes.Box(0.8125, 0, 0, 1, 1, 1),
+                "east" => Shapes.Shapes.Box(0, 0, 0, 0.1875, 1, 1),
+                _ => Shapes.Shapes.Empty()
+            };
+        }
+
         if (!blockState.BlocksMotion || blockState.IsAir || blockState.IsLiquid)
         {
             return Shapes.Shapes.Empty();
