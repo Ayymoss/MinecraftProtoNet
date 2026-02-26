@@ -17,6 +17,7 @@
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java
  */
 
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
@@ -24,6 +25,7 @@ using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Behaviors;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Core.Enums;
+using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
@@ -34,7 +36,9 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
 /// </summary>
 public abstract class Movement : IMovement
 {
-    public static readonly BlockFace[] HorizontalsButAlsoDown = 
+    private static readonly ILogger _movementLogger = LoggingConfiguration.CreateLogger("MinecraftProtoNet.Baritone.Movement");
+
+    public static readonly BlockFace[] HorizontalsButAlsoDown =
     {
         BlockFace.North, BlockFace.South, BlockFace.East, BlockFace.West, BlockFace.Bottom
     };
@@ -169,8 +173,17 @@ public abstract class Movement : IMovement
                 var blockState = BlockStateInterface.Get(Ctx, feet);
                 if (blockState != null && !MovementHelper.CanWalkThrough(Ctx, feet))
                 {
-                    MovementHelper.SwitchToBestToolFor(Ctx, blockState);
-                    _currentState.SetInput(Input.ClickLeft, true);
+                    // Don't try to break bottom slabs the player is standing ON TOP of.
+                    // When on a bottom slab at block Y, player.Y = Y + 0.5, and
+                    // floor(Y + 0.5) = Y, so feet falls inside the slab block.
+                    // But the player is above the slab's collision box, not stuck inside.
+                    bool onTopOfSlab = MovementHelper.IsBottomSlab(blockState)
+                                       && playerEntity.Position.Y >= feet.Y + 0.5;
+                    if (!onTopOfSlab)
+                    {
+                        MovementHelper.SwitchToBestToolFor(Ctx, blockState);
+                        _currentState.SetInput(Input.ClickLeft, true);
+                    }
                 }
             }
         }
@@ -179,11 +192,20 @@ public abstract class Movement : IMovement
         var target = _currentState.GetTarget();
         if (target != null && target.GetRotation() != null)
         {
+            var activeInputs = string.Join(",", _currentState.GetInputStates()
+                .Where(kv => kv.Value).Select(kv => kv.Key));
+            _movementLogger.LogDebug(
+                "[Movement] {Type} ({SrcX},{SrcY},{SrcZ})->({DestX},{DestY},{DestZ}) Status={Status} Yaw={Yaw:F1} Pitch={Pitch:F1} Inputs=[{Inputs}]",
+                GetType().Name, Src.X, Src.Y, Src.Z, Dest.X, Dest.Y, Dest.Z,
+                _currentState.GetStatus(),
+                target.GetRotation()!.GetYaw(), target.GetRotation()!.GetPitch(),
+                activeInputs);
+
             Baritone.GetLookBehavior().UpdateTarget(
                 target.GetRotation()!,
                 target.HasToForceRotations());
         }
-        
+
         Baritone.GetInputOverrideHandler().ClearAllKeys();
         var inputStates = _currentState.GetInputStates().ToList();
         foreach (var kvp in inputStates)

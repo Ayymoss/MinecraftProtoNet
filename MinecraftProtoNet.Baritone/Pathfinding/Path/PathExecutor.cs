@@ -17,6 +17,7 @@
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/path/PathExecutor.java
  */
 
+using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Pathing.Calc;
 using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
@@ -27,6 +28,7 @@ using MinecraftProtoNet.Baritone.Pathfinding.Movement;
 using MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.State;
 using MovementType = MinecraftProtoNet.Baritone.Pathfinding.Movement.Movement;
 using BaritoneSettings = MinecraftProtoNet.Baritone.Core.Baritone;
@@ -39,6 +41,8 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Path;
 /// </summary>
 public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
 {
+    private static readonly ILogger _logger = LoggingConfiguration.CreateLogger("MinecraftProtoNet.Baritone.PathExecutor");
+
     private const double MaxMaxDistFromPath = 3;
     private const double MaxDistFromPath = 2;
     private const double MaxTicksAway = 200;
@@ -59,6 +63,24 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
 
     private bool _sprintNextTick;
 
+    /// <summary>
+    /// Checks if the player's feet position is contained in a movement's valid positions,
+    /// accounting for bottom slab offset. When standing on a bottom slab at block Y,
+    /// the player's Y is Y+0.5 which floors to Y, but the path expects Y+1.
+    /// </summary>
+    private bool IsInValidPositions(HashSet<BetterBlockPos> validPositions, BetterBlockPos feet)
+    {
+        if (validPositions.Contains(feet)) return true;
+        // Check slab-offset: player at (X, Y, Z) on a bottom slab should match (X, Y+1, Z)
+        var blockAtFeet = BlockStateInterface.Get(_ctx, feet);
+        if (blockAtFeet != null && MovementHelper.IsBottomSlab(blockAtFeet))
+        {
+            var slabAdjusted = new BetterBlockPos(feet.X, feet.Y + 1, feet.Z);
+            return validPositions.Contains(slabAdjusted);
+        }
+        return false;
+    }
+
     public bool OnTick()
     {
         var context = behavior.SecretInternalGetCalculationContext() ?? new CalculationContext(Baritone);
@@ -74,17 +96,25 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             var whereAmI = _ctx.PlayerFeet();
             if (whereAmI == null) return false;
 
-            if (!movement.GetValidPositions().Contains(whereAmI))
+            if (!IsInValidPositions(movement.GetValidPositions(), whereAmI))
             {
+                _logger.LogDebug(
+                    "[PathExec] NOT in valid pos! Feet=({FeetX},{FeetY},{FeetZ}) PathPos={PathPos} Move={Type} ({SrcX},{SrcY},{SrcZ})->({DestX},{DestY},{DestZ}) ValidPos=[{Valid}]",
+                    whereAmI.X, whereAmI.Y, whereAmI.Z, _pathPosition, movement.GetType().Name,
+                    movement.GetSrc().X, movement.GetSrc().Y, movement.GetSrc().Z,
+                    movement.GetDest().X, movement.GetDest().Y, movement.GetDest().Z,
+                    string.Join("; ", movement.GetValidPositions().Select(p => $"({p.X},{p.Y},{p.Z})")));
+
                 bool foundLagPos = false;
                 for (int i = _pathPosition - 1; i >= 0; i--)
                 {
-                    if (((MovementType)path.Movements()[i]).GetValidPositions().Contains(whereAmI))
+                    if (IsInValidPositions(((MovementType)path.Movements()[i]).GetValidPositions(), whereAmI))
                     {
                         int previousPos = _pathPosition;
                         _pathPosition = i;
                         for (int j = _pathPosition; j <= previousPos; j++) path.Movements()[j].Reset();
                         OnChangeInPathPosition();
+                        _logger.LogDebug("[PathExec] Lag rewind: {PreviousPos} -> {NewPos}", previousPos, i);
                         Baritone.GetGameEventHandler().LogDirect($"Lag rewind: {previousPos} -> {i}");
                         foundLagPos = true;
                         break;
@@ -95,8 +125,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 bool foundSkipPos = false;
                 for (int i = _pathPosition + 3; i < path.Length() - 1; i++)
                 {
-                    if (((MovementType)path.Movements()[i]).GetValidPositions().Contains(whereAmI))
+                    if (IsInValidPositions(((MovementType)path.Movements()[i]).GetValidPositions(), whereAmI))
                     {
+                        _logger.LogDebug("[PathExec] Skip forward: {OldPos} -> {NewPos}", _pathPosition, i - 1);
                         _pathPosition = i - 1;
                         OnChangeInPathPosition();
                         foundSkipPos = true;
@@ -104,6 +135,8 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                     }
                 }
                 if (foundSkipPos) continue;
+
+                _logger.LogDebug("[PathExec] No valid position found, executing movement anyway");
             }
 
             var status = ClosestPathPos(path);
@@ -165,21 +198,28 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             if (movementStatus == MovementStatus.Unreachable || movementStatus == MovementStatus.Failed) { Cancel(); return true; }
             if (movementStatus == MovementStatus.Success)
             {
+                _logger.LogDebug("[PathExec] Movement SUCCESS at pathPos={PathPos}, advancing", _pathPosition);
                 _pathPosition++; OnChangeInPathPosition(); continue;
             }
             else
             {
                 var skipResult = CheckSkip(context);
-                if (skipResult == SkipResult.Skipped) continue;
-                _sprintNextTick = (skipResult == SkipResult.Sprint);
-                if (!_sprintNextTick)
+                if (skipResult == SkipResult.Skipped)
                 {
-                    var player = _ctx.Player() as Entity;
-                    if (player != null) player.StopSprinting();
+                    _logger.LogDebug("[PathExec] CheckSkip=Skipped at pathPos={PathPos}", _pathPosition);
+                    continue;
                 }
+                _sprintNextTick = (skipResult == SkipResult.Sprint);
+                // Re-set sprint on InputOverrideHandler. CheckSkip always clears sprint (line 196)
+                // then returns Sprint/NoSprint. We must propagate this back so
+                // InputOverrideHandler.OnTick() applies the correct state to Entity.
+                // This replaces Java's SprintStateEvent mechanism (MixinClientPlayerEntity.redirectSprintInput).
+                behavior.Baritone.GetInputOverrideHandler().SetInputForceState(
+                    Api.Utils.Input.Input.Sprint, _sprintNextTick);
                 _ticksOnCurrent++;
                 if (_currentMovementOriginalCostEstimate.HasValue && _ticksOnCurrent > _currentMovementOriginalCostEstimate.Value + BaritoneSettings.Settings().MovementTimeoutTicks.Value)
                 {
+                    _logger.LogWarning("[PathExec] Movement TIMEOUT at pathPos={PathPos} ticksOnCurrent={Ticks}", _pathPosition, _ticksOnCurrent);
                     Cancel(); return true;
                 }
             }
@@ -206,6 +246,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 {
                     _pathPosition++; OnChangeInPathPosition();
                     behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, true);
+                    // Sprint must also be active for the sprint-jump boost (0.2 horizontal velocity)
+                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2229-2241
+                    behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Sprint, true);
                     return SkipResult.Skipped;
                 }
             }

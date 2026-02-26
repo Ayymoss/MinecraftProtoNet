@@ -35,6 +35,9 @@ public static class BaritoneIntegration
     // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinMinecraft.java:54-110
     private static readonly ThreadLocal<Func<EventState, TickEvent.TickEventType, TickEvent>?> TickProviderStorage = new();
 
+    // Track whether we've subscribed to Level.BlockChanged to avoid duplicate subscriptions
+    private static volatile bool _blockChangeHooked;
+
     /// <summary>
     /// Hooks Baritone tick events to the game loop.
     /// Call this from the application layer (e.g., Bot.Webcore) after creating the GameLoop.
@@ -50,6 +53,36 @@ public static class BaritoneIntegration
         {
             try
             {
+                // Subscribe to Level.BlockChanged once to forward to Baritone's event system
+                if (!_blockChangeHooked)
+                {
+                    _blockChangeHooked = true;
+                    client.State.Level.BlockChanged += (x, y, z, blockStateId) =>
+                    {
+                        try
+                        {
+                            var chunkX = x >> 4;
+                            var chunkZ = z >> 4;
+                            var pos = new Api.Utils.BetterBlockPos(x, y, z);
+                            var blocks = new List<(Api.Utils.BetterBlockPos Pos, object BlockState)>
+                            {
+                                (pos, blockStateId)
+                            };
+                            var evt = new BlockChangeEvent((chunkX, chunkZ), blocks);
+
+                            var provider = BaritoneAPI.GetProvider();
+                            foreach (var b in provider.GetAllBaritones())
+                            {
+                                b.GetGameEventHandler().OnBlockChange(evt);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogTrace(ex, "Error dispatching Baritone block change event");
+                        }
+                    };
+                }
+
                 var baritoneProvider = BaritoneAPI.GetProvider();
                 var allBaritones = baritoneProvider.GetAllBaritones();
                 

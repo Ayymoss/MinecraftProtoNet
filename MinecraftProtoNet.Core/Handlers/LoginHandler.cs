@@ -14,6 +14,7 @@ using HelloPacket = MinecraftProtoNet.Core.Packets.Login.Clientbound.HelloPacket
 namespace MinecraftProtoNet.Core.Handlers;
 
 [HandlesPacket(typeof(DisconnectPacket))]
+[HandlesPacket(typeof(DisconnectLoginPacket))]
 [HandlesPacket(typeof(HelloPacket))]
 [HandlesPacket(typeof(LoginSuccessPacket))]
 [HandlesPacket(typeof(LoginCompressionPacket))]
@@ -30,6 +31,10 @@ public class LoginHandler : IPacketHandler
         {
             case DisconnectPacket disconnectPacket:
                 _logger.LogWarning("Disconnected: {Reason}", disconnectPacket.Reason);
+                await client.DisconnectAsync();
+                break;
+            case DisconnectLoginPacket disconnectLoginPacket:
+                _logger.LogWarning("Login disconnected: {Reason}", disconnectLoginPacket.Reason);
                 await client.DisconnectAsync();
                 break;
             case HelloPacket helloPacket:
@@ -86,8 +91,10 @@ public class LoginHandler : IPacketHandler
 
             _logger.LogInformation("Mojang authentication successful");
             
-            // Small delay to ensure Mojang's session has propagated before server queries it
-            await Task.Delay(100);
+            // Delay to ensure Mojang's session has propagated before server queries it.
+            // The server will query Mojang's session server after receiving our Key packet.
+            // If our session hasn't propagated yet, the server responds with "unverified_username".
+            await Task.Delay(500);
         }
         else
         {

@@ -156,8 +156,20 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
     public BlockState? GetBlockAt(int worldX, int worldY, int worldZ)
         => chunkManager.GetBlockAt(worldX, worldY, worldZ);
 
+    /// <summary>
+    /// Event fired when a block is updated. Parameters: (x, y, z, blockStateId).
+    /// External systems (e.g., Baritone) subscribe to get notified of block changes.
+    /// </summary>
+    public event Action<int, int, int, int>? BlockChanged;
+
     public void HandleBlockUpdate(Vector3<double> position, int blockStateId)
-        => chunkManager.HandleBlockUpdate(position, blockStateId);
+    {
+        chunkManager.HandleBlockUpdate(position, blockStateId);
+        var x = (int)Math.Floor(position.X);
+        var y = (int)Math.Floor(position.Y);
+        var z = (int)Math.Floor(position.Z);
+        BlockChanged?.Invoke(x, y, z, blockStateId);
+    }
 
     public List<AABB> GetCollidingBlockAABBs(AABB queryBox)
         => chunkManager.GetCollidingBlockAABBs(queryBox);

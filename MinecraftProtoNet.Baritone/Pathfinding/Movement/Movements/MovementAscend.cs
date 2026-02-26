@@ -52,7 +52,11 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         var dir = GetDirection();
         var horizontalDir = (dir.X, 0, dir.Z);
         var prior = new BetterBlockPos(Src.X - horizontalDir.X, Src.Y, Src.Z - horizontalDir.Z);
-        return new HashSet<BetterBlockPos> { Src, Src.Above(), Dest, prior, prior.Above() };
+        // Include Dest.Below() (dest X,Z at src Y) — this is where the player's feet
+        // will be when standing on a bottom slab at PositionToPlace, since the slab top
+        // is at Y+0.5 and floor(Y+0.5) = Y, not Y+1.
+        var destBelow = new BetterBlockPos(Dest.X, Dest.Y - 1, Dest.Z);
+        return new HashSet<BetterBlockPos> { Src, Src.Above(), Dest, prior, prior.Above(), destBelow };
     }
 
     public static double Cost(CalculationContext context, int x, int y, int z, int destX, int destZ)
@@ -128,6 +132,19 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         {
             Baritone.GetGameEventHandler().LogDirect($"Ascend: Success at {feet}");
             return state.SetStatus(MovementStatus.Success);
+        }
+
+        // When ascending onto a bottom slab, the player stands at Y+0.5 on the slab,
+        // so floor(Y+0.5) = Y = Dest.Y - 1. The normal success check above misses this.
+        // Reference: bottom slab handling in cost calculation (line 91-95) and runtime (line 169)
+        if (feet != null && feet.X == Dest.X && feet.Z == Dest.Z && feet.Y == Dest.Y - 1)
+        {
+            var supportBlock = BlockStateInterface.Get(Ctx, PositionToPlace!);
+            if (MovementHelper.IsBottomSlab(supportBlock))
+            {
+                Baritone.GetGameEventHandler().LogDirect($"Ascend: Success at {feet} (bottom slab)");
+                return state.SetStatus(MovementStatus.Success);
+            }
         }
 
         if (PositionToPlace != null)

@@ -111,6 +111,15 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task ConnectAsync(string host, int port, bool isSnapshot = false)
     {
+        // Always clean up any previous connection state before connecting
+        // This handles the case where the server disconnected us (e.g., unverified_username)
+        // and the user clicks Connect again without explicitly disconnecting first
+        if (IsConnected || ProtocolState != ProtocolState.Handshaking)
+        {
+            _logger.LogInformation("Cleaning up previous connection state before reconnecting");
+            await DisconnectAsync();
+        }
+
         _logger.LogDebug("Switching protocol state: {ProtocolState}", ProtocolState);
 
         // Create a fresh CancellationTokenSource for this connection session
@@ -159,6 +168,25 @@ public class MinecraftClient : IMinecraftClient
             default:
                 throw new ArgumentOutOfRangeException();
         }
+    }
+
+    /// <summary>
+    /// Cleans up connection state after the server disconnects us unexpectedly.
+    /// Resets the connection so ConnectAsync can work again without requiring
+    /// an explicit DisconnectAsync call from the UI.
+    /// </summary>
+    private async Task CleanupAfterServerDisconnect()
+    {
+        IsConnected = false;
+        await _gameLoop.StopAsync();
+
+        // Reset connection so it can be reused
+        if (_connection is Connection conn)
+        {
+            conn.Disconnect();
+        }
+
+        ProtocolState = ProtocolState.Handshaking;
     }
 
     public async Task DisconnectAsync()
@@ -236,7 +264,7 @@ public class MinecraftClient : IMinecraftClient
             catch (EndOfStreamException ex)
             {
                 _logger.LogError(ex, "Connection closed by server");
-                IsConnected = false;
+                await CleanupAfterServerDisconnect();
                 OnDisconnected?.Invoke(this, DisconnectReason.EndOfStream);
                 break;
             }
@@ -247,7 +275,7 @@ public class MinecraftClient : IMinecraftClient
             {
                 _logger.LogError(ex, "Connection forcibly closed by the remote host. ErrorCode: {ErrorCode}, SocketErrorCode: {SocketErrorCode}",
                     socket.ErrorCode, socket.SocketErrorCode);
-                IsConnected = false;
+                await CleanupAfterServerDisconnect();
                 OnDisconnected?.Invoke(this, DisconnectReason.ConnectionReset);
                 break;
             }

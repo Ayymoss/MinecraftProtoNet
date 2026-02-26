@@ -180,8 +180,28 @@ public class BotService : IDisposable
             if (!authResult) return false;
         }
 
-        await _client.ConnectAsync(ServerAddress, ServerPort, true);
-        _refreshTimer?.Start();
+        // Retry logic for Mojang session propagation race ("unverified_username")
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            await _client.ConnectAsync(ServerAddress, ServerPort, true);
+
+            if (IsConnected)
+            {
+                _refreshTimer?.Start();
+                NotifyStateChanged();
+                return true;
+            }
+
+            // If not connected after ConnectAsync, the server likely disconnected us during login.
+            // Wait before retrying to allow Mojang session propagation.
+            if (attempt < maxRetries)
+            {
+                var delayMs = attempt * 2000; // 2s, 4s
+                await Task.Delay(delayMs);
+            }
+        }
+
         NotifyStateChanged();
         return IsConnected;
     }

@@ -40,10 +40,18 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
     /// </summary>
     private bool _wasTheBridgeBlockAlwaysThere = true;
 
+    /// <summary>
+    /// Tracks whether the bot has reached close enough to dest to mine in place.
+    /// Once set, walk-while-breaking is disabled for this movement to prevent
+    /// oscillation caused by the distance threshold flip-flop at 0.83 blocks.
+    /// </summary>
+    private bool _reachedDestWhileBreaking;
+
     public override void Reset()
     {
         base.Reset();
         _wasTheBridgeBlockAlwaysThere = true;
+        _reachedDestWhileBreaking = false;
     }
 
     public override double CalculateCost(CalculationContext context)
@@ -225,7 +233,21 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             double distWhileBreaking = Math.Max(Math.Abs(playerWb.Position.X - (Dest.X + 0.5)), Math.Abs(playerWb.Position.Z - (Dest.Z + 0.5)));
             if (distWhileBreaking < 0.83)
             {
+                // Once close enough, lock into mine-in-place mode to prevent oscillation.
+                // Sprint momentum can carry the bot past the 0.83 boundary, causing
+                // alternating walk-forward/mine-in-place states and ~180° yaw flips each tick.
+                _reachedDestWhileBreaking = true;
                 return state;
+            }
+            if (_reachedDestWhileBreaking)
+            {
+                // Already committed to mining in place; don't re-enable walk-while-breaking
+                // unless pushed significantly far back (e.g. by mob knockback).
+                if (distWhileBreaking < 1.5)
+                {
+                    return state;
+                }
+                _reachedDestWhileBreaking = false;
             }
             var targetRotWb = state.GetTarget()?.GetRotation();
             if (targetRotWb == null)

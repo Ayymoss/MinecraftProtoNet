@@ -67,7 +67,15 @@ public class InteractionManager : IInteractionManager
                     Sequence = entity.IncrementSequence()
                 });
                 await _client.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
-                
+
+                // Client-side prediction: immediately set block to air locally.
+                // This matches vanilla Minecraft behavior where the client predicts block removal.
+                // Without this, Baritone's Prepared() still sees the block as solid on the next tick
+                // (before the server's BlockUpdate packet arrives) and starts mining the same block again.
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java
+                _client.State.Level.HandleBlockUpdate(
+                    new Vector3<double>(_breakingBlockPosition!.X, _breakingBlockPosition.Y, _breakingBlockPosition.Z), 0);
+
                 _isBreakingBlock = false;
                 _breakingBlockPosition = null;
                 return true;
@@ -143,6 +151,8 @@ public class InteractionManager : IInteractionManager
                 Face = face,
                 Sequence = entity.IncrementSequence()
             });
+            // Client-side prediction: set block to air immediately
+            _client.State.Level.HandleBlockUpdate(new Vector3<double>(pos.X, pos.Y, pos.Z), 0);
             _isBreakingBlock = false;
             _breakingBlockPosition = null;
         }

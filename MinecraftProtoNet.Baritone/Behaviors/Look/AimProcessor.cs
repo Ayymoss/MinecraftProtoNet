@@ -57,10 +57,13 @@ public class AimProcessor : ITickableAimProcessor
         desiredYaw += (float)_randomYawOffset;
         desiredPitch += (float)_randomPitchOffset;
 
+        // NormalizeAndClamp to prevent yaw accumulation.
+        // In Java, CalculateMouseMove applies mouse sensitivity math that naturally bounds yaw.
+        // Since our stub returns target directly, we must explicitly normalize.
         return new Rotation(
             CalculateMouseMove(prev.GetYaw(), desiredYaw),
             CalculateMouseMove(prev.GetPitch(), desiredPitch)
-        ).Clamp();
+        ).NormalizeAndClamp();
     }
 
     public ITickableAimProcessor Fork()

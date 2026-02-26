@@ -131,7 +131,7 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
     private bool InControl()
     {
         // Check if any movement input is forced
-        foreach (var input in new[] { Input.MoveForward, Input.MoveBack, Input.MoveLeft, Input.MoveRight, Input.Sneak, Input.Jump })
+        foreach (var input in new[] { Input.MoveForward, Input.MoveBack, Input.MoveLeft, Input.MoveRight, Input.Sneak, Input.Jump, Input.Sprint })
         {
             if (IsInputForcedDown(input))
             {
