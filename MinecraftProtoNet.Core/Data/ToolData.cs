@@ -1,10 +1,11 @@
 using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace MinecraftProtoNet.Core.Data;
 
 /// <summary>
 /// Provides data about tools, their tiers, and effectiveness against blocks.
-/// Data sourced from Minecraft 1.21 mechanics.
+/// Tool-block effectiveness is derived from datagen mineable tags where available.
 /// </summary>
 public static class ToolData
 {
@@ -81,116 +82,38 @@ public static class ToolData
     }
 
     /// <summary>
-    /// Determines if a tool is "effective" (correct tool) for a given block.
-    /// This is a simplified lookup. Ideally, this would be data-driven or tag-based.
+    /// Maps ToolType to the corresponding datagen mineable tag name.
     /// </summary>
-    /// <summary>
-    /// Strips variant suffixes (_stairs, _slab, _wall, _fence, _fence_gate, _button, _pressure_plate)
-    /// to get the base material name for tool matching.
-    /// e.g. "minecraft:brick_stairs" → "minecraft:brick", "minecraft:oak_stairs" → "minecraft:oak"
-    /// </summary>
-    private static string GetBaseMaterial(string name)
+    private static readonly Dictionary<ToolType, string> ToolToMineableTag = new()
     {
-        // Order matters: check longer suffixes first
-        string[] suffixes = ["_stairs", "_slab", "_wall", "_fence_gate", "_fence", "_button", "_pressure_plate"];
-        foreach (var suffix in suffixes)
-        {
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return name[..^suffix.Length];
-            }
-        }
-        return name;
-    }
+        [ToolType.Pickaxe] = "mineable/pickaxe",
+        [ToolType.Axe] = "mineable/axe",
+        [ToolType.Shovel] = "mineable/shovel",
+        [ToolType.Hoe] = "mineable/hoe",
+    };
 
+    /// <summary>
+    /// Determines if a tool is "effective" (correct tool) for a given block.
+    /// Uses datagen mineable tags from StaticFiles/data/minecraft/tags/block/mineable/.
+    /// Shears effectiveness uses a name-based check since datagen doesn't export a shears tag.
+    /// </summary>
     public static bool IsCorrectTool(ToolType tool, BlockState block)
     {
-        // Material checks based on block names/types
-        var name = block.Name;
-        // Also check the base material for variant blocks (stairs, slabs, walls, etc.)
-        var baseName = GetBaseMaterial(name);
+        if (block.IsExhaustinglyDifficultToBreak) return false;
 
-        if (block.IsExhaustinglyDifficultToBreak) return false; // Bedrock etc.
-
-        // Pickaxe
-        if (tool == ToolType.Pickaxe)
-        {
-            if (name.Contains("stone") || name.Contains("cobblestone") || name.Contains("andesite") ||
-                name.Contains("granite") || name.Contains("diorite") || name.Contains("ore") ||
-                (name.Contains("block") && (name.Contains("iron") || name.Contains("gold") || name.Contains("diamond"))) ||
-                name.Contains("brick") || name.Contains("concrete") || name.Contains("terracotta") ||
-                name.Contains("furnace") || name.Contains("anvil") || name.Contains("rail") ||
-                name.Contains("obsidian") || name.Contains("spawner") || name.Contains("prismarine") ||
-                name.Contains("lantern") || name.Contains("cauldron") || name.Contains("hopper") ||
-                name.Contains("sandstone") || name.Contains("deepslate") || name.Contains("copper") ||
-                name.Contains("blackstone") || name.Contains("basalt") || name.Contains("tuff") ||
-                name.Contains("calcite") || name.Contains("dripstone") || name.Contains("amethyst") ||
-                name.Contains("purpur") || name.Contains("quartz") || name.Contains("end_stone"))
-            {
-                return true;
-            }
-            // Check base material for variants (e.g. "minecraft:brick" from "minecraft:brick_stairs")
-            if (baseName != name && IsCorrectTool(tool, new BlockState(0, baseName)))
-            {
-                return true;
-            }
-        }
-
-        // Axe
-        if (tool == ToolType.Axe)
-        {
-            if (name.Contains("log") || name.Contains("planks") || name.Contains("wood") ||
-                name.Contains("chest") || name.Contains("barrel") || name.Contains("fence") ||
-                name.Contains("gate") || name.Contains("sign") || name.Contains("banner") ||
-                name.Contains("bookshelf") || name.Contains("loom") || name.Contains("composter") ||
-                name.Contains("crafting_table") || name.Contains("bamboo") || name.Contains("stem") ||
-                name.Contains("hyphae") || name.Contains("mushroom_block"))
-            {
-                return true;
-            }
-            // Check base material for variants (e.g. "minecraft:oak" from "minecraft:oak_stairs")
-            if (baseName != name && IsCorrectTool(tool, new BlockState(0, baseName)))
-            {
-                return true;
-            }
-        }
-
-        // Shovel
-        if (tool == ToolType.Shovel)
-        {
-            // "sand" must not match "sandstone" — sandstone is a pickaxe block
-            if (name.Contains("dirt") || name.Contains("grass") ||
-                (name.Contains("sand") && !name.Contains("sandstone")) ||
-                name.Contains("gravel") || name.Contains("clay") || name.Contains("snow") ||
-                name.Contains("mud") || name.Contains("soul_sand") || name.Contains("soul_soil") ||
-                name.Contains("concrete_powder"))
-            {
-                return true;
-            }
-        }
-
-        // Hoe
-        if (tool == ToolType.Hoe)
-        {
-            if (name.Contains("leaves") || name.Contains("hay_block") || name.Contains("sculk") ||
-                name.Contains("sponge") || name.Contains("wart_block") || name.Contains("shroomlight"))
-            {
-                return true;
-            }
-        }
-
-        // Shears
+        // Shears don't have a mineable tag — use simple name check
         if (tool == ToolType.Shears)
         {
-            if (name.Contains("leaves") || name.Contains("wool") || name.Contains("cobweb") ||
-                name.Contains("vine"))
-            {
-                return true;
-            }
+            var name = block.Name;
+            return name.Contains("leaves") || name.Contains("wool") ||
+                   name.Contains("cobweb") || name.Contains("vine");
         }
 
-        // Some blocks require no specific tool or any tool works (dirt/wood technically don't REQUIRE tool to drop, but have speed boost)
-        // This method strictly returns if the tool applies its speed bonus / is the intended tool class.
+        if (ToolToMineableTag.TryGetValue(tool, out var tagName))
+        {
+            return ClientState.BlockTags.HasTag(block.Name, tagName);
+        }
+
         return false;
     }
 }

@@ -12,7 +12,7 @@ public class RegistryDataLoader : IRegistryDataLoader
     private const string BlocksFileName = "blocks.json";
     private const string RegistriesFileName = "registries.json";
 
-    private readonly string _staticFilesPath = Path.Combine(AppContext.BaseDirectory, "StaticFiles");
+    private readonly string _staticFilesPath = Path.Combine(AppContext.BaseDirectory, @"StaticFiles\reports");
 
     /// <inheritdoc />
     public async Task<Dictionary<int, BlockState>> LoadBlockStatesAsync()

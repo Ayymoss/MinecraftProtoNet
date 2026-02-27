@@ -1,5 +1,6 @@
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Physics.Shapes;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace MinecraftProtoNet.Core.Physics;
 
@@ -94,7 +95,7 @@ public class BlockShapeRegistry : IBlockShapeRegistry
             return Shapes.Shapes.Or(baseBox, stepBox);
         }
 
-        if (blockState.Name.Contains("carpet"))
+        if (ClientState.BlockTags.HasTag(blockState.Name, "wool_carpets"))
         {
              return Shapes.Shapes.Box(0, 0, 0, 1, 0.0625, 1);
         }

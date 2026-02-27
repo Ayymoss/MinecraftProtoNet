@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.NBT.Tags;
+using MinecraftProtoNet.Core.Services;
 using BlockState = MinecraftProtoNet.Core.Models.World.Chunk.BlockState;
 
 namespace MinecraftProtoNet.Core.State.Base;
@@ -77,6 +78,12 @@ public class ClientState
     public static FrozenDictionary<int, Biome> BiomeRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, string> ItemRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, string> EntityTypeRegistry { get; private set; } = null!;
+    public static BlockTagRegistry BlockTags { get; private set; } = new();
+
+    public static void InitializeBlockTags()
+    {
+        BlockTags.Initialize();
+    }
 
     public static void InitializeBlockStateRegistry(Dictionary<int, BlockState> blockStates)
     {

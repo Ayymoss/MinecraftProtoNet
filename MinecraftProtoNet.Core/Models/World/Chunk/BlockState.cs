@@ -1,3 +1,5 @@
+using MinecraftProtoNet.Core.State.Base;
+
 namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
@@ -67,8 +69,8 @@ public class BlockState
         }
     }
 
-    public bool IsSlab => Name.Contains("slab", StringComparison.OrdinalIgnoreCase);
-    public bool IsStairs => Name.Contains("stairs", StringComparison.OrdinalIgnoreCase);
+    public bool IsSlab => ClientState.BlockTags.HasTag(Name, "slabs");
+    public bool IsStairs => ClientState.BlockTags.HasTag(Name, "stairs");
     public bool IsSnow => Name.Equals("minecraft:snow", StringComparison.OrdinalIgnoreCase);
 
     public int SnowLayers => Properties.TryGetValue("layers", out var layers) && int.TryParse(layers, out var count) ? count : 0;

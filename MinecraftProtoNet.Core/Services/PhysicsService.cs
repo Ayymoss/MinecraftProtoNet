@@ -6,6 +6,7 @@ using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.Physics.Shapes;
 using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace MinecraftProtoNet.Core.Services;
 
@@ -783,44 +784,22 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
     }
 
     /// <summary>
-    /// Set of block names that are in the BlockTags.CLIMBABLE tag.
-    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/data/tags/VanillaBlockTagsProvider.java:64
-    /// Tag: BlockTags.CLIMBABLE = ladder, vine, scaffolding, weeping_vines, weeping_vines_plant,
-    ///   twisting_vines, twisting_vines_plant, cave_vines, cave_vines_plant
-    /// </summary>
-    private static readonly HashSet<string> ClimbableBlocks = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "minecraft:ladder",
-        "minecraft:vine",
-        "minecraft:scaffolding",
-        "minecraft:weeping_vines",
-        "minecraft:weeping_vines_plant",
-        "minecraft:twisting_vines",
-        "minecraft:twisting_vines_plant",
-        "minecraft:cave_vines",
-        "minecraft:cave_vines_plant"
-    };
-
-    /// <summary>
     /// Checks if entity is on a climbable block (ladder, vine, etc.).
+    /// Uses the "climbable" block tag from datagen (StaticFiles/data/minecraft/tags/block/climbable.json).
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:1636-1651
-    /// Java: onClimbable() checks getInBlockState().is(BlockTags.CLIMBABLE) at blockPosition()
-    /// blockPosition() = (floor(x), floor(y), floor(z))
     /// </summary>
     private bool IsOnClimbable(Entity entity, Level? level)
     {
         if (level == null) return false;
-        
-        // Get block at entity's feet position (floor of entity position)
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:3721-3722
+
         int bx = (int)Math.Floor(entity.Position.X);
         int by = (int)Math.Floor(entity.Position.Y);
         int bz = (int)Math.Floor(entity.Position.Z);
-        
+
         var blockState = level.GetBlockAt(bx, by, bz);
         if (blockState == null) return false;
-        
-        return ClimbableBlocks.Contains(blockState.Name);
+
+        return ClientState.BlockTags.HasTag(blockState.Name, "climbable");
     }
 
     /// <summary>

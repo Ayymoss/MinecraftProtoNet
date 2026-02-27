@@ -1,13 +1,19 @@
+using MinecraftProtoNet.Core.State.Base;
+
 namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 /// <summary>
 /// Registry of block physics data matching Mojang's Block.Properties.
-/// Data sourced from minecraft-26.1-REFERENCE-ONLY.
+/// Non-default friction/speedFactor/jumpFactor values are kept here because
+/// datagen does not export these (they're hardcoded in Java's BlockBehaviour.Properties).
+/// HasCollision is now derived from datagen block tags where possible.
 /// </summary>
 public static class BlockPhysicsData
 {
     /// <summary>
     /// Block physics: (Friction, SpeedFactor, JumpFactor, HasCollision, DestroySpeed)
+    /// Only blocks with NON-DEFAULT friction, speedFactor, or jumpFactor are listed here.
+    /// HasCollision for most blocks is derived from tags (see ApplyTagBasedCollision).
     /// </summary>
     private static readonly Dictionary<string, BlockData> Registry = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -25,147 +31,46 @@ public static class BlockPhysicsData
         ["minecraft:soul_sand"] = new(0.6f, 0.4f, 1.0f, true, 0.5f),
         ["minecraft:soul_soil"] = new(0.6f, 0.4f, 1.0f, true, 0.5f),
 
-        // ===== Air blocks (no collision) =====
-        ["minecraft:air"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:cave_air"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:void_air"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Passable plants (no collision) =====
-        ["minecraft:grass"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:short_grass"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:tall_grass"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:fern"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:large_fern"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:dead_bush"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:seagrass"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:tall_seagrass"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:kelp"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:kelp_plant"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:vine"] = new(0.6f, 1.0f, 1.0f, false, 0.2f),
-        ["minecraft:glow_lichen"] = new(0.6f, 1.0f, 1.0f, false, 0.2f),
-        ["minecraft:hanging_roots"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Flowers (no collision) =====
-        ["minecraft:dandelion"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:poppy"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:blue_orchid"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:allium"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:azure_bluet"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:red_tulip"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:orange_tulip"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:white_tulip"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:pink_tulip"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:oxeye_daisy"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:cornflower"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:lily_of_the_valley"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:wither_rose"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:sunflower"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:lilac"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:rose_bush"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:peony"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:pink_petals"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:torchflower"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:pitcher_plant"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Saplings (no collision) =====
-        ["minecraft:oak_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:spruce_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:birch_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:jungle_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:acacia_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:dark_oak_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:cherry_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:mangrove_propagule"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:bamboo_sapling"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Mushrooms (no collision) =====
-        ["minecraft:brown_mushroom"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:red_mushroom"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:crimson_fungus"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:warped_fungus"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:crimson_roots"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:warped_roots"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:nether_sprouts"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Torches & Decorations (no collision) =====
-        ["minecraft:torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:wall_torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:soul_torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:soul_wall_torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:redstone_torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:redstone_wall_torch"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:end_rod"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Rails (no collision) =====
-        ["minecraft:rail"] = new(0.6f, 1.0f, 1.0f, false, 0.7f),
-        ["minecraft:powered_rail"] = new(0.6f, 1.0f, 1.0f, false, 0.7f),
-        ["minecraft:detector_rail"] = new(0.6f, 1.0f, 1.0f, false, 0.7f),
-        ["minecraft:activator_rail"] = new(0.6f, 1.0f, 1.0f, false, 0.7f),
-
-        // ===== Redstone Components (no collision) =====
-        ["minecraft:redstone_wire"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:lever"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:tripwire"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:tripwire_hook"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-
-        // ===== Sugar Cane & Similar (no collision) =====
-        ["minecraft:sugar_cane"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:fire"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:soul_fire"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
-        ["minecraft:nether_portal"] = new(0.6f, 1.0f, 1.0f, false, -1.0f),
-
-        // ===== Water (liquid, no collision) =====
-        ["minecraft:water"] = new(0.6f, 1.0f, 1.0f, false, 100.0f),
-        ["minecraft:lava"] = new(0.6f, 1.0f, 1.0f, false, 100.0f),
-
-        // ===== Cobweb (special - has collision but doesn't block motion) =====
+        // ===== Cobweb (special - has collision but doesn't block motion, slow speed) =====
         ["minecraft:cobweb"] = new(0.6f, 0.25f, 1.0f, true, 4.0f),
-
-        // ===== Ladders & Climbables =====
-        ["minecraft:ladder"] = new(0.6f, 1.0f, 1.0f, false, 0.4f),
-        ["minecraft:scaffolding"] = new(0.6f, 1.0f, 1.0f, false, 0.0f),
 
         // ===== Bedrock (unbreakable) =====
         ["minecraft:bedrock"] = new(0.6f, 1.0f, 1.0f, true, -1.0f),
-        ["bedrock"] = new(0.6f, 1.0f, 1.0f, true, -1.0f),
 
-        // ===== Pressure Plates (no collision) =====
-        ["minecraft:stone_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:oak_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:spruce_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:birch_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:jungle_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:acacia_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:dark_oak_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:cherry_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:mangrove_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:bamboo_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:crimson_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:warped_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:polished_blackstone_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:light_weighted_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:heavy_weighted_pressure_plate"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
+        // ===== Liquids =====
+        ["minecraft:water"] = new(0.6f, 1.0f, 1.0f, false, 100.0f),
+        ["minecraft:lava"] = new(0.6f, 1.0f, 1.0f, false, 100.0f),
+    };
 
-        // ===== Buttons (no collision) =====
-        ["minecraft:stone_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:oak_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:spruce_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:birch_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:jungle_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:acacia_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:dark_oak_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:cherry_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:mangrove_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:bamboo_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:crimson_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:warped_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
-        ["minecraft:polished_blackstone_button"] = new(0.6f, 1.0f, 1.0f, false, 0.5f),
+    /// <summary>
+    /// Block tags that indicate no collision (blocks the player can walk through).
+    /// These are loaded from datagen tag files in StaticFiles/data/minecraft/tags/block/.
+    /// </summary>
+    private static readonly string[] NoCollisionTags =
+    [
+        "replaceable",      // air, water, lava, grass, fern, dead_bush, vines, etc.
+        "buttons",          // all button variants
+        "all_signs",        // all sign and hanging sign variants
+        "pressure_plates",  // all pressure plate variants
+        "rails",            // rail, powered_rail, detector_rail, activator_rail
+    ];
 
-        // ===== Signs (no collision) =====
-        ["minecraft:oak_sign"] = new(0.6f, 1.0f, 1.0f, false, 1.0f),
-        ["minecraft:oak_wall_sign"] = new(0.6f, 1.0f, 1.0f, false, 1.0f),
-        ["minecraft:oak_hanging_sign"] = new(0.6f, 1.0f, 1.0f, false, 1.0f),
-        ["minecraft:oak_wall_hanging_sign"] = new(0.6f, 1.0f, 1.0f, false, 1.0f),
+    /// <summary>
+    /// Individual blocks with no collision that aren't covered by tags above.
+    /// </summary>
+    private static readonly HashSet<string> AdditionalNoCollisionBlocks = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Torches
+        "minecraft:torch", "minecraft:wall_torch",
+        "minecraft:soul_torch", "minecraft:soul_wall_torch",
+        "minecraft:redstone_torch", "minecraft:redstone_wall_torch",
+        // Redstone
+        "minecraft:redstone_wire", "minecraft:lever",
+        "minecraft:tripwire", "minecraft:tripwire_hook",
+        // Misc passable
+        "minecraft:end_rod", "minecraft:sugar_cane",
+        "minecraft:fire", "minecraft:soul_fire",
+        "minecraft:nether_portal", "minecraft:ladder", "minecraft:scaffolding",
     };
 
     /// <summary>
@@ -183,79 +88,57 @@ public static class BlockPhysicsData
         }
         else
         {
-            // Apply fallback based on name patterns
-            ApplyFallbacks(state);
+            // Derive HasCollision from tags and known no-collision blocks
+            ApplyTagBasedCollision(state);
         }
     }
 
     /// <summary>
-    /// Fallback logic for blocks not in registry.
+    /// Uses datagen block tags to determine if a block has collision.
+    /// Falls back to name-based heuristics for blocks not covered by tags.
     /// </summary>
-    private static void ApplyFallbacks(BlockState state)
+    private static void ApplyTagBasedCollision(BlockState state)
     {
         var name = state.Name;
 
-        // Saplings
-        if (name.EndsWith("_sapling", StringComparison.OrdinalIgnoreCase))
+        // Check tag-based no-collision
+        foreach (var tag in NoCollisionTags)
+        {
+            if (ClientState.BlockTags.HasTag(name, tag))
+            {
+                state.HasCollision = false;
+                return;
+            }
+        }
+
+        // Check individual no-collision blocks
+        if (AdditionalNoCollisionBlocks.Contains(name))
         {
             state.HasCollision = false;
+            return;
         }
-        // Flowers
-        else if (name.EndsWith("_flower", StringComparison.OrdinalIgnoreCase) || 
-                 name.Contains("flower", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Signs
-        else if (name.Contains("_sign", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Buttons
-        else if (name.EndsWith("_button", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Pressure plates
-        else if (name.EndsWith("_pressure_plate", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Torches
-        else if (name.Contains("torch", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Rails
-        else if (name.Contains("rail", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Carpet — HAS collision (1/16 block height). Do NOT set HasCollision=false.
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/level/block/CarpetBlock.java
-        // Carpets have VoxelShape = Block.column(16, 0, 1) → Box(0, 0, 0, 1, 0.0625, 1)
-        // The correct shape is already in BlockShapeRegistry.GetShape().
-        // Coral fans
-        else if (name.Contains("_coral_fan", StringComparison.OrdinalIgnoreCase))
-        {
-            state.HasCollision = false;
-        }
-        // Crops
-        else if (name.Equals("minecraft:wheat", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:carrots", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:potatoes", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:beetroots", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:melon_stem", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:pumpkin_stem", StringComparison.OrdinalIgnoreCase) ||
-                 name.Equals("minecraft:sweet_berry_bush", StringComparison.OrdinalIgnoreCase))
+
+        // Heuristic fallbacks for blocks that may not be in tags
+        // (flowers, saplings, mushrooms, crops, coral fans)
+        if (name.EndsWith("_sapling", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("_flower", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("_coral_fan", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:wheat", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:carrots", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:potatoes", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:beetroots", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:melon_stem", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:pumpkin_stem", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:sweet_berry_bush", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:brown_mushroom", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:red_mushroom", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:crimson_fungus", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("minecraft:warped_fungus", StringComparison.OrdinalIgnoreCase))
         {
             state.HasCollision = false;
         }
     }
 
-    /// <summary>
-    /// Block physics data record.
-    /// </summary>
     private readonly record struct BlockData(
         float Friction,
         float SpeedFactor,

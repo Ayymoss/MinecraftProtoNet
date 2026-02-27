@@ -70,6 +70,9 @@ public class ConfigurationHandler(
     {
         logger.LogDebug("Finishing configuration phase...");
 
+        // Initialize block tags first (used by BlockPhysicsData during block state loading)
+        ClientState.InitializeBlockTags();
+
         // Initialize static registries from files
         await InitializeBlockStatesAsync();
         InitializeBiomesFromServerRegistry(client);
