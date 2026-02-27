@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Collections.Generic;
+using MinecraftProtoNet.Core.Models.World;
 
 namespace MinecraftProtoNet.Core.State;
 
@@ -38,9 +40,14 @@ public interface ITickManager
     Stopwatch TimeSinceLastTimePacket { get; }
 
     /// <summary>
-    /// Updates tick information from a server time packet.
+    /// Updates tick information from a server time packet (legacy format).
     /// </summary>
     void UpdateTickInformation(long serverWorldAge, long timeOfDay, bool timeOfDayIncreasing);
+
+    /// <summary>
+    /// Updates tick information from a server time packet (new snapshot format).
+    /// </summary>
+    void UpdateTickInformation(long gameTime, Dictionary<int, ClockState> clockUpdates);
 
     /// <summary>
     /// Increments the client tick counter.

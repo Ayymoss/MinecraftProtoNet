@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Collections.Generic;
+using MinecraftProtoNet.Core.Models.World;
 
 namespace MinecraftProtoNet.Core.State;
 
@@ -53,6 +55,31 @@ public class TickManager : ITickManager
             }
 
             ClientTickCounter = serverWorldAge;
+        }
+    }
+
+    public void UpdateTickInformation(long gameTime, Dictionary<int, ClockState> clockUpdates)
+    {
+        // For legacy compatibility, we try to pick the "main" clock (ID 0 usually overworld)
+        // and map it to TimeOfDay / TimeOfDayIncreasing.
+        ClockState? targetState = null;
+        if (clockUpdates.TryGetValue(0, out var overworldState))
+        {
+            targetState = overworldState;
+        }
+        else if (clockUpdates.Values.FirstOrDefault() is { } firstState)
+        {
+            targetState = firstState;
+        }
+
+        if (targetState is not null)
+        {
+            UpdateTickInformation(gameTime, targetState.TotalTicks, !targetState.Paused);
+        }
+        else
+        {
+            // If no clocks are provided, we only update world age (GameTime)
+            UpdateTickInformation(gameTime, TimeOfDay, TimeOfDayIncreasing);
         }
     }
 

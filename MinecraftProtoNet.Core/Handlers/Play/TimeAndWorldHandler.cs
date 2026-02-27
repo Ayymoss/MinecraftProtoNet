@@ -26,9 +26,8 @@ public class TimeAndWorldHandler(ILogger<TimeAndWorldHandler> logger) : IPacketH
         {
             case SetTimePacket setTimePacket:
                 client.State.Level.UpdateTickInformation(
-                    setTimePacket.WorldAge,
-                    setTimePacket.TimeOfDay,
-                    setTimePacket.TimeOfDayIncreasing);
+                    setTimePacket.GameTime,
+                    setTimePacket.ClockUpdates);
                 break;
 
             case TickingStatePacket tickingStatePacket:

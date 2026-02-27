@@ -25,6 +25,7 @@ public class ChunkSection
     public void Read(ref PacketBufferReader reader)
     {
         NonEmptyBlockCount = reader.ReadSignedShort();
+        _ = reader.ReadSignedShort(); // fluidCount (new in snapshot)
         BlockStates.Read(ref reader);
         Biomes.Read(ref reader);
     }

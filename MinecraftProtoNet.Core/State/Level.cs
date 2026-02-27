@@ -1,5 +1,7 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
+using MinecraftProtoNet.Core.Models.World;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Models.World.Meta;
@@ -47,6 +49,9 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
 
     public void UpdateTickInformation(long serverWorldAge, long timeOfDay, bool timeOfDayIncreasing)
         => tickManager.UpdateTickInformation(serverWorldAge, timeOfDay, timeOfDayIncreasing);
+
+    public void UpdateTickInformation(long gameTime, Dictionary<int, ClockState> clockUpdates)
+        => tickManager.UpdateTickInformation(gameTime, clockUpdates);
 
     public void IncrementClientTickCounter()
         => tickManager.IncrementClientTickCounter();
