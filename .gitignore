@@ -13,8 +13,8 @@
 /dataSources.local.xml
 
 # Decompiled Minecraft Source
-minecraft-26.1-REFERENCE-ONLY/
-baritone-1.21.11-REFERENCE-ONLY/
+_JavaReferences/
+StaticFiles/
 
 # Common IntelliJ Platform excludes
 *.suo
