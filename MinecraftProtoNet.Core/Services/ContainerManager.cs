@@ -144,7 +144,7 @@ public class ContainerManager : IContainerManager
 
         // 4. Build and send the packet
         // Reference: MultiPlayerGameMode.java:455-459
-        var clickPacket = new ClickContainerPacket
+        var clickPacket = new ContainerClickPacket
         {
             WindowId = container.ContainerId,
             StateId = container.StateId,
@@ -467,7 +467,7 @@ public class ContainerManager : IContainerManager
         // CarriedItem should be current cursor (unaffected by QuickMove)
         // Reference: MultiPlayerGameMode.java:455 — carriedItem = getCarried() after clicked()
         // QuickMove doesn't modify the cursor
-        var clickPacket = new ClickContainerPacket
+        var clickPacket = new ContainerClickPacket
         {
             WindowId = windowId,
             StateId = stateId,
@@ -492,7 +492,7 @@ public class ContainerManager : IContainerManager
 
         var containerId = CurrentContainer!.ContainerId;
 
-        var closePacket = new CloseContainerPacket
+        var closePacket = new ContainerClosePacket
         {
             ContainerId = containerId
         };

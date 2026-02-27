@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x53, ProtocolState.Play)]
+[Packet(0x54, ProtocolState.Play)]
 public class SectionBlocksUpdatePacket : IClientboundPacket
 {
     public required Vector3<float> SectionPosition { get; set; }

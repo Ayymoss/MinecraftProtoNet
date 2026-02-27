@@ -253,7 +253,7 @@ public class InventoryManager(
                 changedSlots[(short)toSlot] = fromItem;
             }
 
-            await packetSender.SendPacketAsync(new ClickContainerPacket
+            await packetSender.SendPacketAsync(new ContainerClickPacket
             {
                 WindowId = 0,
                 StateId = inventory.StateId,
@@ -283,7 +283,7 @@ public class InventoryManager(
             changedSlots1[(short)fromSlot] = Slot.Empty;
         }
 
-        await packetSender.SendPacketAsync(new ClickContainerPacket
+        await packetSender.SendPacketAsync(new ContainerClickPacket
         {
             WindowId = 0,
             StateId = inventory.StateId,
@@ -305,7 +305,7 @@ public class InventoryManager(
 
         var newCursor = toItemBefore.IsEmpty ? Slot.Empty : toItemBefore;
 
-        await packetSender.SendPacketAsync(new ClickContainerPacket
+        await packetSender.SendPacketAsync(new ContainerClickPacket
         {
             WindowId = 0,
             StateId = inventory.StateId, // Vanilla client also uses same stateId for rapid clicks

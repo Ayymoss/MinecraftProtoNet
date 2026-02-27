@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent when an entity is linked to another (e.g., leash).
 /// </summary>
-[Packet(0x63, ProtocolState.Play)]
+[Packet(0x64, ProtocolState.Play)]
 public class SetEntityLinkPacket : IClientboundPacket
 {
     /// <summary>

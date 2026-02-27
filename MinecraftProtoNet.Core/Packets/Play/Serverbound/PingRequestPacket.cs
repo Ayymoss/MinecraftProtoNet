@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x25, ProtocolState.Play)]
+[Packet(0x26, ProtocolState.Play)]
 public class PingRequestPacket : IServerboundPacket
 {
     public long Payload { get; set; }

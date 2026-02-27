@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x64, ProtocolState.Play, true)]
+[Packet(0x65, ProtocolState.Play, true)]
 public class SetEntityMotionPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

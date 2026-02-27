@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent when a mob effect is removed from an entity.
 /// </summary>
-[Packet(0x4D, ProtocolState.Play)]
+[Packet(0x4E, ProtocolState.Play)]
 public class RemoveMobEffectPacket : IClientboundPacket
 {
     /// <summary>

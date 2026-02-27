@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x5E, ProtocolState.Play)]
+[Packet(0x5F, ProtocolState.Play)]
 public class SetChunkCacheRadiusPacket : IClientboundPacket
 {
     public int ViewDistance { get; set; }

@@ -14,9 +14,9 @@ using HelloPacket = MinecraftProtoNet.Core.Packets.Login.Clientbound.HelloPacket
 namespace MinecraftProtoNet.Core.Handlers;
 
 [HandlesPacket(typeof(DisconnectPacket))]
-[HandlesPacket(typeof(DisconnectLoginPacket))]
+[HandlesPacket(typeof(LoginDisconnectPacket))]
 [HandlesPacket(typeof(HelloPacket))]
-[HandlesPacket(typeof(LoginSuccessPacket))]
+[HandlesPacket(typeof(LoginFinishedPacket))]
 [HandlesPacket(typeof(LoginCompressionPacket))]
 public class LoginHandler : IPacketHandler
 {
@@ -33,7 +33,7 @@ public class LoginHandler : IPacketHandler
                 _logger.LogWarning("Disconnected: {Reason}", disconnectPacket.Reason);
                 await client.DisconnectAsync();
                 break;
-            case DisconnectLoginPacket disconnectLoginPacket:
+            case LoginDisconnectPacket disconnectLoginPacket:
                 _logger.LogWarning("Login disconnected: {Reason}", disconnectLoginPacket.Reason);
                 await client.DisconnectAsync();
                 break;
@@ -42,7 +42,7 @@ public class LoginHandler : IPacketHandler
                 await HandleEncryptionRequestAsync(helloPacket, client);
                 break;
             }
-            case LoginSuccessPacket loginSuccess:
+            case LoginFinishedPacket loginFinished:
                 await client.SendPacketAsync(new LoginAcknowledgedPacket());
                 client.ProtocolState = ProtocolState.Configuration;
                 _logger.LogDebug("Switching protocol state: {ProtocolState}", client.ProtocolState);

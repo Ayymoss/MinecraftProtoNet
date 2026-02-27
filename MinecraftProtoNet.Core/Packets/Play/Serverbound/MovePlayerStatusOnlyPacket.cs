@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 /// Sent when only ground/collision status flags change (no position or rotation change).
 /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java:194-215
 /// </summary>
-[Packet(0x20, ProtocolState.Play)]
+[Packet(0x21, ProtocolState.Play)]
 public class MovePlayerStatusOnlyPacket : IServerboundPacket
 {
     public required MovementFlags Flags { get; set; }

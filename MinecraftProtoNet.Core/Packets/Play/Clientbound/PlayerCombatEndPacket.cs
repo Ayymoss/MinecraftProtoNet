@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x41, ProtocolState.Play)]
+[Packet(0x42, ProtocolState.Play)]
 public class PlayerCombatEndPacket : IClientboundPacket
 {
     public int DurationInTicks { get; set; }

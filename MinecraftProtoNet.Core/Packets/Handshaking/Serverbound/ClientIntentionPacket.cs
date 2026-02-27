@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 namespace MinecraftProtoNet.Core.Packets.Handshaking.Serverbound;
 
 [Packet(0x00, ProtocolState.Handshaking)]
-public class HandshakePacket : IServerboundPacket
+public class ClientIntentionPacket : IServerboundPacket
 {
     public int ProtocolVersion { get; set; }
     public string ServerAddress { get; set; } = string.Empty;

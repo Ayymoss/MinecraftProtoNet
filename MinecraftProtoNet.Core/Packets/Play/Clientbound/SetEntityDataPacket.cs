@@ -9,7 +9,7 @@ using Spectre.Console;
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
 // TODO: Partially implemented.
-[Packet(0x62, ProtocolState.Play, true)]
+[Packet(0x63, ProtocolState.Play, true)]
 public class SetEntityDataPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

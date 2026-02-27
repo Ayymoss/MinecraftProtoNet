@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x2E, ProtocolState.Play)]
+[Packet(0x2F, ProtocolState.Play)]
 public class LevelParticlesPacket : IClientboundPacket
 {
     public bool LongDistance { get; set; }

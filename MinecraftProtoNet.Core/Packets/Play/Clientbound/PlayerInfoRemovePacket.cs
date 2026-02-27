@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x44, ProtocolState.Play)]
+[Packet(0x45, ProtocolState.Play)]
 public class PlayerInfoRemovePacket : IClientboundPacket
 {
     public required Guid[] Uuids { get; set; }

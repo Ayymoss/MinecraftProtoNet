@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x2B, ProtocolState.Play)]
+[Packet(0x2C, ProtocolState.Play)]
 public class PlayerLoadedPacket : IServerboundPacket
 {
     public void Serialize(ref PacketBufferWriter buffer)

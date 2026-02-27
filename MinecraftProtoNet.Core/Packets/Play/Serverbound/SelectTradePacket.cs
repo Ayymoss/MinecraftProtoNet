@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 /// <summary>
 /// Sent by the client to select a trade in the merchant UI.
 /// </summary>
-[Packet(0x32, ProtocolState.Play)]
+[Packet(0x33, ProtocolState.Play)]
 public class SelectTradePacket : IServerboundPacket
 {
     /// <summary>

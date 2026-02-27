@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x09, ProtocolState.Play)]
+[Packet(0x0A, ProtocolState.Play)]
 public class ChatSessionUpdatePacket : IServerboundPacket
 {
     public required Guid SessionId { get; set; }

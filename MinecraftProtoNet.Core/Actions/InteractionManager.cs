@@ -619,7 +619,7 @@ public class InteractionManager : IInteractionManager
         var mode = clickType.ToClickContainerMode();
 
         // Build click packet
-        var clickPacket = new ClickContainerPacket
+        var clickPacket = new ContainerClickPacket
         {
             WindowId = windowId,
             StateId = stateId,

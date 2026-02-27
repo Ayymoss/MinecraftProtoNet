@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x55, ProtocolState.Play)]
+[Packet(0x56, ProtocolState.Play)]
 public class ServerDataPacket : IClientboundPacket
 {
     public required NbtTag Motd { get; set; }

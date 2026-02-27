@@ -8,8 +8,8 @@ namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 /// <summary>
 /// Sent by the client to close an open container.
 /// </summary>
-[Packet(0x12, ProtocolState.Play)]
-public class CloseContainerPacket : IServerboundPacket
+[Packet(0x13, ProtocolState.Play)]
+public class ContainerClosePacket : IServerboundPacket
 {
     /// <summary>
     /// The container ID to close. 0 closes the player inventory.

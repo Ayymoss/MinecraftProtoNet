@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x42, ProtocolState.Play)]
+[Packet(0x43, ProtocolState.Play)]
 public class PlayerCombatEnterPacket : IClientboundPacket
 {
     public void Deserialize(ref PacketBufferReader buffer)

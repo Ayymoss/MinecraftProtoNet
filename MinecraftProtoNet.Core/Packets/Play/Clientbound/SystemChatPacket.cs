@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x78, ProtocolState.Play)]
+[Packet(0x79, ProtocolState.Play)]
 public class SystemChatPacket : IClientboundPacket
 {
     public required NbtTag Tags { get; set; }

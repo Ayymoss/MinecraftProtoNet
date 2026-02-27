@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x2A, ProtocolState.Play)]
+[Packet(0x2B, ProtocolState.Play)]
 public class InitializeBorderPacket : IClientboundPacket
 {
     public double X { get; set; }

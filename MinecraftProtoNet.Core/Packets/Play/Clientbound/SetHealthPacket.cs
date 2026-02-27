@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x67, ProtocolState.Play)]
+[Packet(0x68, ProtocolState.Play)]
 public class SetHealthPacket : IClientboundPacket
 {
     public float Health { get; set; }

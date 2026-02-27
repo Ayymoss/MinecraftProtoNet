@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x4C, ProtocolState.Play, true)]
+[Packet(0x4D, ProtocolState.Play, true)]
 public class RemoveEntitiesPacket : IClientboundPacket
 {
     public required int[] Entities { get; set; }

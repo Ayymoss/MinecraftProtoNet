@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x5F, ProtocolState.Play)]
+[Packet(0x60, ProtocolState.Play)]
 public class SetCursorItemPacket : IClientboundPacket
 {
     public required Slot Contents { get; set; }

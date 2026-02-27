@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x7B, ProtocolState.Play)]
+[Packet(0x7C, ProtocolState.Play)]
 public class TakeItemEntityPacket : IClientboundPacket
 {
     public int CollectedEntityId { get; set; }

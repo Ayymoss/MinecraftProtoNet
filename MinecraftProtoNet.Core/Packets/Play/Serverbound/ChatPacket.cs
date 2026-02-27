@@ -7,7 +7,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x08, ProtocolState.Play)]
+[Packet(0x09, ProtocolState.Play)]
 public class ChatPacket : IServerboundPacket
 {
     [SetsRequiredMembers]

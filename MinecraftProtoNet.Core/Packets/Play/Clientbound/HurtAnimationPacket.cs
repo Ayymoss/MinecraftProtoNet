@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x29, ProtocolState.Play)]
+[Packet(0x2A, ProtocolState.Play)]
 public class HurtAnimationPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

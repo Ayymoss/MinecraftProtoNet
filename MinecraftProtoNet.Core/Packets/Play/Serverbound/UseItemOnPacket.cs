@@ -7,7 +7,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x3F, ProtocolState.Play)]
+[Packet(0x42, ProtocolState.Play)]
 public class UseItemOnPacket : IServerboundPacket
 {
     public required Hand Hand { get; set; }

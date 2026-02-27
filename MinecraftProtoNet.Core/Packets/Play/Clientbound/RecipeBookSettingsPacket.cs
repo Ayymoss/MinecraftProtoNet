@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// Contains recipe book settings for all recipe book types.
 /// Each type has two boolean settings: open and filtering.
 /// </summary>
-[Packet(0x4B, ProtocolState.Play)]
+[Packet(0x4C, ProtocolState.Play)]
 public class RecipeBookSettingsPacket : IClientboundPacket
 {
     // Crafting settings

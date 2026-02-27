@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Updates light data for a chunk.
 /// </summary>
-[Packet(0x2F, ProtocolState.Play)]
+[Packet(0x30, ProtocolState.Play)]
 public class LightUpdatePacket : IClientboundPacket
 {
     public int ChunkX { get; set; }

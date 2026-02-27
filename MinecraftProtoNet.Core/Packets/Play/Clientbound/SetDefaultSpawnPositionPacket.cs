@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x60, ProtocolState.Play)]
+[Packet(0x61, ProtocolState.Play)]
 public class SetDefaultSpawnPositionPacket : IClientboundPacket
 {
     public required Vector3<double> Location { get; set; }

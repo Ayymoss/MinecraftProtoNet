@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent when a mob effect is applied or updated on an entity.
 /// </summary>
-[Packet(0x83, ProtocolState.Play)]
+[Packet(0x84, ProtocolState.Play)]
 public class UpdateMobEffectPacket : IClientboundPacket
 {
     private const byte FlagAmbient = 1;

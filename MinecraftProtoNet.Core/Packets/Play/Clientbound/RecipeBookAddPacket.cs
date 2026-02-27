@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// This is a stub implementation that consumes the data without full parsing due to
 /// the complex nested structure of recipe displays.
 /// </summary>
-[Packet(0x49, ProtocolState.Play)]
+[Packet(0x4A, ProtocolState.Play)]
 public class RecipeBookAddPacket : IClientboundPacket
 {
     public bool Replace { get; set; }

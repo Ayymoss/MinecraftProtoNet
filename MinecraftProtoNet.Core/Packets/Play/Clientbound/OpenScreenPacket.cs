@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent by the server to open an inventory screen (chest, furnace, crafting table, etc.).
 /// </summary>
-[Packet(0x3A, ProtocolState.Play)]
+[Packet(0x3B, ProtocolState.Play)]
 public class OpenScreenPacket : IClientboundPacket
 {
     /// <summary>

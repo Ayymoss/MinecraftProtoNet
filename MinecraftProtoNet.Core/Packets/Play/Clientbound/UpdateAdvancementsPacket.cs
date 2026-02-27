@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// Updates advancement data. This is a complex packet with advancement trees.
 /// For now, we parse the basic structure but consume most complex nested data.
 /// </summary>
-[Packet(0x81, ProtocolState.Play)]
+[Packet(0x82, ProtocolState.Play)]
 public class UpdateAdvancementsPacket : IClientboundPacket
 {
     public bool Reset { get; set; }

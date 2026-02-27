@@ -410,7 +410,7 @@ public static class MovementHelper
 
             // Send the swap packet (fire-and-forget from sync context)
             var client = (IPacketSender)ctx.Minecraft();
-            _ = client.SendPacketAsync(new ClickContainerPacket
+            _ = client.SendPacketAsync(new ContainerClickPacket
             {
                 WindowId = 0,
                 StateId = player.Inventory.StateId,

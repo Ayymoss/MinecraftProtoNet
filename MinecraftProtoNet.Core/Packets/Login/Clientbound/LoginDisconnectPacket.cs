@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 namespace MinecraftProtoNet.Core.Packets.Login.Clientbound;
 
 [Packet(0x00, ProtocolState.Login)]
-public class DisconnectLoginPacket : IClientboundPacket
+public class LoginDisconnectPacket : IClientboundPacket
 {
     public string Reason { get; set; } = string.Empty;
 

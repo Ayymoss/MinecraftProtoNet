@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x3C, ProtocolState.Play)]
+[Packet(0x3D, ProtocolState.Play)]
 public class PingPacket : IClientboundPacket
 {
     public int Id { get; set; }

@@ -10,7 +10,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// Sent when the player respawns or changes dimension.
 /// Contains the same spawn info as LoginPacket.
 /// </summary>
-[Packet(0x51, ProtocolState.Play)]
+[Packet(0x52, ProtocolState.Play)]
 public class RespawnPacket : IClientboundPacket
 {
     public const byte KeepAttributeModifiers = 1;

@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x30, ProtocolState.Play)]
+[Packet(0x31, ProtocolState.Play)]
 public class LoginPacket : IClientboundPacket
 {
     public int EntityId { get; set; }

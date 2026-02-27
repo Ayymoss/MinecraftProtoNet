@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x47, ProtocolState.Play)]
+[Packet(0x48, ProtocolState.Play)]
 public class PlayerPositionPacket : IClientboundPacket
 {
     public int TeleportId { get; set; }

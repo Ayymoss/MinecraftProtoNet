@@ -105,7 +105,7 @@ public static class CSharpPacketUpdater
         if (registration == null)
         {
             return new UpdateResult(filePath, fileName, currentId, null, UpdateStatus.NoMatch,
-                $"No matching Java packet found for {fileName}");
+                $"No matching Java packet found for {fileName} (state: {state})");
         }
 
         var newId = registration.PacketId;

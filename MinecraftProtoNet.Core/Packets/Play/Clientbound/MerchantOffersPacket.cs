@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent by the server to populate merchant/villager trade offers.
 /// </summary>
-[Packet(0x33, ProtocolState.Play)]
+[Packet(0x34, ProtocolState.Play)]
 public class MerchantOffersPacket : IClientboundPacket
 {
     /// <summary>

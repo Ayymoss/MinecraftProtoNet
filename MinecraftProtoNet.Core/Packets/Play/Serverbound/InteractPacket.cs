@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x19, ProtocolState.Play)]
+[Packet(0x1A, ProtocolState.Play)]
 public class InteractPacket : IServerboundPacket
 {
     public required int EntityId { get; set; }

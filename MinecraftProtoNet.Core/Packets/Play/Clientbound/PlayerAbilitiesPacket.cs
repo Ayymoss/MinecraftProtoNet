@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x3F, ProtocolState.Play)]
+[Packet(0x40, ProtocolState.Play)]
 public class PlayerAbilitiesPacket : IClientboundPacket
 {
     public AbilityFlag Flag { get; set; }

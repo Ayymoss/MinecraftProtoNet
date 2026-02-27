@@ -3,12 +3,13 @@ using System.Text.RegularExpressions;
 namespace PacketIdSync;
 
 /// <summary>
-/// Parses GameProtocols.java to extract packet registrations and their IDs.
+/// Parses *Protocols.java files to extract packet registrations and their IDs.
+/// Supports all protocol states: Game (Play), Configuration, Login, Status, Handshake.
 /// </summary>
 public static class JavaProtocolParser
 {
     /// <summary>
-    /// Represents a packet registration from the Java protocol file.
+    /// Represents a packet registration from a Java protocol file.
     /// </summary>
     public record PacketRegistration(
         string JavaTypeName,      // e.g., "ClientboundLoginPacket" or "ServerboundChatPacket"
@@ -28,59 +29,126 @@ public static class JavaProtocolParser
         Play,
         Configuration,
         Login,
-        Status
+        Status,
+        Handshaking
     }
 
     /// <summary>
-    /// Parses GameProtocols.java and extracts all packet registrations.
+    /// Maps a *Protocols.java filename to its protocol state.
     /// </summary>
-    public static List<PacketRegistration> ParseGameProtocols(string javaFilePath)
+    private static readonly Dictionary<string, ProtocolState> FileNameToState = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["GameProtocols.java"] = ProtocolState.Play,
+        ["ConfigurationProtocols.java"] = ProtocolState.Configuration,
+        ["LoginProtocols.java"] = ProtocolState.Login,
+        ["StatusProtocols.java"] = ProtocolState.Status,
+        ["HandshakeProtocols.java"] = ProtocolState.Handshaking,
+    };
+
+    /// <summary>
+    /// Maps a protocol state to the expected C# packets subdirectory name.
+    /// </summary>
+    public static readonly Dictionary<ProtocolState, string> StateToCSharpDir = new()
+    {
+        [ProtocolState.Play] = "Play",
+        [ProtocolState.Configuration] = "Configuration",
+        [ProtocolState.Login] = "Login",
+        [ProtocolState.Status] = "Status",
+        [ProtocolState.Handshaking] = "Handshaking",
+    };
+
+    /// <summary>
+    /// Infers the protocol state from a *Protocols.java filename.
+    /// Returns null if the filename is not recognized.
+    /// </summary>
+    public static ProtocolState? InferStateFromFileName(string filePath)
+    {
+        var fileName = Path.GetFileName(filePath);
+        return FileNameToState.TryGetValue(fileName, out var state) ? state : null;
+    }
+
+    /// <summary>
+    /// Discovers all *Protocols.java files under a root directory.
+    /// Returns a list of (filePath, protocolState) tuples.
+    /// </summary>
+    public static List<(string FilePath, ProtocolState State)> DiscoverProtocolFiles(string rootDirectory)
+    {
+        var results = new List<(string, ProtocolState)>();
+        var javaFiles = Directory.GetFiles(rootDirectory, "*Protocols.java", SearchOption.AllDirectories);
+
+        foreach (var file in javaFiles)
+        {
+            var state = InferStateFromFileName(file);
+            if (state.HasValue)
+            {
+                results.Add((file, state.Value));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Parses a *Protocols.java file and extracts all packet registrations.
+    /// </summary>
+    public static List<PacketRegistration> ParseProtocolFile(string javaFilePath, ProtocolState state)
     {
         if (!File.Exists(javaFilePath))
         {
-            throw new FileNotFoundException($"GameProtocols.java not found at: {javaFilePath}");
+            throw new FileNotFoundException($"Protocol file not found at: {javaFilePath}");
         }
 
         var content = File.ReadAllText(javaFilePath);
         var registrations = new List<PacketRegistration>();
 
-        // Find the section boundaries - look for the assignments, not declarations
+        // Find section boundaries independently — don't assume ordering or that both exist
         var serverboundStart = content.IndexOf("SERVERBOUND_TEMPLATE =", StringComparison.Ordinal);
         var clientboundStart = content.IndexOf("CLIENTBOUND_TEMPLATE =", StringComparison.Ordinal);
 
-        if (serverboundStart >= 0 && clientboundStart > serverboundStart)
+        if (serverboundStart >= 0)
         {
-            var serverboundSection = content[serverboundStart..clientboundStart];
-            registrations.AddRange(ParseSection(serverboundSection, PacketDirection.Serverbound));
+            // Serverbound section ends at clientbound start (if it exists and comes after) or end of content
+            var serverboundEnd = (clientboundStart > serverboundStart) ? clientboundStart : content.Length;
+            var serverboundSection = content[serverboundStart..serverboundEnd];
+            registrations.AddRange(ParseSection(serverboundSection, PacketDirection.Serverbound, state));
         }
 
         if (clientboundStart >= 0)
         {
-            var clientboundSection = content[clientboundStart..];
-            registrations.AddRange(ParseSection(clientboundSection, PacketDirection.Clientbound));
+            // Clientbound section ends at serverbound start (if it exists and comes after) or end of content
+            var clientboundEnd = (serverboundStart > clientboundStart) ? serverboundStart : content.Length;
+            var clientboundSection = content[clientboundStart..clientboundEnd];
+            registrations.AddRange(ParseSection(clientboundSection, PacketDirection.Clientbound, state));
         }
 
         return registrations;
     }
 
-    private static List<PacketRegistration> ParseSection(string section, PacketDirection direction)
+    /// <summary>
+    /// Backward-compatible overload — parses with Play state by default.
+    /// </summary>
+    public static List<PacketRegistration> ParseGameProtocols(string javaFilePath)
+    {
+        return ParseProtocolFile(javaFilePath, ProtocolState.Play);
+    }
+
+    private static List<PacketRegistration> ParseSection(string section, PacketDirection direction, ProtocolState state)
     {
         var registrations = new List<(int position, string className)>();
 
         // Normalize whitespace - collapse all whitespace to single spaces
         var normalizedSection = Regex.Replace(section, @"\s+", " ");
 
-        // Pattern 1: Match .addPacket with STREAM_CODEC
-        // .addPacket(GamePacketTypes.TYPE_NAME, PacketClassName.STREAM_CODEC)
-        // .addPacket(GamePacketTypes.TYPE_NAME, PacketClassName.Pos.STREAM_CODEC)  <- nested class
-        var streamCodecPattern = @"\.(addPacket|withBundlePacket)\s*\([^,]+,\s*(\w+)(Packet)?(?:\.(\w+))?\.(STREAM_CODEC|GAMEPLAY_STREAM_CODEC)";
+        // Pattern 1: Match .addPacket/.withBundlePacket with any *STREAM_CODEC variant
+        // Handles: STREAM_CODEC, GAMEPLAY_STREAM_CODEC, CONFIG_STREAM_CODEC, CONTEXT_FREE_STREAM_CODEC
+        var streamCodecPattern = @"\.(addPacket|withBundlePacket)\s*\([^,]+,\s*(\w+)(Packet)?(?:\.(\w+))?\.\w*STREAM_CODEC";
 
         foreach (Match match in Regex.Matches(normalizedSection, streamCodecPattern))
         {
             var baseName = match.Groups[2].Value;
             var hasPacketSuffix = match.Groups[3].Success;
             var nestedClass = match.Groups[4].Success ? match.Groups[4].Value : null;
-            
+
             var className = BuildClassName(baseName, hasPacketSuffix, nestedClass);
             registrations.Add((match.Index, className));
         }
@@ -93,7 +161,7 @@ public static class JavaProtocolParser
         {
             var baseName = match.Groups[1].Value;
             var hasPacketSuffix = match.Groups[2].Success;
-            
+
             var className = BuildClassName(baseName, hasPacketSuffix, null);
             registrations.Add((match.Index, className));
         }
@@ -101,7 +169,7 @@ public static class JavaProtocolParser
         // Sort by position in the file to get correct packet IDs
         var sortedRegistrations = registrations
             .OrderBy(r => r.position)
-            .Select((r, idx) => new PacketRegistration(r.className, idx, direction, ProtocolState.Play))
+            .Select((r, idx) => new PacketRegistration(r.className, idx, direction, state))
             .ToList();
 
         return sortedRegistrations;
@@ -111,7 +179,7 @@ public static class JavaProtocolParser
     {
         // If there's a nested class suffix, we need to insert it before "Packet"
         // e.g., MoveEntityPacket + Pos => MoveEntityPosPacket
-        if (!string.IsNullOrEmpty(nestedClass) && nestedClass != "STREAM_CODEC" && nestedClass != "GAMEPLAY_STREAM_CODEC")
+        if (!string.IsNullOrEmpty(nestedClass) && !nestedClass.EndsWith("STREAM_CODEC"))
         {
             // If baseName already ends with "Packet", insert the nested class before it
             if (baseName.EndsWith("Packet"))
@@ -129,7 +197,7 @@ public static class JavaProtocolParser
                 return $"{baseName}{nestedClass}Packet";
             }
         }
-        
+
         // No nested class - just ensure it ends with Packet
         if (hasPacketSuffix)
         {
@@ -139,7 +207,7 @@ public static class JavaProtocolParser
         {
             return baseName + "Packet";
         }
-        
+
         return baseName;
     }
 }

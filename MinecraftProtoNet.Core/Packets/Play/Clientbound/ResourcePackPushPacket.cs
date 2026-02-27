@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// Sent by the server to request the client downloads a resource pack.
 /// The client should respond with ServerboundResourcePackPacket.
 /// </summary>
-[Packet(0x50, ProtocolState.Play)]
+[Packet(0x51, ProtocolState.Play)]
 public class ResourcePackPushPacket : IClientboundPacket
 {
     /// <summary>

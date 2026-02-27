@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// Sent by the server to signal that the client should enter the configuration phase.
 /// This has no payload - it's just a signal.
 /// </summary>
-[Packet(0x75, ProtocolState.Play)]
+[Packet(0x76, ProtocolState.Play)]
 public class StartConfigurationPacket : IClientboundPacket
 {
     public void Deserialize(ref PacketBufferReader buffer)

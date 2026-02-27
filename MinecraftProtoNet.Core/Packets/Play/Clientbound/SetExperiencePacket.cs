@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x66, ProtocolState.Play)]
+[Packet(0x67, ProtocolState.Play)]
 public class SetExperiencePacket : IClientboundPacket
 {
     public float ExperienceBar { get; set; }

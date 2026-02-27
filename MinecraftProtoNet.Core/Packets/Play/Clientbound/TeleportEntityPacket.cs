@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent to teleport an entity to a new position.
 /// </summary>
-[Packet(0x7C, ProtocolState.Play)]
+[Packet(0x7D, ProtocolState.Play)]
 public class TeleportEntityPacket : IClientboundPacket
 {
     /// <summary>

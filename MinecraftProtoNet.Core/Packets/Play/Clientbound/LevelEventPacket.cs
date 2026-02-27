@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x2D, ProtocolState.Play)]
+[Packet(0x2E, ProtocolState.Play)]
 public class LevelEventPacket : IClientboundPacket
 {
     public int EventId { get; set; }

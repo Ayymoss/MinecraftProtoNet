@@ -139,7 +139,7 @@ public class MinecraftClient : IMinecraftClient
             ? ProtocolConstants.GetSnapshotProtocolVersion() 
             : ProtocolConstants.ProtocolVersion;
 
-        var handshakePacket = new HandshakePacket
+        var handshakePacket = new ClientIntentionPacket
         {
             ProtocolVersion = protocolVersion,
             ServerAddress = host,

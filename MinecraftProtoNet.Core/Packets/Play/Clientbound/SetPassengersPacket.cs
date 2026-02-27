@@ -8,7 +8,7 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 /// <summary>
 /// Sent when entities mount/dismount a vehicle.
 /// </summary>
-[Packet(0x6A, ProtocolState.Play)]
+[Packet(0x6B, ProtocolState.Play)]
 public class SetPassengersPacket : IClientboundPacket
 {
     /// <summary>

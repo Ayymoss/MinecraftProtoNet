@@ -6,7 +6,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x43, ProtocolState.Play)]
+[Packet(0x44, ProtocolState.Play)]
 public class PlayerCombatKillPacket : IClientboundPacket
 {
     public int PlayerId { get; set; }

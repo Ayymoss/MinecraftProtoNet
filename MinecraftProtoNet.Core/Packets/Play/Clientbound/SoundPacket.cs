@@ -8,7 +8,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x74, ProtocolState.Play, true)]
+[Packet(0x75, ProtocolState.Play, true)]
 public class SoundPacket : IClientboundPacket
 {
     public int SoundId { get; set; }

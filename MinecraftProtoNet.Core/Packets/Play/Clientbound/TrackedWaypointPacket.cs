@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 
-[Packet(0x89, ProtocolState.Play, true)]
+[Packet(0x8A, ProtocolState.Play, true)]
 public class TrackedWaypointPacket : IClientboundPacket
 {
     public void Deserialize(ref PacketBufferReader buffer)
