@@ -46,6 +46,17 @@ public class Entity
         }
     } = 20f;
 
+    public float MaxHealth
+    {
+        get;
+        set
+        {
+            if (!(Math.Abs(field - value) > 0.01f)) return;
+            field = value;
+            OnStatsChanged?.Invoke();
+        }
+    } = 20f;
+
     public int Hunger
     {
         get;

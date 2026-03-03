@@ -77,7 +77,22 @@
                                 <div class="flex items-center gap-2">
                                     <span class="font-bold text-slate-200 truncate uppercase tracking-tight text-xs">@typeName</span>
                                     <span class="text-[10px] font-black text-slate-700">#@entity.EntityId</span>
+                                    @if (entity.Health < entity.MaxHealth)
+                                    {
+                                        <div class="flex items-center gap-1">
+                                            <i class="ph-duotone ph-heart-straight text-rose-500 text-[10px]"></i>
+                                            <span class="text-[10px] font-black text-slate-400">@entity.Health.ToString("F0")/@entity.MaxHealth.ToString("F0")</span>
+                                        </div>
+                                    }
                                 </div>
+
+                                @if (entity.Health < entity.MaxHealth)
+                                {
+                                    <div class="mt-1.5 h-1 bg-slate-950 rounded-full overflow-hidden border border-slate-800/50 p-0.5">
+                                        <div class="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]"
+                                             style="width: @(Math.Clamp(entity.Health / entity.MaxHealth * 100, 0, 100))%"></div>
+                                    </div>
+                                }
 
                                 <div class="flex items-center gap-3 mt-1.5">
                                     <div class="flex items-center gap-1 text-[10px] text-slate-500">

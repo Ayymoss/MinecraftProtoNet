@@ -25,6 +25,8 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(HurtAnimationPacket))]
 [HandlesPacket(typeof(SetHealthPacket))]
 [HandlesPacket(typeof(DamageEventPacket))]
+[HandlesPacket(typeof(SetEntityDataPacket))]
+[HandlesPacket(typeof(UpdateAttributesPacket))]
 public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physicsService) : IPacketHandler
 {
     /// <summary>
@@ -190,6 +192,47 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
                     });
                 }
 
+                break;
+
+            case SetEntityDataPacket setEntityDataPacket:
+                // Extract health from metadata index 9 (LivingEntity.DATA_HEALTH_ID)
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java
+                foreach (var metadata in setEntityDataPacket.MetadataPayload)
+                {
+                    if (metadata is { Index: 9, Type: SetEntityDataPacket.MetadataType.Float, Value: float health })
+                    {
+                        // Update player entity health
+                        var playerEntity = client.State.Level.GetEntityOfId(setEntityDataPacket.EntityId);
+                        playerEntity?.Health = health;
+
+                        // Update world entity health
+                        client.State.WorldEntities.UpdateHealth(setEntityDataPacket.EntityId, health);
+                    }
+                }
+                break;
+
+            case UpdateAttributesPacket updateAttributesPacket:
+                // Extract max_health attribute
+                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/ai/attributes/Attributes.java
+                if (client.State.RegistryKeyOrder.TryGetValue("minecraft:attribute", out var attributes))
+                {
+                    var maxHealthIndex = attributes.IndexOf("minecraft:max_health");
+                    if (maxHealthIndex >= 0)
+                    {
+                        foreach (var property in updateAttributesPacket.Properties)
+                        {
+                            if (property.Id != maxHealthIndex) continue;
+                            var maxHealth = (float)property.Value;
+
+                            // Update player entity max health
+                            var playerEntity = client.State.Level.GetEntityOfId(updateAttributesPacket.EntityId);
+                            playerEntity?.MaxHealth = maxHealth;
+
+                            // Update world entity max health
+                            client.State.WorldEntities.UpdateMaxHealth(updateAttributesPacket.EntityId, maxHealth);
+                        }
+                    }
+                }
                 break;
 
             case DamageEventPacket damageEventPacket:

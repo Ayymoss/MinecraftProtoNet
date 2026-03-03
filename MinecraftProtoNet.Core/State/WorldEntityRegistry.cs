@@ -15,6 +15,8 @@ public class WorldEntity
     public Vector2<float> YawPitch { get; set; } = new();
     public Vector3<double> Velocity { get; set; } = new();
     public bool IsOnGround { get; set; }
+    public float Health { get; set; } = 20f;
+    public float MaxHealth { get; set; } = 20f;
 }
 
 /// <summary>
@@ -89,6 +91,28 @@ public class WorldEntityRegistry
             entity.Velocity = velocity;
             entity.YawPitch = yawPitch;
             entity.IsOnGround = onGround;
+        }
+    }
+
+    /// <summary>
+    /// Updates entity health.
+    /// </summary>
+    public void UpdateHealth(int entityId, float health)
+    {
+        if (_entities.TryGetValue(entityId, out var entity))
+        {
+            entity.Health = health;
+        }
+    }
+
+    /// <summary>
+    /// Updates entity max health.
+    /// </summary>
+    public void UpdateMaxHealth(int entityId, float maxHealth)
+    {
+        if (_entities.TryGetValue(entityId, out var entity))
+        {
+            entity.MaxHealth = maxHealth;
         }
     }
 

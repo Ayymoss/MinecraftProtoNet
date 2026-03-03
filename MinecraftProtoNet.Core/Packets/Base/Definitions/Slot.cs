@@ -186,61 +186,317 @@ public class Slot
     /// </summary>
     public static object? ReadComponentData(ref PacketBufferReader reader, ComponentType type, int typeId)
     {
-        // Based on DataComponents.java from Minecraft 1.21
-        // Types use ByteBufCodecs.VAR_INT, FLOAT, BOOL, or complex stream codecs
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/core/component/DataComponents.java
+        // Each component type has a specific StreamCodec; the wire format varies by type.
+        // NBT-based types use fromCodecWithRegistries (writes an NBT tag).
+        // Simple types use ByteBufCodecs.VAR_INT/FLOAT/BOOL/etc.
+        // Complex types use StreamCodec.composite or custom codecs.
         return type switch
         {
-            // NBT-based types
+            // === NBT-based types (CustomData.STREAM_CODEC = NBT compound) ===
             ComponentType.CustomData => reader.ReadNbtTag(),
             ComponentType.BucketEntityData => reader.ReadNbtTag(),
-            
-            // VarInt types
+
+            // === VarInt types (ByteBufCodecs.VAR_INT) ===
             ComponentType.MaxStackSize => reader.ReadVarInt(),
             ComponentType.MaxDamage => reader.ReadVarInt(),
             ComponentType.Damage => reader.ReadVarInt(),
             ComponentType.RepairCost => reader.ReadVarInt(),
             ComponentType.AdditionalTradeCost => reader.ReadVarInt(),
             ComponentType.OminousBottleAmplifier => reader.ReadVarInt(),
-            
-            // Boolean types
+            ComponentType.Enchantable => reader.ReadVarInt(),
+
+            // === VarInt enum types (ByteBufCodecs.idMapper) ===
+            ComponentType.Dye => reader.ReadVarInt(),
+            ComponentType.BaseColor => reader.ReadVarInt(),
+            ComponentType.MapPostProcessing => reader.ReadVarInt(),
+            ComponentType.Rarity => reader.ReadVarInt(),
+            ComponentType.WolfCollar => reader.ReadVarInt(),
+            ComponentType.TropicalFishBaseColor => reader.ReadVarInt(),
+            ComponentType.TropicalFishPatternColor => reader.ReadVarInt(),
+            ComponentType.CatCollar => reader.ReadVarInt(),
+            ComponentType.SheepColor => reader.ReadVarInt(),
+            ComponentType.ShulkerColor => reader.ReadVarInt(),
+            ComponentType.FoxVariant => reader.ReadVarInt(),
+            ComponentType.SalmonSize => reader.ReadVarInt(),
+            ComponentType.ParrotVariant => reader.ReadVarInt(),
+            ComponentType.MooshroomVariant => reader.ReadVarInt(),
+            ComponentType.RabbitVariant => reader.ReadVarInt(),
+            ComponentType.LlamaVariant => reader.ReadVarInt(),
+            ComponentType.AxolotlVariant => reader.ReadVarInt(),
+
+            // === Holder<T> registry types (ByteBufCodecs.holderRegistry = VarInt) ===
+            ComponentType.DamageType => reader.ReadVarInt(),
+            ComponentType.DamageResistant => reader.ReadVarInt(),
+            ComponentType.VillagerVariant => reader.ReadVarInt(),
+            ComponentType.WolfVariant => reader.ReadVarInt(),
+            ComponentType.WolfSoundVariant => reader.ReadVarInt(),
+            ComponentType.PigVariant => reader.ReadVarInt(),
+            ComponentType.PigSoundVariant => reader.ReadVarInt(),
+            ComponentType.CowVariant => reader.ReadVarInt(),
+            ComponentType.CowSoundVariant => reader.ReadVarInt(),
+            ComponentType.ChickenVariant => reader.ReadVarInt(),
+            ComponentType.ChickenSoundVariant => reader.ReadVarInt(),
+            ComponentType.ZombieNautilusVariant => reader.ReadVarInt(),
+            ComponentType.FrogVariant => reader.ReadVarInt(),
+            ComponentType.PaintingVariant => reader.ReadVarInt(),
+            ComponentType.CatVariant => reader.ReadVarInt(),
+            ComponentType.CatSoundVariant => reader.ReadVarInt(),
+            ComponentType.ProvidesTrimMaterial => reader.ReadVarInt(),
+
+            // === Boolean types (ByteBufCodecs.BOOL) ===
             ComponentType.EnchantmentGlintOverride => reader.ReadBoolean(),
-            
-            // Float types  
+
+            // === Float types (ByteBufCodecs.FLOAT) ===
             ComponentType.MinimumAttackCharge => reader.ReadFloat(),
             ComponentType.PotionDurationScale => reader.ReadFloat(),
-            
-            // Unit types (no data - just presence)
+
+            // === Unit types (no data) ===
             ComponentType.Unbreakable => Unit.Instance,
             ComponentType.Glider => Unit.Instance,
             ComponentType.IntangibleProjectile => null, // No network sync
             ComponentType.CreativeSlotLock => Unit.Instance,
-            
-            // Identifier types (string - namespace:path format)
+
+            // === Identifier types (Identifier.STREAM_CODEC = VarInt length + UTF-8) ===
             ComponentType.ItemModel => reader.ReadString(),
             ComponentType.TooltipStyle => reader.ReadString(),
             ComponentType.NoteBlockSound => reader.ReadString(),
-            
-            // Complex types - read as NBT fallback (may not work for all)
-            // These require proper stream codec implementations
+            ComponentType.ProvidesBannerPatterns => reader.ReadString(), // TagKey = Identifier
+
+            // === Text component types (ComponentSerialization.STREAM_CODEC = NBT tag) ===
+            ComponentType.CustomName => reader.ReadNbtTag(),
+            ComponentType.ItemName => reader.ReadNbtTag(),
+
+            // === Map<Holder, VarInt> types (ItemEnchantments) ===
+            // Reference: ItemEnchantments.java — map(holderRegistry, VAR_INT)
+            ComponentType.Enchantments => ReadMapVarIntVarInt(ref reader),
+            ComponentType.StoredEnchantments => ReadMapVarIntVarInt(ref reader),
+
+            // === Composite types with known binary formats ===
+            // Reference: UseEffects.java — BOOL + BOOL + FLOAT
+            ComponentType.UseEffects => ReadUseEffects(ref reader),
+            // Reference: FoodProperties.java — VAR_INT + FLOAT + BOOL
+            ComponentType.Food => ReadFoodProperties(ref reader),
+            // Reference: Weapon.java — VAR_INT + FLOAT
+            ComponentType.Weapon => ReadWeapon(ref reader),
+            // Reference: AttackRange.java — 6 FLOATs
+            ComponentType.AttackRange => ReadAttackRange(ref reader),
+            // Reference: SwingAnimation.java — VarInt enum + VarInt
+            ComponentType.SwingAnimation => ReadSwingAnimation(ref reader),
+            // Reference: TooltipDisplay.java — BOOL + list of VarInt
+            ComponentType.TooltipDisplay => ReadTooltipDisplay(ref reader),
+            // Reference: CustomModelData.java — 4 lists (floats, bools, strings, ints)
+            ComponentType.CustomModelData => ReadCustomModelData(ref reader),
+            // Reference: MapId.java — VAR_INT
+            ComponentType.MapId => reader.ReadVarInt(),
+            // Reference: MapItemColor.java — INT (signed 32-bit)
+            ComponentType.MapColor => reader.ReadSignedInt(),
+            // Reference: DyedItemColor.java — INT (signed 32-bit)
+            ComponentType.DyedColor => reader.ReadSignedInt(),
+            // Reference: HorseVariant.java — composite VarInt + VarInt
+            ComponentType.HorseVariant => ReadHorseVariant(ref reader),
+            // Reference: TropicalFish.Pattern.STREAM_CODEC — composite VarInt + VarInt
+            ComponentType.TropicalFishPattern => ReadTropicalFishPattern(ref reader),
+
+            // === Lore: list of text components (each is an NBT tag via ComponentSerialization) ===
+            // Reference: ItemLore.java — ComponentSerialization.STREAM_CODEC.apply(list(256))
+            ComponentType.Lore => ReadNbtList(ref reader),
+
+            // === BlockItemStateProperties: map<String, String> ===
+            // Reference: BlockItemStateProperties.java — map(STRING_UTF8, STRING_UTF8)
+            ComponentType.BlockState => ReadMapStringString(ref reader),
+
+            // Non-networked types (no STREAM_CODEC, should never appear on wire)
+            ComponentType.Lock => null,
+            ComponentType.ContainerLoot => null,
+            ComponentType.Recipes => null,
+            ComponentType.MapDecorations => null,
+            ComponentType.DebugStickState => null,
+
+            // All remaining types use binary StreamCodec.composite formats.
+            // They are NOT NBT-encoded. If encountered, we cannot skip them without
+            // knowing their exact format. The fallback will log a warning.
             _ => ReadUnknownComponent(ref reader, typeId)
         };
     }
 
+    #region Component Data Readers
+
     /// <summary>
-    /// Attempts to read unknown component types. Since we can't know the format,
-    /// we try reading as NBT first. If that fails, we log and return null.
-    /// This is a workaround until all component types are properly implemented.
+    /// Reads a list of NBT tags (e.g. Lore — list of text components).
+    /// Reference: ItemLore.java — ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list(256))
+    /// </summary>
+    private static object ReadNbtList(ref PacketBufferReader reader)
+    {
+        var count = reader.ReadVarInt();
+        var tags = new object?[count];
+        for (var i = 0; i < count; i++)
+            tags[i] = reader.ReadNbtTag();
+        return tags;
+    }
+
+    /// <summary>
+    /// Reads a Map(String, String) — used by BlockItemStateProperties.
+    /// Reference: BlockItemStateProperties.java — ByteBufCodecs.map(HashMap::new, STRING_UTF8, STRING_UTF8)
+    /// </summary>
+    private static object ReadMapStringString(ref PacketBufferReader reader)
+    {
+        var count = reader.ReadVarInt();
+        var map = new Dictionary<string, string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var key = reader.ReadString();
+            var value = reader.ReadString();
+            map[key] = value;
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Reads a Map(VarInt, VarInt) — used by ItemEnchantments.
+    /// Reference: ItemEnchantments.java — ByteBufCodecs.map(holderRegistry, VAR_INT)
+    /// </summary>
+    private static object ReadMapVarIntVarInt(ref PacketBufferReader reader)
+    {
+        var count = reader.ReadVarInt();
+        var map = new Dictionary<int, int>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var key = reader.ReadVarInt();
+            var value = reader.ReadVarInt();
+            map[key] = value;
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Reference: UseEffects.java — BOOL + BOOL + FLOAT
+    /// </summary>
+    private static object ReadUseEffects(ref PacketBufferReader reader)
+    {
+        var canSprint = reader.ReadBoolean();
+        var interactVibrations = reader.ReadBoolean();
+        var speedMultiplier = reader.ReadFloat();
+        return (canSprint, interactVibrations, speedMultiplier);
+    }
+
+    /// <summary>
+    /// Reference: FoodProperties.java — VAR_INT + FLOAT + BOOL
+    /// </summary>
+    private static object ReadFoodProperties(ref PacketBufferReader reader)
+    {
+        var nutrition = reader.ReadVarInt();
+        var saturation = reader.ReadFloat();
+        var canAlwaysEat = reader.ReadBoolean();
+        return (nutrition, saturation, canAlwaysEat);
+    }
+
+    /// <summary>
+    /// Reference: Weapon.java — VAR_INT + FLOAT
+    /// </summary>
+    private static object ReadWeapon(ref PacketBufferReader reader)
+    {
+        var itemDamagePerAttack = reader.ReadVarInt();
+        var disableBlockingForSeconds = reader.ReadFloat();
+        return (itemDamagePerAttack, disableBlockingForSeconds);
+    }
+
+    /// <summary>
+    /// Reference: AttackRange.java — 6 FLOATs
+    /// </summary>
+    private static object ReadAttackRange(ref PacketBufferReader reader)
+    {
+        var minReach = reader.ReadFloat();
+        var maxReach = reader.ReadFloat();
+        var minCreativeReach = reader.ReadFloat();
+        var maxCreativeReach = reader.ReadFloat();
+        var hitboxMargin = reader.ReadFloat();
+        var mobFactor = reader.ReadFloat();
+        return (minReach, maxReach, minCreativeReach, maxCreativeReach, hitboxMargin, mobFactor);
+    }
+
+    /// <summary>
+    /// Reference: SwingAnimation.java — VarInt enum + VarInt duration
+    /// </summary>
+    private static object ReadSwingAnimation(ref PacketBufferReader reader)
+    {
+        var animationType = reader.ReadVarInt();
+        var duration = reader.ReadVarInt();
+        return (animationType, duration);
+    }
+
+    /// <summary>
+    /// Reference: TooltipDisplay.java — BOOL + collection of VarInt (DataComponentType registry IDs)
+    /// </summary>
+    private static object ReadTooltipDisplay(ref PacketBufferReader reader)
+    {
+        var hideTooltip = reader.ReadBoolean();
+        var count = reader.ReadVarInt();
+        var hiddenComponents = new int[count];
+        for (var i = 0; i < count; i++)
+            hiddenComponents[i] = reader.ReadVarInt();
+        return (hideTooltip, hiddenComponents);
+    }
+
+    /// <summary>
+    /// Reference: CustomModelData.java — 4 lists (floats, bools, strings, ints)
+    /// </summary>
+    private static object ReadCustomModelData(ref PacketBufferReader reader)
+    {
+        // List<Float>
+        var floatCount = reader.ReadVarInt();
+        for (var i = 0; i < floatCount; i++) reader.ReadFloat();
+        // List<Boolean>
+        var boolCount = reader.ReadVarInt();
+        for (var i = 0; i < boolCount; i++) reader.ReadBoolean();
+        // List<String>
+        var stringCount = reader.ReadVarInt();
+        for (var i = 0; i < stringCount; i++) reader.ReadString();
+        // List<Int>
+        var intCount = reader.ReadVarInt();
+        for (var i = 0; i < intCount; i++) reader.ReadSignedInt();
+        return null;
+    }
+
+    /// <summary>
+    /// Reference: Variant.java (Horse) — VarInt + VarInt
+    /// </summary>
+    private static object ReadHorseVariant(ref PacketBufferReader reader)
+    {
+        var color = reader.ReadVarInt();
+        var markings = reader.ReadVarInt();
+        return (color, markings);
+    }
+
+    /// <summary>
+    /// Reference: TropicalFish.Pattern.STREAM_CODEC — VarInt size + VarInt pattern
+    /// </summary>
+    private static object ReadTropicalFishPattern(ref PacketBufferReader reader)
+    {
+        var size = reader.ReadVarInt();
+        var pattern = reader.ReadVarInt();
+        return (size, pattern);
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Fallback for truly unknown component types. Logs a warning.
+    /// Since we cannot determine the wire format, this will likely corrupt the buffer.
+    /// All known component types should be handled explicitly above.
     /// </summary>
     private static object? ReadUnknownComponent(ref PacketBufferReader reader, int typeId)
     {
-        // Most complex types are NBT-encoded, try that first
+        Log.Warning("[Slot] Unhandled component type {TypeId} — buffer may be corrupted. " +
+                    "Add explicit handling for this type in ReadComponentData.", typeId);
+        // Attempt NBT as last resort — some modded/future types may use it
         try
         {
             return reader.ReadNbtTag();
         }
         catch
         {
-            Log.Warning("[Slot] Unknown component type {TypeId} - unable to parse", typeId);
+            Log.Error("[Slot] Failed to read component type {TypeId} as NBT — buffer is now corrupted", typeId);
             return null;
         }
     }
@@ -348,8 +604,9 @@ public class Unit
 }
 
 /// <summary>
-/// Component types from DataComponents.java (Minecraft 1.21).
-/// Order matches the registry order.
+/// Component types from DataComponents.java (Minecraft 26.1).
+/// Order matches the registry registration order — IDs are assigned sequentially.
+/// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/core/component/DataComponents.java:107-216
 /// </summary>
 public enum ComponentType
 {
@@ -396,42 +653,72 @@ public enum ComponentType
     SwingAnimation = 40,
     AdditionalTradeCost = 41,
     StoredEnchantments = 42,
-    DyedColor = 43,
-    MapColor = 44,
-    MapId = 45,
-    MapDecorations = 46,
-    MapPostProcessing = 47,
-    ChargedProjectiles = 48,
-    BundleContents = 49,
-    PotionContents = 50,
-    PotionDurationScale = 51,
-    SuspiciousStewEffects = 52,
-    WritableBookContent = 53,
-    WrittenBookContent = 54,
-    Trim = 55,
-    DebugStickState = 56,
-    EntityData = 57,
-    BucketEntityData = 58,
-    BlockEntityData = 59,
-    Instrument = 60,
-    ProvidesTrimMaterial = 61,
-    OminousBottleAmplifier = 62,
-    JukeboxPlayable = 63,
-    ProvidesBannerPatterns = 64,
-    Recipes = 65,
-    LodestoneTracker = 66,
-    FireworkExplosion = 67,
-    Fireworks = 68,
-    Profile = 69,
-    NoteBlockSound = 70,
-    BannerPatterns = 71,
-    BaseColor = 72,
-    PotDecorations = 73,
-    Container = 74,
-    BlockState = 75,
-    Bees = 76,
-    Lock = 77,
-    ContainerLoot = 78,
-    BreakSound = 79,
-    // Entity variants continue from here...
+    Dye = 43,
+    DyedColor = 44,
+    MapColor = 45,
+    MapId = 46,
+    MapDecorations = 47,
+    MapPostProcessing = 48,
+    ChargedProjectiles = 49,
+    BundleContents = 50,
+    PotionContents = 51,
+    PotionDurationScale = 52,
+    SuspiciousStewEffects = 53,
+    WritableBookContent = 54,
+    WrittenBookContent = 55,
+    Trim = 56,
+    DebugStickState = 57,
+    EntityData = 58,
+    BucketEntityData = 59,
+    BlockEntityData = 60,
+    Instrument = 61,
+    ProvidesTrimMaterial = 62,
+    OminousBottleAmplifier = 63,
+    JukeboxPlayable = 64,
+    ProvidesBannerPatterns = 65,
+    Recipes = 66,
+    LodestoneTracker = 67,
+    FireworkExplosion = 68,
+    Fireworks = 69,
+    Profile = 70,
+    NoteBlockSound = 71,
+    BannerPatterns = 72,
+    BaseColor = 73,
+    PotDecorations = 74,
+    Container = 75,
+    BlockState = 76,
+    Bees = 77,
+    Lock = 78,
+    ContainerLoot = 79,
+    BreakSound = 80,
+    // Entity variant components (26.1)
+    VillagerVariant = 81,
+    WolfVariant = 82,
+    WolfSoundVariant = 83,
+    WolfCollar = 84,
+    FoxVariant = 85,
+    SalmonSize = 86,
+    ParrotVariant = 87,
+    TropicalFishPattern = 88,
+    TropicalFishBaseColor = 89,
+    TropicalFishPatternColor = 90,
+    MooshroomVariant = 91,
+    RabbitVariant = 92,
+    PigVariant = 93,
+    PigSoundVariant = 94,
+    CowVariant = 95,
+    CowSoundVariant = 96,
+    ChickenVariant = 97,
+    ChickenSoundVariant = 98,
+    ZombieNautilusVariant = 99,
+    FrogVariant = 100,
+    HorseVariant = 101,
+    PaintingVariant = 102,
+    LlamaVariant = 103,
+    AxolotlVariant = 104,
+    CatVariant = 105,
+    CatSoundVariant = 106,
+    CatCollar = 107,
+    SheepColor = 108,
+    ShulkerColor = 109,
 }
