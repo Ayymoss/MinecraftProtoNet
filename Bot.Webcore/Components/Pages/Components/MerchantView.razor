@@ -1,98 +1,160 @@
 @using Bot.Webcore.Services
 @inject BotService Bot
 
-<div class="space-y-4">
-    <!-- Villager Info -->
-    <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-            <div class="flex items-center gap-1 text-amber-400">
-                @for (int i = 1; i <= 5; i++)
-                {
-                    var level = i;
-                    <i class="@(level <= MerchantData.VillagerLevel ? "ph-fill" : "ph-duotone") ph-star text-sm"></i>
-                }
-            </div>
-            <span class="text-sm text-gray-400">Level @MerchantData.VillagerLevel</span>
-        </div>
-        @if (MerchantData.ShowProgress)
-        {
-            <div class="flex items-center gap-2">
-                <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div class="h-full bg-emerald-500 transition-all" 
-                         style="width: @GetXpProgress()%"></div>
+<div class="space-y-6">
+    <!-- Villager Info Card -->
+    <div class="bg-slate-950/40 rounded-2xl border border-slate-800/60 p-4 shadow-inner">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-lg shadow-amber-500/5">
+                    <i class="ph-duotone ph-users text-2xl text-amber-400"></i>
                 </div>
-                <span class="text-xs text-gray-500">@MerchantData.VillagerXp XP</span>
+                <div>
+                    <h3 class="font-bold text-slate-100 flex items-center gap-2">
+                        Villager Merchant
+                        <span class="px-2 py-0.5 bg-slate-800 rounded text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                            Level @MerchantData.VillagerLevel
+                        </span>
+                    </h3>
+                    <div class="flex items-center gap-1.5 mt-1">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            var level = i;
+                            <i class="@(level <= MerchantData.VillagerLevel ? "ph-fill text-amber-400" : "ph-duotone text-slate-700") ph-star text-xs"></i>
+                        }
+                    </div>
+                </div>
             </div>
-        }
+
+            @if (MerchantData.ShowProgress)
+            {
+                <div class="flex-1 md:max-w-[240px]">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Experience</span>
+                        <span class="text-[10px] font-black text-emerald-400">@MerchantData.VillagerXp XP</span>
+                    </div>
+                    <div class="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800/50 p-0.5">
+                        <div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.3)] transition-all duration-700 ease-out" 
+                             style="width: @GetXpProgress()%"></div>
+                    </div>
+                </div>
+            }
+        </div>
     </div>
 
-    <!-- Trade Offers -->
-    <div class="space-y-2">
-        @for (int i = 0; i < MerchantData.Offers.Count; i++)
-        {
-            var index = i;
-            var offer = MerchantData.Offers[i];
-            var isSelected = MerchantData.SelectedTradeIndex == index;
-            var isDisabled = offer.IsOutOfStock;
+    <!-- Trade Offers List -->
+    <div class="space-y-3">
+        <div class="flex items-center gap-2 px-1">
+            <span class="h-px flex-1 bg-slate-800/50"></span>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Available Trades</p>
+            <span class="h-px flex-1 bg-slate-800/50"></span>
+        </div>
 
-            <div class="@GetTradeClass(isSelected, isDisabled)"
-                 @onclick="() => SelectTrade(index)">
-                <!-- Input Items -->
-                <div class="flex items-center gap-2">
-                    <div class="@GetItemSlotClass()">
-                        <span class="text-[10px] text-center">@GetItemName(offer.BaseCostA.ItemId)</span>
-                        <span class="absolute bottom-0 right-0.5 text-[8px] text-emerald-400 font-bold">
-                            @offer.GetModifiedCostCount()
-                        </span>
-                    </div>
-                    @if (offer.CostB != null)
-                    {
-                        <span class="text-gray-600">+</span>
-                        <div class="@GetItemSlotClass()">
-                            <span class="text-[10px] text-center">@GetItemName(offer.CostB.ItemId)</span>
-                            <span class="absolute bottom-0 right-0.5 text-[8px] text-emerald-400 font-bold">
-                                @offer.CostB.Count
-                            </span>
+        <div class="grid grid-cols-1 gap-3">
+            @for (int i = 0; i < MerchantData.Offers.Count; i++)
+            {
+                var index = i;
+                var offer = MerchantData.Offers[i];
+                var isSelected = MerchantData.SelectedTradeIndex == index;
+                var isDisabled = offer.IsOutOfStock;
+
+                <div class="@GetTradeClass(isSelected, isDisabled)"
+                     @onclick="() => SelectTrade(index)">
+                    
+                    <!-- Transaction Visualization -->
+                    <div class="flex items-center gap-4 flex-1">
+                        <!-- Input Section -->
+                        <div class="flex items-center gap-2">
+                            <div class="@GetItemSlotClass(false)">
+                                <div class="w-full h-full flex items-center justify-center p-1">
+                                    <span class="text-[9px] leading-tight text-center font-bold text-slate-300 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
+                                        @GetItemName(offer.BaseCostA.ItemId)
+                                    </span>
+                                </div>
+                                <div class="absolute bottom-1 right-1.5 px-1 bg-emerald-500/20 rounded text-[10px] text-emerald-400 font-black backdrop-blur-sm border border-emerald-500/20">
+                                    @offer.GetModifiedCostCount()
+                                </div>
+                            </div>
+
+                            @if (offer.CostB != null)
+                            {
+                                <div class="p-1.5 bg-slate-800/40 rounded-lg border border-slate-800/60">
+                                    <i class="ph-bold ph-plus text-[10px] text-slate-600"></i>
+                                </div>
+                                
+                                <div class="@GetItemSlotClass(false)">
+                                    <div class="w-full h-full flex items-center justify-center p-1">
+                                        <span class="text-[9px] leading-tight text-center font-bold text-slate-300 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
+                                            @GetItemName(offer.CostB.ItemId)
+                                        </span>
+                                    </div>
+                                    <div class="absolute bottom-1 right-1.5 px-1 bg-emerald-500/20 rounded text-[10px] text-emerald-400 font-black backdrop-blur-sm border border-emerald-500/20">
+                                        @offer.CostB.Count
+                                    </div>
+                                </div>
+                            }
                         </div>
-                    }
-                </div>
 
-                <!-- Arrow -->
-                <i class="ph-bold ph-arrow-right text-gray-500"></i>
+                        <!-- Arrow Divider -->
+                        <div class="flex flex-col items-center gap-1 opacity-40">
+                            <i class="ph-bold ph-arrow-right text-lg text-amber-500/60"></i>
+                        </div>
 
-                <!-- Result Item -->
-                <div class="@GetItemSlotClass() border-amber-500/50">
-                    <span class="text-[10px] text-center text-amber-300">
-                        @GetItemName(offer.Result.ItemId ?? 0)
-                    </span>
-                    <span class="absolute bottom-0 right-0.5 text-[8px] text-amber-400 font-bold">
-                        @offer.Result.ItemCount
-                    </span>
-                </div>
-
-                <!-- Trade Info -->
-                <div class="ml-auto text-right">
-                    <div class="text-xs text-gray-400">
-                        @offer.Uses / @offer.MaxUses
+                        <!-- Result Section -->
+                        <div class="@GetItemSlotClass(true)">
+                            <div class="w-full h-full flex items-center justify-center p-1">
+                                <span class="text-[9px] leading-tight text-center font-black text-amber-200 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
+                                    @GetItemName(offer.Result.ItemId ?? 0)
+                                </span>
+                            </div>
+                            <div class="absolute bottom-1 right-1.5 px-1 bg-amber-500/20 rounded text-[10px] text-amber-400 font-black backdrop-blur-sm border border-amber-500/20 shadow-lg shadow-amber-500/10">
+                                @offer.Result.ItemCount
+                            </div>
+                            @if (isSelected)
+                            {
+                                <div class="absolute inset-0 border-2 border-amber-400/50 rounded-xl pointer-events-none shadow-[inset_0_0_15px_rgba(245,158,11,0.2)]"></div>
+                            }
+                        </div>
                     </div>
-                    @if (isDisabled)
-                    {
-                        <span class="text-[10px] text-red-400">Sold Out</span>
-                    }
-                    else if (MerchantData.CanRestock)
-                    {
-                        <span class="text-[10px] text-gray-500">Restocks</span>
-                    }
+
+                    <!-- Meta / Status Info -->
+                    <div class="flex flex-col items-end gap-1.5 pl-4 border-l border-slate-800/40">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-slate-500">STOCK</span>
+                            <div class="flex gap-0.5">
+                                @for (int s = 0; s < 5; s++)
+                                {
+                                    var filled = s < (int)((1.0 - (double)offer.Uses/offer.MaxUses) * 5);
+                                    <div class="w-1.5 h-3 rounded-sm @(isDisabled ? "bg-rose-500/20" : filled ? "bg-emerald-500/40" : "bg-slate-800")"></div>
+                                }
+                            </div>
+                        </div>
+                        
+                        @if (isDisabled)
+                        {
+                            <span class="px-2 py-0.5 bg-rose-500/10 text-rose-400 text-[10px] font-black uppercase tracking-tighter rounded border border-rose-500/20">
+                                Sold Out
+                            </span>
+                        }
+                        else
+                        {
+                            <div class="text-[10px] font-medium text-slate-400 tabular-nums">
+                                @offer.Uses <span class="text-slate-700">/</span> @offer.MaxUses
+                            </div>
+                        }
+                    </div>
                 </div>
-            </div>
-        }
+            }
+        </div>
     </div>
 
     @if (MerchantData.Offers.Count == 0)
     {
-        <div class="text-center py-4 text-gray-500">
-            <i class="ph-duotone ph-x-circle text-2xl mb-1 block"></i>
-            <p class="text-sm">No trades available</p>
+        <div class="flex flex-col items-center justify-center py-10 text-slate-600 bg-slate-900/20 rounded-2xl border border-slate-800/40 border-dashed">
+            <div class="w-12 h-12 rounded-full bg-slate-800/30 flex items-center justify-center mb-3 border border-slate-800/50">
+                <i class="ph-duotone ph-storefront text-2xl opacity-20"></i>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-widest opacity-40">No Trade Offers Available</p>
         </div>
     }
 </div>

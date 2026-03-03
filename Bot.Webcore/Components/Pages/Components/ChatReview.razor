@@ -3,57 +3,71 @@
 @using MinecraftProtoNet.Core.Dtos
 @implements IDisposable
 
-<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl">
-    <div class="flex items-center justify-between mb-4">
+<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col h-full">
+    <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
         <div class="flex items-center gap-3">
-            <i class="ph-duotone ph-chats text-2xl text-emerald-400"></i>
-            <h2 class="text-xl font-semibold text-gray-100">Chat Redirection</h2>
+            <div class="flex px-2 py-1 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                <i class="ph-duotone ph-chats text-xl text-emerald-400"></i>
+            </div>
+            <h2 class="text-lg font-bold text-slate-100 tracking-tight">Signal Review</h2>
         </div>
-        <div class="flex items-center gap-2 bg-slate-800 rounded-full px-3 py-1 border border-slate-700">
-            <span class="text-xs text-gray-400">Redirect</span>
-            <input type="checkbox" @bind="Bot.State.BotSettings.RedirectChat" class="form-checkbox h-4 w-4 text-emerald-500 rounded border-slate-600 bg-slate-700" />
-        </div>
+        
+        <label class="flex items-center gap-3 cursor-pointer group">
+            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-400 transition-colors">Redirect Chat</span>
+            <div class="relative">
+                <input type="checkbox" @bind="Bot.State.BotSettings.RedirectChat" class="sr-only peer" />
+                <div class="w-10 h-5 bg-slate-800 rounded-full border border-slate-700 peer-checked:bg-emerald-500/20 peer-checked:border-emerald-500/40 transition-all shadow-inner"></div>
+                <div class="absolute left-1 top-1 w-3 h-3 bg-slate-500 rounded-full transition-all peer-checked:left-6 peer-checked:bg-emerald-400 shadow-md"></div>
+            </div>
+        </label>
     </div>
 
-    @if (!Bot.IsConnected)
-    {
-        <div class="text-center py-6 text-gray-500">
-            <i class="ph-duotone ph-chat-centered-dots text-4xl mb-2 block"></i>
-            <p>Connect to review redirected chat</p>
-        </div>
-    }
-    else if (Bot.PendingRedirectedChat.IsEmpty)
-    {
-        <div class="text-center py-6 text-gray-500 italic">
-            <p>No pending messages for review.</p>
-        </div>
-    }
-    else
-    {
-        <div class="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-            @foreach (var msg in Bot.PendingRedirectedChat.ToList())
-            {
-                <div class="p-3 bg-slate-800/80 rounded-lg border border-slate-700/50 flex flex-col gap-2">
-                    <div class="text-sm text-gray-200 break-words">
-                        @msg.Message
-                    </div>
-                    <div class="flex items-center justify-between text-[10px] text-gray-500">
-                        <span>@DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp).LocalDateTime.ToString("T")</span>
-                        <div class="flex gap-2">
-                            <button @onclick="() => Dismiss(msg)" 
-                                    class="px-2 py-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded border border-red-700/30 transition-colors">
-                                Dismiss
-                            </button>
-                            <button @onclick="() => Send(msg)" 
-                                    class="px-2 py-1 bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 rounded border border-emerald-700/30 transition-colors">
-                                Send to Minecraft
-                            </button>
+    <div class="p-5 flex-1 flex flex-col min-h-0">
+        @if (!Bot.IsConnected)
+        {
+            <div class="flex flex-col items-center justify-center py-12 text-slate-600">
+                <div class="w-16 h-16 rounded-full bg-slate-800/30 flex items-center justify-center mb-4 border border-slate-800/50">
+                    <i class="ph-duotone ph-chat-centered-dots text-3xl opacity-20"></i>
+                </div>
+                <p class="font-medium text-sm">Awaiting connection...</p>
+            </div>
+        }
+        else if (Bot.PendingRedirectedChat.IsEmpty)
+        {
+            <div class="flex-1 flex flex-col items-center justify-center py-10 opacity-30 italic">
+                <p class="text-xs font-bold uppercase tracking-widest">No signals for review</p>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-3 overflow-y-auto pr-2 custom-scrollbar flex-1">
+                @foreach (var msg in Bot.PendingRedirectedChat.ToList())
+                {
+                    <div class="p-4 bg-slate-950/40 rounded-2xl border border-slate-800/60 flex flex-col gap-3 group hover:border-emerald-500/20 transition-all shadow-inner">
+                        <div class="text-sm text-slate-200 leading-relaxed font-medium break-words">
+                            @msg.Message
+                        </div>
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-800/40">
+                            <span class="text-[10px] font-black text-slate-600 tabular-nums uppercase">
+                                <i class="ph-duotone ph-clock mr-1"></i>
+                                @DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp).LocalDateTime.ToString("T")
+                            </span>
+                            <div class="flex gap-2">
+                                <button @onclick="() => Dismiss(msg)" 
+                                        class="px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-tighter rounded-lg border border-rose-500/20 transition-all">
+                                    Dismiss
+                                </button>
+                                <button @onclick="() => Send(msg)" 
+                                        class="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-tighter rounded-lg border border-emerald-500/20 transition-all shadow-lg shadow-emerald-500/5">
+                                    Relay to Core
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            }
-        </div>
-    }
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {

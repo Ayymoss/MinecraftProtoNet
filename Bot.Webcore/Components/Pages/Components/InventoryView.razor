@@ -4,79 +4,125 @@
 @inject DragDropState DragState
 @implements IDisposable
 
-<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl">
-    <div class="flex items-center gap-3 mb-6">
-        <i class="ph-duotone ph-backpack text-2xl text-emerald-400"></i>
-        <h2 class="text-xl font-semibold text-gray-100">Inventory</h2>
+<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
+        <div class="flex items-center gap-3">
+            <div class="flex px-2 py-1 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                <i class="ph-duotone ph-backpack text-xl text-emerald-400"></i>
+            </div>
+            <h2 class="text-lg font-bold text-slate-100 tracking-tight">Player Inventory</h2>
+        </div>
+        @if (Bot.IsConnected)
+        {
+            <div class="px-3 py-1 bg-slate-950/50 rounded-full border border-slate-800/50 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                @(Bot.State.LocalPlayer?.Entity?.Inventory?.HeldSlotWithOffset - 35 ?? 1) Selected
+            </div>
+        }
     </div>
 
-    @if (!Bot.IsConnected)
-    {
-        <div class="text-center py-8 text-gray-500">
-            <i class="ph-duotone ph-package text-4xl mb-2 block"></i>
-            <p>Connect to view inventory</p>
-        </div>
-    }
-    else
-    {
-        var inventory = Bot.State.LocalPlayer?.Entity?.Inventory;
-        var heldSlot = inventory?.HeldSlotWithOffset ?? 36;
-        
-        <!-- Main Inventory (Slots 9-35: 3 rows of 9) -->
-        <div class="mb-6">
-            <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide">Main Inventory</p>
-            <div class="grid grid-cols-9 gap-1">
-                @for (int i = 9; i <= 35; i++)
-                {
-                    var slotIndex = i;
-                    var slot = inventory?.GetSlot((short)slotIndex) ?? Slot.Empty;
-                    <div class="@GetSlotClass(slotIndex, heldSlot, DragState.IsDragging && !DragState.IsFromContainer && DragState.SourceSlot == slotIndex) group relative cursor-pointer"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(slotIndex, slot)"
-                         @ondrop="() => OnDrop(slotIndex)"
-                         @ondragover:preventDefault
-                         @onclick="e => OnSlotClick(slotIndex, e)"
-                         title="@GetFullItemName(slot.ItemId)">
-                        @if (slot.ItemCount > 0 && slot.ItemId.HasValue)
-                        {
-                            <span class="text-[10px] leading-tight text-center break-words hyphens-auto">@GetItemName(slot.ItemId.Value)</span>
-                            <span class="absolute bottom-0.5 right-1 text-[9px] text-emerald-400 font-bold">@slot.ItemCount</span>
-                        }
-                    </div>
-                }
+    <div class="p-6">
+        @if (!Bot.IsConnected)
+        {
+            <div class="flex flex-col items-center justify-center py-12 text-slate-600">
+                <div class="w-16 h-16 rounded-full bg-slate-800/30 flex items-center justify-center mb-4 border border-slate-800/50">
+                    <i class="ph-duotone ph-package text-3xl opacity-20"></i>
+                </div>
+                <p class="font-medium">Connect to view inventory data</p>
             </div>
-        </div>
+        }
+        else
+        {
+            var inventory = Bot.State.LocalPlayer?.Entity?.Inventory;
+            var heldSlot = inventory?.HeldSlotWithOffset ?? 36;
+            
+            <!-- Main Inventory -->
+            <div class="mb-8">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Storage</p>
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                </div>
+                
+                <div class="grid grid-cols-9 gap-2">
+                    @for (int i = 9; i <= 35; i++)
+                    {
+                        var slotIndex = i;
+                        var slot = inventory?.GetSlot((short)slotIndex) ?? Slot.Empty;
+                        var isDragging = DragState.IsDragging && !DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
+                        
+                        <div class="@GetSlotClass(slotIndex, heldSlot, false, isDragging) group relative cursor-pointer"
+                             draggable="true"
+                             @ondragstart="() => OnDragStart(slotIndex, slot)"
+                             @ondrop="() => OnDrop(slotIndex)"
+                             @ondragover:preventDefault
+                             @onclick="e => OnSlotClick(slotIndex, e)"
+                             title="@GetFullItemName(slot.ItemId)">
+                            
+                            @if (slot.ItemCount > 0 && slot.ItemId.HasValue)
+                            {
+                                <div class="w-full h-full flex items-center justify-center p-1">
+                                    <span class="text-[9px] leading-[1.1] text-center font-medium text-slate-300 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
+                                        @GetItemName(slot.ItemId.Value)
+                                    </span>
+                                </div>
+                                <div class="absolute bottom-1 right-1.5 px-1 bg-emerald-500/20 rounded text-[10px] text-emerald-400 font-black backdrop-blur-sm border border-emerald-500/20">
+                                    @slot.ItemCount
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
 
-        <!-- Hotbar (Slots 36-44) -->
-        <div>
-            <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide">Hotbar (click to select, shift+click to move)</p>
-            <div class="grid grid-cols-9 gap-1">
-                @for (int i = 36; i <= 44; i++)
-                {
-                    var slotIndex = i;
-                    var slot = inventory?.GetSlot((short)slotIndex) ?? Slot.Empty;
-                    var isHeld = slotIndex == heldSlot;
-                    var isDragging = DragState.IsDragging && !DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
-                    <div class="@GetSlotClass(slotIndex, heldSlot, isHeld, isDragging) group relative cursor-pointer"
-                         @onclick="e => OnHotbarClick(slotIndex, e)"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(slotIndex, slot)"
-                         @ondrop="() => OnDrop(slotIndex)"
-                         @ondragover:preventDefault
-                         title="@GetFullItemName(slot.ItemId)">
-                        @if (slot.ItemCount > 0 && slot.ItemId.HasValue)
-                        {
-                            <span class="text-[10px] leading-tight text-center break-words hyphens-auto">@GetItemName(slot.ItemId.Value)</span>
-                            <span class="absolute bottom-0.5 right-1 text-[9px] text-emerald-400 font-bold">@slot.ItemCount</span>
-                        }
-                        @if (isHeld)
-                        {
-                            <div class="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                        }
-                        <span class="absolute top-0.5 left-1 text-[8px] text-gray-600">@(slotIndex - 35)</span>
-                    </div>
-                }
+            <!-- Hotbar -->
+            <div>
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="h-px flex-1 bg-emerald-500/10"></span>
+                    <p class="text-[10px] font-bold text-emerald-500/60 uppercase tracking-[0.2em]">Hotbar</p>
+                    <span class="h-px flex-1 bg-emerald-500/10"></span>
+                </div>
+
+                <div class="grid grid-cols-9 gap-2">
+                    @for (int i = 36; i <= 44; i++)
+                    {
+                        var slotIndex = i;
+                        var slot = inventory?.GetSlot((short)slotIndex) ?? Slot.Empty;
+                        var isHeld = slotIndex == heldSlot;
+                        var isDragging = DragState.IsDragging && !DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
+                        
+                        <div class="@GetSlotClass(slotIndex, heldSlot, isHeld, isDragging) group relative cursor-pointer"
+                             @onclick="e => OnHotbarClick(slotIndex, e)"
+                             draggable="true"
+                             @ondragstart="() => OnDragStart(slotIndex, slot)"
+                             @ondrop="() => OnDrop(slotIndex)"
+                             @ondragover:preventDefault
+                             title="@GetFullItemName(slot.ItemId)">
+                            
+                            @if (slot.ItemCount > 0 && slot.ItemId.HasValue)
+                            {
+                                <div class="w-full h-full flex items-center justify-center p-1">
+                                    <span class="text-[9px] leading-[1.1] text-center font-bold text-slate-200 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
+                                        @GetItemName(slot.ItemId.Value)
+                                    </span>
+                                </div>
+                                <div class="absolute bottom-1 right-1.5 px-1 bg-emerald-500/20 rounded text-[10px] text-emerald-400 font-black backdrop-blur-sm border border-emerald-500/20">
+                                    @slot.ItemCount
+                                </div>
+                            }
+                            
+                            <span class="absolute top-1 left-1.5 text-[8px] font-black @(isHeld ? "text-emerald-400" : "text-slate-700 group-hover:text-slate-500")">
+                                @(slotIndex - 35)
+                            </span>
+
+                            @if (isHeld)
+                            {
+                                <div class="absolute inset-0 border-2 border-emerald-400/50 rounded-xl pointer-events-none shadow-[inset_0_0_15px_rgba(16,185,129,0.2)]"></div>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
-        </div>
-    }
+        }
+    </div>
 </div>

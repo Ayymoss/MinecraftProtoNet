@@ -2,93 +2,117 @@
 @using Bot.Webcore.Services
 @implements IDisposable
 
-<div class="bg-mc-card backdrop-blur-md rounded-xl border border-slate-700/50 p-6 shadow-xl h-full">
-    <div class="flex items-center gap-3 mb-6">
-        <i class="ph-duotone ph-paw-print text-2xl text-amber-400"></i>
-        <h2 class="text-xl font-semibold text-gray-100">Entities</h2>
+<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col h-full">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
+        <div class="flex items-center gap-3">
+            <div class="flex px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                <i class="ph-duotone ph-paw-print text-xl text-amber-400"></i>
+            </div>
+            <h2 class="text-lg font-bold text-slate-100 tracking-tight">Nearby Entities</h2>
+        </div>
         @if (Bot.IsConnected)
         {
-            <span class="ml-auto text-sm text-gray-500">@Bot.State.WorldEntities.GetAllEntities().Count nearby</span>
+            <div class="flex items-center gap-2">
+                <div class="px-3 py-1 bg-slate-950/50 rounded-full border border-slate-800/50 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    @Bot.State.WorldEntities.GetAllEntities().Count Count
+                </div>
+                @if (IsPathing)
+                {
+                    <button @onclick="StopPathfinding"
+                            class="flex items-center gap-2 px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-rose-500/20 transition-all">
+                        <i class="ph-bold ph-stop"></i>
+                        Stop Path
+                    </button>
+                }
+            </div>
         }
     </div>
 
-    @if (!Bot.IsConnected)
-    {
-        <div class="text-center py-8 text-gray-500">
-            <i class="ph-duotone ph-ghost text-4xl mb-2 block"></i>
-            <p>Connect to view entities</p>
-        </div>
-    }
-    else
-    {
-        <!-- Search filter -->
-        <div class="mb-4">
-            <div class="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
-                <i class="ph ph-magnifying-glass text-gray-500"></i>
-                <input type="text" @bind="_searchFilter" @bind:event="oninput"
-                       class="bg-transparent border-none outline-none text-gray-100 w-full text-sm"
-                       placeholder="Filter by type (e.g. villager, zombie)..." />
-            </div>
-        </div>
-
-        var entities = GetFilteredEntities();
-
-        @if (entities.Count == 0)
+    <div class="p-5 flex-1 flex flex-col min-h-0">
+        @if (!Bot.IsConnected)
         {
-            <div class="text-center py-8 text-gray-500">
-                <i class="ph-duotone ph-ghost text-4xl mb-2 block"></i>
-                <p>No entities found</p>
+            <div class="flex flex-col items-center justify-center py-12 text-slate-600">
+                <div class="w-16 h-16 rounded-full bg-slate-800/30 flex items-center justify-center mb-4 border border-slate-800/50">
+                    <i class="ph-duotone ph-ghost text-3xl opacity-20"></i>
+                </div>
+                <p class="font-medium text-sm">Connect to track entities</p>
             </div>
         }
         else
         {
-            <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
-                @foreach (var entity in entities)
-                {
-                    var typeName = GetEntityTypeName(entity.EntityType);
-                    <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/30 hover:border-slate-600/50 transition-all">
-                        <!-- Entity type icon -->
-                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-600/30 to-amber-700/30 flex items-center justify-center flex-shrink-0">
-                            <i class="ph-duotone ph-paw-print text-lg text-amber-400"></i>
-                        </div>
+            var entities = GetFilteredEntities();
 
-                        <!-- Entity info -->
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class="font-medium text-gray-100 truncate">@typeName</span>
-                                <span class="text-[10px] text-gray-600">#@entity.EntityId</span>
-                            </div>
-
-                            <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                                <span title="Position">
-                                    <i class="ph ph-map-pin mr-0.5"></i>
-                                    @FormatPosition(entity)
-                                </span>
-                                <span title="Distance" class="text-cyan-400">
-                                    <i class="ph ph-ruler mr-0.5"></i>
-                                    @FormatDistance(entity)
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Action buttons -->
-                        <div class="flex gap-1 flex-shrink-0">
-                            <button @onclick="() => LookAtEntity(entity)"
-                                    class="flex items-center gap-1 px-2 py-1 text-xs bg-cyan-600/60 hover:bg-cyan-600 text-white rounded-md transition-all border border-cyan-500/50"
-                                    title="Look at this entity">
-                                <i class="ph ph-eye text-xs"></i>
-                                Look
-                            </button>
-                            <button @onclick="() => InteractWithEntity(entity)"
-                                    class="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600/60 hover:bg-amber-600 text-white rounded-md transition-all border border-amber-500/50"
-                                    title="Interact with this entity">
-                                <i class="ph ph-hand-pointing text-xs"></i>
-                                Interact
-                            </button>
-                        </div>
-                    </div>
-                }
+            <!-- Search filter -->
+            <div class="relative group mb-5">
+                <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <i class="ph-duotone ph-magnifying-glass text-slate-500 group-focus-within:text-amber-400 transition-colors"></i>
+                </div>
+                <input type="text" @bind="_searchFilter" @bind:event="oninput"
+                       class="w-full bg-slate-950/50 border border-slate-800/80 rounded-2xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/40 transition-all shadow-inner"
+                       placeholder="Search entities..." />
             </div>
+
+            @if (entities.Count == 0)
+            {
+                <div class="flex-1 flex flex-col items-center justify-center py-10 opacity-40">
+                    <i class="ph-duotone ph-ghost text-4xl mb-2"></i>
+                    <p class="text-xs font-bold uppercase tracking-widest">Zero signals detected</p>
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2 overflow-y-auto pr-2 custom-scrollbar max-h-[600px]">
+                    @foreach (var entity in entities)
+                    {
+                        var typeName = GetEntityTypeName(entity.EntityType);
+                        <div class="flex items-center gap-4 p-3 rounded-2xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-900/60 hover:border-amber-500/30 transition-all group">
+                            <!-- Icon -->
+                            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+                                <i class="ph-duotone ph-paw-print text-xl text-amber-400"></i>
+                            </div>
+
+                            <!-- Info -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-slate-200 truncate uppercase tracking-tight text-xs">@typeName</span>
+                                    <span class="text-[10px] font-black text-slate-700">#@entity.EntityId</span>
+                                </div>
+
+                                <div class="flex items-center gap-3 mt-1.5">
+                                    <div class="flex items-center gap-1 text-[10px] text-slate-500">
+                                        <i class="ph-duotone ph-map-pin text-slate-600"></i>
+                                        @FormatPosition(entity)
+                                    </div>
+                                    <div class="flex items-center gap-1 text-[10px] font-bold text-cyan-400/80">
+                                        <i class="ph-duotone ph-ruler"></i>
+                                        @FormatDistance(entity)
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button @onclick="() => PathfindToEntity(entity)"
+                                        class="flex px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/20 transition-all"
+                                        title="Path to">
+                                    <i class="ph-duotone ph-footprints text-lg"></i>
+                                </button>
+                                <button @onclick="() => LookAtEntity(entity)"
+                                        class="flex px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg border border-cyan-500/20 transition-all"
+                                        title="Look at">
+                                    <i class="ph-duotone ph-eye text-lg"></i>
+                                </button>
+                                <button @onclick="() => InteractWithEntity(entity)"
+                                        class="flex px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/20 transition-all"
+                                        title="Interact">
+                                    <i class="ph-duotone ph-hand-pointing text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
         }
-    }
+    </div>
 </div>

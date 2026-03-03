@@ -23,18 +23,25 @@ public partial class MerchantView
 
     private string GetTradeClass(bool isSelected, bool isDisabled)
     {
-        var baseClass = "flex items-center gap-3 p-2 rounded-lg transition-all cursor-pointer ";
+        var baseClass = "flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 cursor-pointer group ";
 
         if (isDisabled)
-            return baseClass + "bg-slate-800/30 opacity-50 cursor-not-allowed";
+            return baseClass + "bg-slate-900/20 opacity-50 cursor-not-allowed border border-slate-800/40 grayscale-[0.5]";
         if (isSelected)
-            return baseClass + "bg-amber-900/30 border border-amber-500/50";
-        return baseClass + "bg-slate-800/50 border border-slate-700/50 hover:border-slate-600";
+            return baseClass + "bg-amber-500/10 border border-amber-500/40 shadow-lg shadow-amber-500/5 ring-1 ring-amber-500/20 scale-[1.01]";
+        
+        return baseClass + "bg-slate-900/40 border border-slate-800/60 hover:bg-slate-900/60 hover:border-slate-700 hover:scale-[1.01] shadow-sm";
     }
 
-    private string GetItemSlotClass() =>
-        "relative w-10 h-10 rounded bg-slate-900/50 border border-slate-700/50 " +
-        "flex items-center justify-center p-0.5";
+    private string GetItemSlotClass(bool isResult)
+    {
+        var baseClass = "relative w-12 h-12 rounded-xl flex items-center justify-center p-1 transition-all duration-200 overflow-hidden ";
+        
+        if (isResult)
+            return baseClass + "bg-amber-500/10 border border-amber-500/30 group-hover:border-amber-400";
+            
+        return baseClass + "bg-slate-950/60 border border-slate-800 group-hover:border-slate-700 shadow-inner";
+    }
 
     private string GetItemName(int itemId)
     {

@@ -143,6 +143,22 @@ public class BotService : IDisposable
     }
 
     /// <summary>
+    /// Gets the Baritone custom goal process for UI binding.
+    /// Returns null if Baritone is not available.
+    /// </summary>
+    public ICustomGoalProcess? CustomGoalProcess
+    {
+        get
+        {
+            try
+            {
+                return _baritoneProvider.CreateBaritone(_client).GetCustomGoalProcess();
+            }
+            catch { return null; }
+        }
+    }
+
+    /// <summary>
     /// Gets the Baritone pathing behavior for UI binding.
     /// Returns null if Baritone is not available.
     /// </summary>

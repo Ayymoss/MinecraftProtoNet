@@ -20,15 +20,15 @@ public partial class InventoryView
     private string GetSlotClass(int slotIndex, int heldSlot, bool isHeld = false, bool isDragging = false)
     {
         var baseClass =
-            "w-full aspect-square rounded-md flex flex-col items-center justify-center p-0.5 transition-all duration-150 overflow-hidden min-h-[48px] ";
+            "w-full aspect-square rounded-xl flex flex-col items-center justify-center p-1 transition-all duration-200 overflow-hidden min-h-[54px] ";
 
         if (isDragging)
-            return baseClass + "bg-blue-900/50 border-2 border-blue-400 opacity-50";
+            return baseClass + "bg-blue-950/40 border-2 border-blue-500/50 opacity-60 scale-95 shadow-lg shadow-blue-500/10";
 
         if (isHeld)
-            return baseClass + "bg-emerald-900/50 border-2 border-emerald-400 hover:bg-emerald-800/50";
+            return baseClass + "bg-emerald-500/10 border border-emerald-400 hover:bg-emerald-500/20 shadow-lg shadow-emerald-500/10";
 
-        return baseClass + "bg-slate-800/80 border border-slate-600/50 hover:border-slate-500 hover:bg-slate-700/80";
+        return baseClass + "bg-slate-950/40 border border-slate-800/60 hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:scale-[1.03] shadow-inner";
     }
 
     private string GetItemName(int itemId)

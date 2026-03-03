@@ -10,6 +10,9 @@ public partial class EntityList
 {
     private string _searchFilter = string.Empty;
 
+
+    private bool IsPathing => Bot.CustomGoalProcess?.IsActive() ?? false;
+
     protected override void OnInitialized()
     {
         Bot.OnStateChanged += HandleStateChanged;
@@ -23,6 +26,20 @@ public partial class EntityList
     public void Dispose()
     {
         Bot.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void PathfindToEntity(WorldEntity entity)
+    {
+        var pos = new MinecraftProtoNet.Baritone.Api.Utils.BetterBlockPos(entity.Position.X, entity.Position.Y, entity.Position.Z);
+        var goal = new MinecraftProtoNet.Baritone.Pathfinding.Goals.GoalNear(pos, 2);
+        Bot.CustomGoalProcess?.SetGoalAndPath(goal);
+        Bot.NotifyStateChanged();
+    }
+
+    private void StopPathfinding()
+    {
+        Bot.CustomGoalProcess?.OnLostControl();
+        Bot.NotifyStateChanged();
     }
 
     private List<WorldEntity> GetFilteredEntities()

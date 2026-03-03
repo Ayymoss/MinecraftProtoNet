@@ -1,106 +1,120 @@
-﻿@page "/"
+@page "/"
 @inject BotService Bot
 @using Bot.Webcore.Services
 @implements IDisposable
 @rendermode InteractiveServer
 
-<PageTitle>MinecraftProtoNet.Core Bot</PageTitle>
+<PageTitle>MinecraftProtoNet - Dashboard</PageTitle>
 
-<!-- Header with connection controls -->
-<div class="mb-8">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-100 flex items-center gap-3">
-                <i class="ph-duotone ph-cube text-emerald-400"></i>
-                MinecraftProtoNet.Core Bot
-            </h1>
-            <p class="text-gray-500 mt-1">Minecraft protocol client dashboard</p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-4">
-            <!-- Server input -->
-            <div class="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
-                <i class="ph ph-globe text-gray-500"></i>
-                <input type="text" @bind="Bot.ServerAddress"
-                       class="bg-transparent border-none outline-none text-gray-100 w-32"
-                       placeholder="Server"/>
-                <span class="text-gray-600">:</span>
-                <input type="number" @bind="Bot.ServerPort"
-                       class="bg-transparent border-none outline-none text-gray-100 w-16"
-                       placeholder="Port"/>
+<div class="text-slate-200">
+    <!-- Top Navigation / Status Header -->
+    <header class="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-3xl mb-10 shadow-2xl shadow-black/20 overflow-hidden">
+        <div class="px-8 py-6 flex flex-col xl:flex-row items-center justify-between gap-8">
+            
+            <!-- Branding & Status Info -->
+            <div class="flex items-center gap-5 w-full xl:w-auto">
+                <div class="p-4 bg-gradient-to-br from-emerald-500/20 to-teal-500/5 rounded-2xl border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative group">
+                    <div class="absolute inset-0 bg-emerald-400 blur-xl opacity-20 group-hover:opacity-40 transition-opacity rounded-2xl"></div>
+                    <i class="ph-duotone ph-cube text-4xl text-emerald-400 relative z-10"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                        MinecraftProtoNet
+                    </h1>
+                    
+                    <div class="flex flex-wrap items-center gap-3 text-sm mt-2 font-medium">
+                        <!-- Connection Status -->
+                        <span class="flex items-center gap-2 @(Bot.IsConnected ? "text-emerald-400" : "text-slate-500")">
+                            <span class="relative flex h-2.5 w-2.5">
+                                @if (Bot.IsConnected) {
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                } else {
+                                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                                }
+                            </span>
+                            @(Bot.IsConnected ? "Connected" : "Offline")
+                        </span>
+                        
+                        @if (Bot.IsConnected) {
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
+                            <span class="text-slate-400 flex items-center gap-1.5 hover:text-slate-300 transition-colors">
+                                <i class="ph-duotone ph-map-pin text-emerald-500 text-base"></i>
+                                @FormatPosition()
+                            </span>
+                        }
+                        @if (Bot.IsAuthenticated) {
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
+                            <span class="text-slate-400 flex items-center gap-1.5">
+                                <i class="ph-duotone ph-shield-check text-emerald-500 text-base"></i>
+                                Authenticated
+                            </span>
+                        }
+                    </div>
+                </div>
             </div>
 
-            <!-- Connection buttons -->
-            @if (Bot.IsConnected)
-            {
-                <button @onclick="@Disconnect"
-                        class="flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all border border-red-500/50">
-                    <i class="ph-bold ph-plug text-lg"></i>
-                    Disconnect
-                </button>
-            }
-            else
-            {
-                <button @onclick="@Connect" disabled="@_connecting"
-                        class="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white rounded-lg transition-all border border-emerald-500/50 disabled:opacity-50">
-                    @if (_connecting)
-                    {
-                        <i class="ph-duotone ph-spinner animate-spin text-lg"></i>
-                        <span>Connecting...</span>
-                    }
-                    else
-                    {
-                        <i class="ph-bold ph-plug text-lg"></i>
-                        <span>Connect</span>
-                    }
-                </button>
-            }
-        </div>
-    </div>
+            <!-- Connection Form & Actions -->
+            <div class="flex items-center gap-2 bg-slate-950/60 p-2.5 rounded-2xl border border-slate-800/80 w-full xl:w-auto overflow-x-auto shadow-inner">
+                <div class="flex items-center gap-3 px-4 min-w-[280px]">
+                    <i class="ph-duotone ph-globe-hemisphere-west text-slate-400 text-xl"></i>
+                    <input type="text" @bind="Bot.ServerAddress"
+                           class="bg-transparent border-none outline-none text-slate-200 w-full placeholder:text-slate-600 focus:ring-0 font-medium text-base"
+                           placeholder="Server Address"/>
+                    <span class="text-slate-600 font-bold">:</span>
+                    <input type="number" @bind="Bot.ServerPort"
+                           class="bg-transparent border-none outline-none text-slate-200 w-24 placeholder:text-slate-600 focus:ring-0 font-medium text-base"
+                           placeholder="Port"/>
+                </div>
 
-    <!-- Status bar -->
-    <div class="flex items-center gap-4 mt-4 text-sm">
-        <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full @(Bot.IsConnected ? "bg-emerald-400 animate-pulse" : "bg-gray-600")"></span>
-            <span class="text-gray-400">@(Bot.IsConnected ? "Connected" : "Disconnected")</span>
+                <div class="w-px h-10 bg-slate-800 shrink-0"></div>
+
+                @if (Bot.IsConnected) {
+                    <button @onclick="Disconnect"
+                            class="flex items-center gap-2.5 px-6 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-xl transition-all duration-300 border border-rose-500/30 font-semibold group shrink-0">
+                        <i class="ph-duotone ph-plug-x text-xl group-hover:scale-110 transition-transform"></i>
+                        Disconnect
+                    </button>
+                } else {
+                    <button @onclick="Connect" disabled="@_connecting"
+                            class="flex items-center gap-2.5 px-6 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-xl transition-all duration-300 border border-emerald-500/30 font-semibold group disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        @if (_connecting) {
+                            <i class="ph-duotone ph-spinner-gap animate-spin text-xl"></i>
+                            <span>Connecting...</span>
+                        } else {
+                            <i class="ph-duotone ph-plug text-xl group-hover:scale-110 transition-transform"></i>
+                            <span>Connect</span>
+                        }
+                    </button>
+                }
+            </div>
         </div>
-        @if (Bot.IsConnected)
-        {
-            <span class="text-gray-600">|</span>
-            <span class="text-gray-400">
-                <i class="ph ph-map-pin mr-1"></i>
-                @FormatPosition()
-            </span>
-        }
-        @if (Bot.IsAuthenticated)
-        {
-            <span class="text-gray-600">|</span>
-            <span class="text-gray-400">
-                <i class="ph ph-shield-check mr-1 text-emerald-400"></i>
-                Authenticated
-            </span>
-        }
+    </header>
+
+    <!-- Main Content Dashboard Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-10 items-start">
+        
+        <!-- Left Panel: Context (Stats, Chat) -->
+        <div class="lg:col-span-4 xl:col-span-3 space-y-6 xl:space-y-8 flex flex-col">
+            <PlayerStats/>
+            <ChatReview/>
+        </div>
+
+        <!-- Center Panel: Primary Interaction (Inventory, Container, Commands) -->
+        <div class="lg:col-span-8 xl:col-span-6 space-y-6 xl:space-y-8 flex flex-col">
+            <InventoryView/>
+            <ContainerView/>
+            <CommandPanel/>
+        </div>
+
+        <!-- Right Panel: Environment (Players, Entities) -->
+        <div class="lg:col-span-12 xl:col-span-3 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 gap-6 xl:gap-8 items-start">
+            <PlayerList/>
+            <EntityList/>
+        </div>
+        
     </div>
 </div>
-
-<!-- Main content: Three-column layout -->
-<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-    <!-- Column 1 -->
-    <div class="space-y-6">
-        <ContainerView/>
-        <InventoryView/>
-    </div>
-
-    <!-- Column 2 -->
-    <div class="space-y-6">
-        <PlayerStats/>
-        <ChatReview/>
-        <CommandPanel/>
-        <PlayerList/>
-        <EntityList/>
-    </div>
-</div>
-
 
 @code {
     private bool _connecting;
@@ -148,5 +162,4 @@
     {
         Bot.OnStateChanged -= OnBotStateChanged;
     }
-
 }
