@@ -30,6 +30,7 @@
     <ItemGroup>
         <ProjectReference Include="..\MinecraftProtoNet.Core\MinecraftProtoNet.Core.csproj" />
         <ProjectReference Include="..\MinecraftProtoNet.Baritone\MinecraftProtoNet.Baritone.csproj" />
+        <ProjectReference Include="..\MinecraftProtoNet.Bazaar\MinecraftProtoNet.Bazaar.csproj" />
     </ItemGroup>
 
     <ItemGroup>

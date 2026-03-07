@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Attributes;
 using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Handlers.Base;
 using MinecraftProtoNet.Core.NBT;
 using MinecraftProtoNet.Core.NBT.Tags.Primitive;
@@ -16,9 +17,10 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 /// </summary>
 [HandlesPacket(typeof(SystemChatPacket))]
 [HandlesPacket(typeof(PlayerChatPacket))]
+[HandlesPacket(typeof(DisguisedChatPacket))]
 [HandlesPacket(typeof(DisconnectPacket))]
 [HandlesPacket(typeof(PlayerCombatKillPacket))]
-public class ChatHandler(ILogger<ChatHandler> logger) : IPacketHandler
+public class ChatHandler(ILogger<ChatHandler> logger, IChatEventBus chatEventBus) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(ChatHandler));
@@ -27,12 +29,32 @@ public class ChatHandler(ILogger<ChatHandler> logger) : IPacketHandler
     {
         switch (packet)
         {
+            case DisguisedChatPacket disguisedChatPacket:
+            {
+                var textParts = disguisedChatPacket.Message.FindTags<NbtString>("text").Reverse().Select(x => x.Value).ToList();
+                logger.LogInformation("[DisguisedChat] {ChatType}: {Messages}",
+                    disguisedChatPacket.ChatType.ChatTypeId, string.Join(" ", textParts));
+
+                chatEventBus.PublishSystemChat(
+                    disguisedChatPacket.Message,
+                    false,
+                    null,
+                    textParts);
+                break;
+            }
+
             case SystemChatPacket systemChatPacket:
             {
                 var translateLookup = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
-                var texts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value);
+                var textParts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value).ToList();
                 logger.LogInformation("System message: ({TranslateKey}) {Messages}",
-                    translateLookup ?? "<NULL>", string.Join(" ", texts));
+                    translateLookup ?? "<NULL>", string.Join(" ", textParts));
+
+                chatEventBus.PublishSystemChat(
+                    systemChatPacket.Tags,
+                    systemChatPacket.Overlay,
+                    translateLookup,
+                    textParts);
                 break;
             }
                 

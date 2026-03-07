@@ -288,6 +288,19 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
         return new Vector3<double>(x, y, z);
     }
 
+    /// <summary>
+    /// Reads a block position encoded as a 64-bit long.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/core/BlockPos.java:95-104
+    /// </summary>
+    public Vector3<int> ReadBlockPos()
+    {
+        var positionRaw = ReadSignedLong();
+        var x = (int)(positionRaw >> 38);
+        var y = (int)(positionRaw << 52 >> 52);
+        var z = (int)(positionRaw << 26 >> 38);
+        return new Vector3<int>(x, y, z);
+    }
+
     public Vector3<float> ReadChunkCoordinatePosition()
     {
         var positionRaw = ReadSignedLong();

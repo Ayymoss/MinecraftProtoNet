@@ -1,6 +1,7 @@
 using Bot.Webcore.Components;
 using Bot.Webcore.Services;
 using MinecraftProtoNet.Baritone.Utilities;
+using MinecraftProtoNet.Bazaar.Utilities;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State;
@@ -23,7 +24,10 @@ public class Program
         
         // Add Baritone pathfinding and physics
         builder.Services.AddBaritone();
-        
+
+        // Add Bazaar autonomous trading
+        builder.Services.AddBazaarTrading(builder.Configuration);
+
         // Add BotService as singleton for UI state
         builder.Services.AddSingleton<BotService>();
         
@@ -46,9 +50,15 @@ public class Program
         // This forces the singleton to be created and hook to the game loop
         app.Services.GetRequiredService<MinecraftProtoNet.Baritone.Utilities.ServiceCollectionExtensions.BaritoneGameLoopHook>();
         
+        // Ensure BazaarGameLoopHook is constructed to attach the hook
+        app.Services.GetRequiredService<MinecraftProtoNet.Bazaar.Utilities.ServiceCollectionExtensions.BazaarGameLoopHook>();
+
         // Register Baritone commands
         var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
         commandRegistry.AutoRegisterCommands(app.Services, typeof(MinecraftProtoNet.Baritone.Commands.BaritoneCommand).Assembly);
+
+        // Register Bazaar commands
+        commandRegistry.AutoRegisterCommands(app.Services, typeof(MinecraftProtoNet.Bazaar.Commands.BazaarCommand).Assembly);
 
         // Configure the HTTP request pipeline
         if (!app.Environment.IsDevelopment())

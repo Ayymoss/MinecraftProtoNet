@@ -34,6 +34,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketService, PacketService>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
 
+        // Event buses (allow external systems to subscribe to game events)
+        services.AddSingleton<IChatEventBus, ChatEventBus>();
+        services.AddSingleton<ISignEventBus, SignEventBus>();
+
         // Chat redirection sinks
         services.AddSingleton<DefaultChatSink>();
         services.AddSingleton<WebcoreChatSink>();
@@ -75,6 +79,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketHandler, Handlers.Play.ContainerHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.PlayerInfoHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.TimeAndWorldHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.SignHandler>();
 
         // Logging - use the existing LoggingConfiguration
         services.AddSingleton<ILoggerFactory>(_ => LoggingConfiguration.CreateLoggerFactory());

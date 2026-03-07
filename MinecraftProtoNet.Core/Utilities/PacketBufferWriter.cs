@@ -196,6 +196,20 @@ public ref struct PacketBufferWriter
         WriteSignedLong(packed);
     }
 
+    /// <summary>
+    /// Writes a block position encoded as a 64-bit long.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/core/BlockPos.java:99-104
+    /// </summary>
+    public void WriteBlockPos(Vector3<int> position)
+    {
+        long x = position.X & 0x3FFFFFF;
+        long y = position.Y & 0xFFF;
+        long z = position.Z & 0x3FFFFFF;
+
+        var packed = (x << 38) | (z << 12) | y;
+        WriteSignedLong(packed);
+    }
+
     public void WriteFloat(float value)
     {
         EnsureCapacity(sizeof(float));
