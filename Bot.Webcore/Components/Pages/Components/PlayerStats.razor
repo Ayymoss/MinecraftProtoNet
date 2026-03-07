@@ -36,7 +36,7 @@
                     </div>
                     <div class="h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/50 p-0.5">
                         <div class="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(225,29,72,0.3)]" 
-                             style="width: @(Math.Clamp((entity?.Health ?? 0) / 20f * 100f, 0, 100))%"></div>
+                             style="width: @((int)Math.Clamp((entity?.Health ?? 0) / (entity?.MaxHealth ?? 20f) * 100f, 0, 100))%"></div>
                     </div>
                 </div>
 
@@ -53,7 +53,7 @@
                     </div>
                     <div class="h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/50 p-0.5">
                         <div class="h-full bg-gradient-to-r from-orange-600 to-orange-400 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(249,115,22,0.3)]" 
-                             style="width: @(Math.Clamp((entity?.Hunger ?? 0) / 20f * 100f, 0, 100))%"></div>
+                             style="width: @((int)Math.Clamp((entity?.Hunger ?? 0) / 20f * 100f, 0, 100))%"></div>
                     </div>
                     @if (entity?.HungerSaturation > 0)
                     {
