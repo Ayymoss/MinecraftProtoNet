@@ -14,6 +14,7 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(LevelChunkWithLightPacket))]
 [HandlesPacket(typeof(ForgetLevelChunkPacket))]
 [HandlesPacket(typeof(BlockUpdatePacket))]
+[HandlesPacket(typeof(BlockEntityDataPacket))]
 [HandlesPacket(typeof(SectionBlocksUpdatePacket))]
 [HandlesPacket(typeof(SetChunkCacheCenterPacket))]
 public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
@@ -27,6 +28,15 @@ public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
         {
             case LevelChunkWithLightPacket levelChunkWithLightPacket:
                 client.State.Level.AddChunk(levelChunkWithLightPacket.Chunk);
+                // Store block entity NBT data (signs, chests, etc.)
+                foreach (var be in levelChunkWithLightPacket.BlockEntities)
+                {
+                    var worldPos = new Models.Core.Vector3<int>(
+                        levelChunkWithLightPacket.ChunkX * 16 + be.X,
+                        be.Y,
+                        levelChunkWithLightPacket.ChunkZ * 16 + be.Z);
+                    client.State.Level.SetBlockEntity(worldPos, be.Type, be.Nbt);
+                }
                 break;
                 
             case ForgetLevelChunkPacket forgetLevelChunkPacket:
@@ -36,6 +46,13 @@ public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
                 
             case BlockUpdatePacket blockUpdatePacket:
                 client.State.Level.HandleBlockUpdate(blockUpdatePacket.Position, blockUpdatePacket.BlockId);
+                break;
+
+            case BlockEntityDataPacket blockEntityDataPacket:
+                client.State.Level.SetBlockEntity(
+                    blockEntityDataPacket.Position,
+                    blockEntityDataPacket.BlockEntityType,
+                    blockEntityDataPacket.Nbt);
                 break;
 
             case SectionBlocksUpdatePacket sectionBlocksUpdatePacket:

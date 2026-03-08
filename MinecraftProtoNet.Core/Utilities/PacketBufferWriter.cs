@@ -68,13 +68,14 @@ public ref struct PacketBufferWriter
 
     public void WriteString(string value)
     {
-        var maxLength = Encoding.UTF8.GetByteCount(value);
-        EnsureCapacity(GetVarIntSize(maxLength) + maxLength);
-
-        var stringLength = Encoding.UTF8.GetBytes(value, _buffer[(_writePosition + GetVarIntSize(maxLength))..]);
-        WriteVarInt(stringLength);
-
-        _writePosition += stringLength;
+        var byteCount = Encoding.UTF8.GetByteCount(value);
+        // Write the VarInt length prefix first, then the UTF-8 string bytes.
+        // This avoids writing string data ahead of _writePosition which can be
+        // lost if WriteVarInt triggers a buffer reallocation.
+        WriteVarInt(byteCount);
+        EnsureCapacity(byteCount);
+        Encoding.UTF8.GetBytes(value, _buffer[_writePosition..]);
+        _writePosition += byteCount;
     }
 
     public void WriteUnsignedShort(ushort value)

@@ -1,6 +1,7 @@
 using MinecraftProtoNet.Core.Attributes;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
+using MinecraftProtoNet.Core.Models.World.Meta;
 using MinecraftProtoNet.Core.Packets.Base;
 using MinecraftProtoNet.Core.Utilities;
 
@@ -12,6 +13,7 @@ public class LevelChunkWithLightPacket : IClientboundPacket
     public int ChunkX { get; set; }
     public int ChunkZ { get; set; }
     public required Chunk Chunk { get; set; }
+    public ChunkBlockEntityInfo[] BlockEntities { get; set; } = [];
 
     public void Deserialize(ref PacketBufferReader buffer)
     {
@@ -31,10 +33,12 @@ public class LevelChunkWithLightPacket : IClientboundPacket
         
         // Block Entities: List of info
         var blockEntitiesCount = buffer.ReadVarInt();
+        var blockEntities = new ChunkBlockEntityInfo[blockEntitiesCount];
         for (var i = 0; i < blockEntitiesCount; i++)
         {
-             _ = buffer.ReadChunkBlockEntity();
+            blockEntities[i] = buffer.ReadChunkBlockEntity();
         }
+        BlockEntities = blockEntities;
 
         Chunk = new Chunk(ChunkX, ChunkZ);
         var chunkReader = new PacketBufferReader(chunkDataBuffer);

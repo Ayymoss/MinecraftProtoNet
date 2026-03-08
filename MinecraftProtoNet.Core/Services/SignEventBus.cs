@@ -11,9 +11,11 @@ public sealed class SignEventBus : ISignEventBus
 {
     public event Func<SignEditorEventArgs, Task>? OnSignEditorOpened;
 
-    public async Task<SignEditorEventArgs> PublishSignEditorOpenedAsync(Vector3<int> position, bool isFrontText)
+    public async Task<SignEditorEventArgs> PublishSignEditorOpenedAsync(Vector3<int> position, bool isFrontText, string[]? existingLines = null)
     {
         var args = new SignEditorEventArgs(position, isFrontText);
+        if (existingLines is not null)
+            args.ExistingLines = existingLines;
 
         var handler = OnSignEditorOpened;
         if (handler is not null)

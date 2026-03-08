@@ -9,7 +9,7 @@ namespace MinecraftProtoNet.Core.Core.Abstractions;
 public interface ISignEventBus
 {
     event Func<SignEditorEventArgs, Task>? OnSignEditorOpened;
-    Task<SignEditorEventArgs> PublishSignEditorOpenedAsync(Vector3<int> position, bool isFrontText);
+    Task<SignEditorEventArgs> PublishSignEditorOpenedAsync(Vector3<int> position, bool isFrontText, string[]? existingLines = null);
 }
 
 /// <summary>
@@ -19,6 +19,11 @@ public class SignEditorEventArgs(Vector3<int> position, bool isFrontText)
 {
     public Vector3<int> Position { get; } = position;
     public bool IsFrontText { get; } = isFrontText;
+
+    /// <summary>
+    /// The existing text lines on the sign, read from block entity NBT data.
+    /// </summary>
+    public string[] ExistingLines { get; set; } = ["", "", "", ""];
 
     /// <summary>
     /// If set by a handler, the sign update will be sent with these lines

@@ -1,0 +1,87 @@
+@using Bot.Webcore.Services
+@inject BotService Bot
+@implements IDisposable
+
+@if (SignEditor is not null)
+{
+    <div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
+            <div class="flex items-center gap-3">
+                <div class="flex px-2 py-1 bg-cyan-500/10 rounded-lg border border-cyan-500/20 shadow-lg shadow-cyan-500/5">
+                    <i class="ph-duotone ph-signpost text-xl text-cyan-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 tracking-tight">Sign Editor</h2>
+                    <span class="text-[10px] text-slate-500 font-mono">
+                        @SignEditor.Position.X, @SignEditor.Position.Y, @SignEditor.Position.Z
+                        &mdash; @(SignEditor.IsFrontText ? "Front" : "Back")
+                    </span>
+                </div>
+            </div>
+            <button @onclick="Cancel"
+                    class="flex px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all border border-transparent hover:border-rose-500/20"
+                    title="Cancel without saving">
+                <i class="ph-bold ph-x text-lg"></i>
+            </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <!-- Front/Back Toggle -->
+            <div class="flex items-center gap-3">
+                <button @onclick="() => SignEditor.IsFrontText = true"
+                        class="@(SignEditor.IsFrontText
+                            ? "px-3 py-1.5 text-xs font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded-lg"
+                            : "px-3 py-1.5 text-xs font-semibold bg-slate-950/40 text-slate-500 border border-slate-800 rounded-lg hover:text-slate-300 transition-colors")">
+                    Front
+                </button>
+                <button @onclick="() => SignEditor.IsFrontText = false"
+                        class="@(!SignEditor.IsFrontText
+                            ? "px-3 py-1.5 text-xs font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded-lg"
+                            : "px-3 py-1.5 text-xs font-semibold bg-slate-950/40 text-slate-500 border border-slate-800 rounded-lg hover:text-slate-300 transition-colors")">
+                    Back
+                </button>
+            </div>
+
+            <!-- Sign Preview + Line Inputs -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Sign Lines</p>
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                </div>
+
+                <div class="space-y-3">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        var lineIndex = i;
+                        <div class="flex items-center gap-3">
+                            <span class="text-[10px] font-bold text-slate-600 w-4 text-right">@(lineIndex + 1)</span>
+                            <input type="text"
+                                   value="@SignEditor.Lines[lineIndex]"
+                                   @oninput="e => OnLineChanged(lineIndex, e)"
+                                   maxlength="15"
+                                   placeholder="Line @(lineIndex + 1)"
+                                   class="flex-1 px-3 py-2 bg-slate-900/60 border border-slate-700/60 rounded-lg text-slate-100 text-center font-medium
+                                          focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none
+                                          placeholder:text-slate-700 transition-all" />
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-3 pt-2">
+                <button @onclick="Submit"
+                        class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-xl transition-all border border-emerald-500/30 font-semibold">
+                    <i class="ph-bold ph-check text-lg"></i>
+                    Done
+                </button>
+                <button @onclick="Cancel"
+                        class="px-4 py-3 bg-slate-800/40 hover:bg-slate-800/60 text-slate-400 hover:text-slate-300 rounded-xl transition-all border border-slate-700 font-semibold">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+}

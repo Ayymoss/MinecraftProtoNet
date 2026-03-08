@@ -4,7 +4,9 @@ using MinecraftProtoNet.Baritone.Api.Process;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Core;
+using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Dtos;
+using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State.Base;
 using System.Collections.Concurrent;
@@ -28,14 +30,20 @@ public class BotService : IDisposable
     /// </summary>
     public ConcurrentQueue<ChatRedirectRequest> PendingRedirectedChat { get; } = new();
 
+    /// <summary>
+    /// Current sign editor state. Non-null when a sign editor is open in the UI.
+    /// </summary>
+    public SignEditorState? CurrentSignEditor { get; set; }
+
     public BotService(
-        IMinecraftClient client, 
-        ClientState state, 
+        IMinecraftClient client,
+        ClientState state,
         IItemRegistryService itemRegistry,
         CommandRegistry commandRegistry,
         IInventoryManager inventoryManager,
         IBaritoneProvider baritoneProvider,
-        IContainerManager containerManager)
+        IContainerManager containerManager,
+        ISignEventBus signEventBus)
     {
         _client = client;
         _baritoneProvider = baritoneProvider;
@@ -44,7 +52,10 @@ public class BotService : IDisposable
         CommandRegistry = commandRegistry;
         InventoryManager = inventoryManager;
         ContainerManager = containerManager;
-        
+
+        // Subscribe to sign editor events for UI display
+        signEventBus.OnSignEditorOpened += HandleSignEditorOpened;
+
         // Listen for disconnect events to update UI
         _client.OnDisconnected += (_, _) => NotifyStateChanged();
         
@@ -229,6 +240,26 @@ public class BotService : IDisposable
         NotifyStateChanged();
     }
 
+    private Task HandleSignEditorOpened(SignEditorEventArgs args)
+    {
+        // Don't open UI if another subscriber already handled it (e.g., Bazaar auto-fill)
+        if (args.Handled) return Task.CompletedTask;
+
+        CurrentSignEditor = new SignEditorState
+        {
+            Position = args.Position,
+            IsFrontText = args.IsFrontText,
+            Lines = [
+                args.ExistingLines.ElementAtOrDefault(0) ?? "",
+                args.ExistingLines.ElementAtOrDefault(1) ?? "",
+                args.ExistingLines.ElementAtOrDefault(2) ?? "",
+                args.ExistingLines.ElementAtOrDefault(3) ?? ""
+            ]
+        };
+        NotifyStateChanged();
+        return Task.CompletedTask;
+    }
+
     public void NotifyStateChanged() => OnStateChanged?.Invoke();
 
     public void Dispose()
@@ -247,5 +278,15 @@ public class BotService : IDisposable
             State.Level.OnPlayersChanged -= NotifyStateChanged;
         }
     }
+}
+
+/// <summary>
+/// Tracks the state of an open sign editor for the Blazor UI.
+/// </summary>
+public class SignEditorState
+{
+    public required Vector3<int> Position { get; init; }
+    public bool IsFrontText { get; set; }
+    public string[] Lines { get; set; } = ["", "", "", ""];
 }
 

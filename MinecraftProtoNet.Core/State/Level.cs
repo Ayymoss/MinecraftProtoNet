@@ -5,6 +5,7 @@ using MinecraftProtoNet.Core.Models.World;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.Physics.Shapes;
 
 namespace MinecraftProtoNet.Core.State;
@@ -193,4 +194,10 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
 
     public Chunk? GetChunk(int chunkX, int chunkZ)
         => chunkManager.GetChunk(chunkX, chunkZ);
+
+    public void SetBlockEntity(Vector3<int> position, int type, NbtTag? nbt)
+        => chunkManager.SetBlockEntity(position, type, nbt);
+
+    public NbtTag? GetBlockEntity(Vector3<int> position)
+        => chunkManager.GetBlockEntity(position);
 }

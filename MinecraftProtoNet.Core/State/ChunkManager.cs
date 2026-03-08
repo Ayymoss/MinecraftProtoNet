@@ -4,6 +4,7 @@ using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.Physics.Shapes;
 
@@ -31,6 +32,11 @@ public class ChunkManager : IChunkManager
 
     /// <inheritdoc />
     public ConcurrentDictionary<(int ChunkX, int ChunkZ), Chunk> Chunks { get; } = [];
+
+    /// <summary>
+    /// Block entity NBT data keyed by world position. Updated from chunk loads and BlockEntityDataPacket.
+    /// </summary>
+    private readonly ConcurrentDictionary<(int X, int Y, int Z), NbtTag> _blockEntities = [];
 
     /// <inheritdoc />
     public BlockState? GetBlockAt(int worldX, int worldY, int worldZ)
@@ -191,7 +197,9 @@ public class ChunkManager : IChunkManager
         var block = GetBlockAt(x, y, z);
         if (block == null || block.IsAir || block.IsLiquid) return null;
 
-        var shape = _blockShapeRegistry.GetShape(block);
+        // Use outline shape for raycasting — this includes non-collision interactive blocks like signs
+        // Reference: BlockBehaviour.java — getShape() (outline) differs from getCollisionShape() (physics)
+        var shape = _blockShapeRegistry.GetOutlineShape(block);
         if (shape.IsEmpty()) return null;
 
         var clipResult = shape.Clip(start, end, new Vector3<int>(x, y, z));
@@ -227,5 +235,22 @@ public class ChunkManager : IChunkManager
     {
         Chunks.TryGetValue((chunkX, chunkZ), out var chunk);
         return chunk;
+    }
+
+    /// <inheritdoc />
+    public void SetBlockEntity(Vector3<int> position, int type, NbtTag? nbt)
+    {
+        var key = (position.X, position.Y, position.Z);
+        if (nbt is null)
+            _blockEntities.TryRemove(key, out _);
+        else
+            _blockEntities[key] = nbt;
+    }
+
+    /// <inheritdoc />
+    public NbtTag? GetBlockEntity(Vector3<int> position)
+    {
+        _blockEntities.TryGetValue((position.X, position.Y, position.Z), out var nbt);
+        return nbt;
     }
 }

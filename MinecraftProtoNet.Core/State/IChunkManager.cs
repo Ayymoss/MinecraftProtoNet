@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.Models.World.Meta;
+using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.Physics.Shapes;
 
 namespace MinecraftProtoNet.Core.State;
@@ -55,4 +56,14 @@ public interface IChunkManager
     /// Gets a chunk by coordinates.
     /// </summary>
     Chunk? GetChunk(int chunkX, int chunkZ);
+
+    /// <summary>
+    /// Stores or updates block entity NBT data at a world position.
+    /// </summary>
+    void SetBlockEntity(Vector3<int> position, int type, NbtTag? nbt);
+
+    /// <summary>
+    /// Gets block entity NBT data at a world position. Returns null if none exists.
+    /// </summary>
+    NbtTag? GetBlockEntity(Vector3<int> position);
 }

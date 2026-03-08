@@ -1,5 +1,7 @@
-﻿using MinecraftProtoNet.Core.NBT.Tags;
+﻿using System.Text;
+using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.NBT.Tags.Abstract;
+using MinecraftProtoNet.Core.NBT.Tags.Primitive;
 
 namespace MinecraftProtoNet.Core.NBT;
 
@@ -89,5 +91,109 @@ public static class NbtExtensions
         }
 
         return currentTag as T;
+    }
+
+    /// <summary>
+    /// Converts an NBT tag tree to a human-readable SNBT-style string for logging.
+    /// </summary>
+    public static string ToSnbt(this NbtTag? tag, int maxDepth = 6)
+    {
+        if (tag is null) return "null";
+        var sb = new StringBuilder();
+        AppendSnbt(sb, tag, 0, maxDepth);
+        return sb.ToString();
+    }
+
+    private static void AppendSnbt(StringBuilder sb, NbtTag tag, int depth, int maxDepth)
+    {
+        if (depth > maxDepth)
+        {
+            sb.Append("...");
+            return;
+        }
+
+        switch (tag)
+        {
+            case NbtCompound compound:
+                sb.Append('{');
+                var first = true;
+                foreach (var child in compound.Value)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+                    if (child.Name is not null)
+                    {
+                        sb.Append(child.Name);
+                        sb.Append(": ");
+                    }
+                    AppendSnbt(sb, child, depth + 1, maxDepth);
+                }
+                sb.Append('}');
+                break;
+
+            case NbtList list:
+                sb.Append('[');
+                for (var i = 0; i < list.Value.Count; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    if (i >= 8)
+                    {
+                        sb.Append($"...+{list.Value.Count - i}");
+                        break;
+                    }
+                    AppendSnbt(sb, list.Value[i], depth + 1, maxDepth);
+                }
+                sb.Append(']');
+                break;
+
+            case NbtString s:
+                // Show exact bytes for debugging string corruption
+                sb.Append('"');
+                foreach (var c in s.Value)
+                {
+                    if (c < 0x20 || c > 0x7E)
+                        sb.Append($"\\x{(int)c:X2}");
+                    else
+                        sb.Append(c);
+                }
+                sb.Append('"');
+                break;
+
+            case NbtByte b:
+                sb.Append(b.Value);
+                sb.Append('b');
+                break;
+            case NbtShort sh:
+                sb.Append(sh.Value);
+                sb.Append('s');
+                break;
+            case NbtInt i:
+                sb.Append(i.Value);
+                break;
+            case NbtLong l:
+                sb.Append(l.Value);
+                sb.Append('L');
+                break;
+            case NbtFloat f:
+                sb.Append(f.Value);
+                sb.Append('f');
+                break;
+            case NbtDouble d:
+                sb.Append(d.Value);
+                sb.Append('d');
+                break;
+            case NbtByteArray ba:
+                sb.Append($"[B;{ba.Value.Length} bytes]");
+                break;
+            case NbtIntArray ia:
+                sb.Append($"[I;{ia.Value.Length} ints]");
+                break;
+            case NbtLongArray la:
+                sb.Append($"[L;{la.Value.Length} longs]");
+                break;
+            default:
+                sb.Append(tag.ToString());
+                break;
+        }
     }
 }

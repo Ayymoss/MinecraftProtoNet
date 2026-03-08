@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using MinecraftProtoNet.Core.Attributes;
+using MinecraftProtoNet.Core.NBT;
 using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.Packets.Base;
 
@@ -78,7 +79,7 @@ public static class PacketHelper
             case string stringValue:
                 return $"\"{stringValue}\"";
             case NbtTag nbtTag:
-                return $"[NBT:{nbtTag.Type}]"; // Compact NBT
+                return nbtTag.ToSnbt();
             case byte[] bytes:
                 return $"[Binary:{bytes.Length} bytes]";
         }
