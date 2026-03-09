@@ -62,6 +62,12 @@ public class ClientState
     public BotSettings BotSettings { get; } = new();
 
     /// <summary>
+    /// The hostname/IP of the currently connected server. Null when disconnected.
+    /// Used by the humanizer to determine local vs remote server.
+    /// </summary>
+    public string? ConnectedServerHost { get; set; }
+
+    /// <summary>
     /// Gets the camera entity (the entity used for rendering/view calculations).
     /// Typically the same as LocalPlayer.Entity, but can differ (e.g., spectator mode).
     /// Equivalent to Java's Minecraft.getCameraEntity().

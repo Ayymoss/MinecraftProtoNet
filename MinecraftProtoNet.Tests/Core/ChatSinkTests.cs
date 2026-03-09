@@ -5,10 +5,12 @@ using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.Abstractions.Api;
+using MinecraftProtoNet.Core.Configuration;
 using MinecraftProtoNet.Core.Dtos;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.State.Base;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MinecraftProtoNet.Core.Commands;
 
 namespace MinecraftProtoNet.Tests.Core;
@@ -35,7 +37,10 @@ public class ChatSinkTests
         // Arrange
         var mockClient = new Mock<IMinecraftClient>();
         mockClient.Setup(x => x.State).Returns(new ClientState());
-        var sink = new DefaultChatSink(mockClient.Object);
+        var mockHumanizer = new Mock<IHumanizer>();
+        mockHumanizer.Setup(x => x.IsRemoteServer).Returns(false);
+        mockHumanizer.Setup(x => x.GetChatCommandDelayMs()).Returns(0);
+        var sink = new DefaultChatSink(mockClient.Object, mockHumanizer.Object);
         var message = "Test Message";
 
         // Act
@@ -89,6 +94,8 @@ public class ChatSinkTests
             new Mock<IPacketService>().Object,
             new Mock<IPhysicsService>().Object,
             new Mock<IGameLoop>().Object,
+            new Mock<IHumanizer>().Object,
+            Options.Create(new HumanizerConfig()),
             new Mock<CommandRegistry>().Object,
             new Mock<ILogger<MinecraftClient>>().Object
         );

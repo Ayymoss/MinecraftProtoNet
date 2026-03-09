@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
@@ -10,7 +11,7 @@ namespace MinecraftProtoNet.Core.Services;
 /// <summary>
 /// Manages the main game loop that drives physics ticks at the server's tick rate.
 /// </summary>
-public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
+public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoop
 {
     private CancellationTokenSource? _cts;
     private Thread? _gameLoopThread;
@@ -104,7 +105,8 @@ public class GameLoop(ILogger<GameLoop> logger) : IGameLoop
 
                     if (processingTimeMs < targetDelayMs)
                     {
-                        var remainingDelayMs = targetDelayMs - processingTimeMs;
+                        var remainingDelayMs = targetDelayMs - processingTimeMs + humanizer.GetTickJitterMs();
+                        remainingDelayMs = Math.Max(1, remainingDelayMs);
                         await Task.Delay(TimeSpan.FromMilliseconds(remainingDelayMs), token);
                     }
                     else

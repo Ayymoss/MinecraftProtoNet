@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Models.Core;
@@ -14,7 +15,7 @@ namespace MinecraftProtoNet.Core.Services;
 /// Service for handling entity physics simulation.
 /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java
 /// </summary>
-public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
+public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer) : IPhysicsService
 {
     private readonly ILogger<PhysicsService> _logger = logger;
 
@@ -1211,6 +1212,12 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         if (entity.IsOnGround) flags |= MovementFlags.OnGround;
         if (entity.HorizontalCollision) flags |= MovementFlags.HorizontalCollision;
 
+        // Apply micro-jitter to outgoing rotation values only (not stored on entity).
+        // This simulates the natural imprecision of human mouse input.
+        var (yawJitter, pitchJitter) = humanizer.GetRotationJitter();
+        var packetYaw = entity.YawPitch.X + yawJitter;
+        var packetPitch = entity.YawPitch.Y + pitchJitter;
+
         if (move && rot)
         {
             await packetSender.SendPacketAsync(new MovePlayerPositionRotationPacket
@@ -1218,8 +1225,8 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
                 X = entity.Position.X,
                 Y = entity.Position.Y,
                 Z = entity.Position.Z,
-                Yaw = entity.YawPitch.X,
-                Pitch = entity.YawPitch.Y,
+                Yaw = packetYaw,
+                Pitch = packetPitch,
                 Flags = flags
             });
         }
@@ -1237,8 +1244,8 @@ public class PhysicsService(ILogger<PhysicsService> logger) : IPhysicsService
         {
             await packetSender.SendPacketAsync(new MovePlayerRotationPacket
             {
-                Yaw = entity.YawPitch.X,
-                Pitch = entity.YawPitch.Y,
+                Yaw = packetYaw,
+                Pitch = packetPitch,
                 Flags = flags
             });
         }

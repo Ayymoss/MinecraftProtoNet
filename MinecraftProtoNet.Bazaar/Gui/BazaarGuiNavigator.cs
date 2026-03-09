@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Bazaar.Configuration;
+using MinecraftProtoNet.Core.Abstractions;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State;
@@ -15,6 +16,7 @@ public sealed class BazaarGuiNavigator : IDisposable
 {
     private readonly IMinecraftClient _client;
     private readonly IContainerManager _containerManager;
+    private readonly IHumanizer _humanizer;
     private readonly BazaarTradingConfig _config;
     private readonly ILogger<BazaarGuiNavigator> _logger;
 
@@ -26,11 +28,13 @@ public sealed class BazaarGuiNavigator : IDisposable
     public BazaarGuiNavigator(
         IMinecraftClient client,
         IContainerManager containerManager,
+        IHumanizer humanizer,
         IOptions<BazaarTradingConfig> config,
         ILogger<BazaarGuiNavigator> logger)
     {
         _client = client;
         _containerManager = containerManager;
+        _humanizer = humanizer;
         _config = config.Value;
         _logger = logger;
 
@@ -46,7 +50,7 @@ public sealed class BazaarGuiNavigator : IDisposable
         if (_containerManager.IsContainerOpen)
         {
             await _containerManager.CloseContainerAsync();
-            await Task.Delay(_config.GuiClickDelayMs, ct);
+            await Task.Delay(_humanizer.GetGuiClickDelayMs(), ct);
         }
 
         _containerOpenTcs = new TaskCompletionSource<ContainerState>(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -15,6 +15,8 @@ using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State.Base;
 using MinecraftProtoNet.Core.Utilities;
 using MinecraftProtoNet.Core.Abstractions;
+using MinecraftProtoNet.Core.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace MinecraftProtoNet.Core.Core;
 
@@ -25,6 +27,8 @@ public class MinecraftClient : IMinecraftClient
     private readonly IPacketService _packetService;
     private readonly IPhysicsService _physicsService;
     private readonly IGameLoop _gameLoop;
+    private readonly IHumanizer _humanizer;
+    private readonly HumanizerConfig _humanizerConfig;
     private CancellationTokenSource _cancellationTokenSource = new();
     private readonly CommandRegistry _commandRegistry;
     private readonly ILogger<MinecraftClient> _logger;
@@ -49,6 +53,8 @@ public class MinecraftClient : IMinecraftClient
         IPacketService packetService,
         IPhysicsService physicsService,
         IGameLoop gameLoop,
+        IHumanizer humanizer,
+        IOptions<HumanizerConfig> humanizerConfig,
         CommandRegistry commandRegistry,
         ILogger<MinecraftClient> logger)
     {
@@ -58,6 +64,8 @@ public class MinecraftClient : IMinecraftClient
         _packetService = packetService;
         _physicsService = physicsService;
         _gameLoop = gameLoop;
+        _humanizer = humanizer;
+        _humanizerConfig = humanizerConfig.Value;
         _commandRegistry = commandRegistry;
         _logger = logger;
         
@@ -130,6 +138,7 @@ public class MinecraftClient : IMinecraftClient
             await conn.ConnectAsync(host, port);
         }
         IsConnected = true;
+        State.ConnectedServerHost = host;
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 
@@ -207,6 +216,7 @@ public class MinecraftClient : IMinecraftClient
         }
 
         // Reset protocol state for next connection
+        State.ConnectedServerHost = null;
         ProtocolState = ProtocolState.Handshaking;
     }
 
@@ -294,6 +304,19 @@ public class MinecraftClient : IMinecraftClient
     public async Task HandleChatMessageAsync(Guid senderGuid, string bodyMessage)
     {
         if (!bodyMessage.StartsWith("!")) return;
+
+        // Block external ! commands on remote servers (other players can't control the bot)
+        if (_humanizerConfig.BlockExternalCommandsOnRemote && _humanizer.IsRemoteServer)
+        {
+            // Only allow commands from our own player
+            var ourUuid = AuthResult?.Uuid;
+            if (ourUuid.HasValue && senderGuid != ourUuid.Value)
+            {
+                _logger.LogDebug("Blocked external command from {Sender} on remote server: {Message}",
+                    senderGuid, bodyMessage);
+                return;
+            }
+        }
 
         var parts = bodyMessage[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return;

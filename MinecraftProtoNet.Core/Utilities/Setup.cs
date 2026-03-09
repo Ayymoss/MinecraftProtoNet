@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
 using MinecraftProtoNet.Core.Commands;
+using MinecraftProtoNet.Core.Configuration;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Handlers;
@@ -33,6 +34,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketSender>(sp => sp.GetRequiredService<Connection>());
         services.AddSingleton<IPacketService, PacketService>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
+
+        // Humanizer (timing variance, rotation jitter, anti-cheat evasion)
+        services.Configure<HumanizerConfig>(configuration.GetSection(HumanizerConfig.SectionName));
+        services.AddSingleton<IHumanizer, HumanizerService>();
+        services.AddSingleton<HumanizerGameLoopHook>();
 
         // Event buses (allow external systems to subscribe to game events)
         services.AddSingleton<IChatEventBus, ChatEventBus>();

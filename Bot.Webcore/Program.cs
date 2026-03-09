@@ -53,6 +53,9 @@ public class Program
         // Ensure BazaarGameLoopHook is constructed to attach the hook
         app.Services.GetRequiredService<MinecraftProtoNet.Bazaar.Utilities.ServiceCollectionExtensions.BazaarGameLoopHook>();
 
+        // Ensure HumanizerGameLoopHook is constructed to attach idle behavior
+        app.Services.GetRequiredService<MinecraftProtoNet.Core.Services.HumanizerGameLoopHook>();
+
         // Register Baritone commands
         var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
         commandRegistry.AutoRegisterCommands(app.Services, typeof(MinecraftProtoNet.Baritone.Commands.BaritoneCommand).Assembly);
