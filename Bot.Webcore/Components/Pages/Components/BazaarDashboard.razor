@@ -1,0 +1,139 @@
+@using Bot.Webcore.Services
+@using MinecraftProtoNet.Bazaar.Engine
+@using MinecraftProtoNet.Bazaar.Orders
+@inject BotService Bot
+@implements IDisposable
+
+<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
+        <div class="flex items-center gap-3">
+            <div class="flex px-2 py-1 bg-violet-500/10 rounded-lg border border-violet-500/20 shadow-lg shadow-violet-500/5">
+                <i class="ph-duotone ph-chart-line-up text-xl text-violet-400"></i>
+            </div>
+            <h2 class="text-lg font-bold text-slate-100 tracking-tight">Bazaar Trading</h2>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded-lg text-xs font-bold @GetStateBadgeClass()">
+                @Engine.State
+            </span>
+        </div>
+    </div>
+
+    <div class="p-6 space-y-6">
+        <!-- Financial Summary -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Balance</p>
+                <p class="text-lg font-black text-slate-100">@Financial.CoinBalance.ToString("N0")</p>
+            </div>
+            <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Invested</p>
+                <p class="text-lg font-black text-amber-400">@Financial.InvestedCapital.ToString("N0")</p>
+            </div>
+            <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Realized P&L</p>
+                <p class="text-lg font-black @(Financial.RealizedPnL >= 0 ? "text-emerald-400" : "text-rose-400")">
+                    @(Financial.RealizedPnL >= 0 ? "+" : "")@Financial.RealizedPnL.ToString("N0")
+                </p>
+            </div>
+            <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Trades</p>
+                <p class="text-lg font-black text-slate-100">@Financial.CompletedTradeCount</p>
+            </div>
+        </div>
+
+        <!-- Halt Warning -->
+        @if (Engine.HaltReason is not null)
+        {
+            <div class="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-start gap-3">
+                <i class="ph-duotone ph-warning-octagon text-xl text-rose-400 mt-0.5"></i>
+                <div>
+                    <p class="text-sm font-bold text-rose-300">Engine Halted</p>
+                    <p class="text-xs text-rose-400/80 mt-1">@Engine.HaltReason</p>
+                </div>
+            </div>
+        }
+
+        <!-- Active Orders -->
+        @if (ActiveOrders.Count > 0)
+        {
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Active Orders (@ActiveOrders.Count)</p>
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                </div>
+
+                <div class="space-y-2">
+                    @foreach (var order in ActiveOrders)
+                    {
+                        <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40 flex items-center gap-3">
+                            <div class="flex px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase @(order.Side == OrderSide.Buy ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/15 text-amber-400 border border-amber-500/20")">
+                                @order.Side
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-slate-200 truncate">@order.ProductName</p>
+                                <p class="text-[11px] text-slate-500">
+                                    @order.Quantity x @order.PricePerUnit.ToString("N1") = @order.TotalCost.ToString("N0")
+                                    @if (order.WalkCount > 0)
+                                    {
+                                        <span class="text-violet-400 ml-1">(walked @order.WalkCount x)</span>
+                                    }
+                                </p>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold @GetOrderStatusClass(order.Status)">
+                                @order.Status
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Completed Trades -->
+        @if (CompletedTrades.Count > 0)
+        {
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Trade History (@CompletedTrades.Count)</p>
+                    <span class="h-px flex-1 bg-slate-800/50"></span>
+                </div>
+
+                <div class="space-y-2">
+                    @foreach (var trade in CompletedTrades.Take(10))
+                    {
+                        <div class="bg-slate-950/40 rounded-xl p-3 border border-slate-800/40 flex items-center gap-3">
+                            <div class="flex px-1.5 py-0.5 rounded-md text-[10px] font-black @(trade.Profit >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/15 text-rose-400 border border-rose-500/20")">
+                                @(trade.Profit >= 0 ? "+" : "")@trade.Profit.ToString("N0")
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-slate-200 truncate">@trade.ProductName</p>
+                                <p class="text-[11px] text-slate-500">
+                                    @trade.Quantity x | Buy @trade.BuyPricePerUnit.ToString("N1") -> Sell @trade.SellPricePerUnit.ToString("N1")
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[11px] font-bold @(trade.ProfitPercent >= 0 ? "text-emerald-400" : "text-rose-400")">
+                                    @(trade.ProfitPercent >= 0 ? "+" : "")@trade.ProfitPercent.ToString("F1")%
+                                </p>
+                                <p class="text-[10px] text-slate-600">@trade.CompletedAt.ToString("HH:mm:ss")</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Empty State -->
+        @if (ActiveOrders.Count == 0 && CompletedTrades.Count == 0 && Engine.State == TradingEngineState.Idle)
+        {
+            <div class="text-center py-6">
+                <i class="ph-duotone ph-chart-bar text-4xl text-slate-700 mb-3"></i>
+                <p class="text-sm text-slate-500">No trading activity yet</p>
+                <p class="text-xs text-slate-600 mt-1">Use <code class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">!bz simulate</code> to test</p>
+            </div>
+        }
+    </div>
+</div>

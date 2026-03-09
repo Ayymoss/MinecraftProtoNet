@@ -1,6 +1,7 @@
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Behavior;
 using MinecraftProtoNet.Baritone.Api.Process;
+using MinecraftProtoNet.Bazaar.Engine;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Core;
@@ -43,10 +44,12 @@ public class BotService : IDisposable
         IInventoryManager inventoryManager,
         IBaritoneProvider baritoneProvider,
         IContainerManager containerManager,
-        ISignEventBus signEventBus)
+        ISignEventBus signEventBus,
+        BazaarTradingEngine bazaarEngine)
     {
         _client = client;
         _baritoneProvider = baritoneProvider;
+        BazaarEngine = bazaarEngine;
         State = state;
         ItemRegistry = itemRegistry;
         CommandRegistry = commandRegistry;
@@ -125,6 +128,9 @@ public class BotService : IDisposable
         foreach (var msg in remaining) PendingRedirectedChat.Enqueue(msg);
         NotifyStateChanged();
     }
+
+    // Bazaar trading engine
+    public BazaarTradingEngine BazaarEngine { get; }
 
     // Delegate to core client
     public bool IsConnected => _client.IsConnected;
