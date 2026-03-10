@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/SolutionFiles/">
     <File Path=".gitignore" />
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/PacketIdSync/PacketIdSync.csproj" />
