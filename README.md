@@ -8,7 +8,7 @@ A fully autonomous **Minecraft bot framework** built in **.NET 10 / C# 14**, imp
 
 | Area | Highlights |
 |---|---|
-| **Protocol** | Full Minecraft **1.21.x** (Protocol 775) implementation with support for snapshots |
+| **Protocol** | Partial Minecraft **26.1** (Protocol 775) implementation |
 | **Authentication** | Complete MSA → Xbox Live → XSTS → Minecraft Services OAuth chain with token caching & chat-session signing |
 | **Networking** | TCP connection, **AES/CFB8** encryption (BouncyCastle), **ZLib** compression, VarInt framing |
 | **Physics** | Vanilla-accurate physics engine — AABB collision, gravity, sprinting, sneaking, swimming, and more |
@@ -326,4 +326,4 @@ graph TD
 
 ## 📄 License
 
-*This project is private and not publicly licensed.*
+MIT License. See [LICENSE](LICENSE) for details.
