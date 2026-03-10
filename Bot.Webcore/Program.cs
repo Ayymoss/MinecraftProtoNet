@@ -1,5 +1,6 @@
 using Bot.Webcore.Components;
 using Bot.Webcore.Services;
+using MinecraftProtoNet.Baritone.Core;
 using MinecraftProtoNet.Baritone.Utilities;
 using MinecraftProtoNet.Bazaar.Utilities;
 using MinecraftProtoNet.Core.Commands;
@@ -44,7 +45,7 @@ public class Program
         EntityInventory.SetRegistryService(registryService);
         
         // Set static registry in Baritone
-        MinecraftProtoNet.Baritone.Core.Baritone.SetItemRegistryService(registryService);
+        Baritone.SetItemRegistryService(registryService);
         
         // Ensure BaritoneGameLoopHook is constructed to attach the hook
         // This forces the singleton to be created and hook to the game loop
@@ -54,7 +55,7 @@ public class Program
         app.Services.GetRequiredService<MinecraftProtoNet.Bazaar.Utilities.ServiceCollectionExtensions.BazaarGameLoopHook>();
 
         // Ensure HumanizerGameLoopHook is constructed to attach idle behavior
-        app.Services.GetRequiredService<MinecraftProtoNet.Core.Services.HumanizerGameLoopHook>();
+        app.Services.GetRequiredService<HumanizerGameLoopHook>();
 
         // Register Baritone commands
         var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();

@@ -61,11 +61,26 @@ public class BaritonePlayerContext : IPlayerContext
     {
         var player = _mc.State.LocalPlayer?.Entity;
         if (player == null) return null;
-        return new BetterBlockPos(
-            (int)Math.Floor(player.Position.X),
-            (int)Math.Floor(player.Position.Y),
-            (int)Math.Floor(player.Position.Z)
-        );
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/IPlayerContext.java:63-82
+        // Java adds +0.1251 to Y to handle soul sand and block boundary cases
+        var feet = new BetterBlockPos(player.Position.X, player.Position.Y + 0.1251, player.Position.Z);
+
+        // Slab check: if the block at feet is a slab, return feet.above()
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/IPlayerContext.java:76-78
+        try
+        {
+            var state = BlockStateInterface.Get(this, feet);
+            if (state.Name.Contains("slab", StringComparison.OrdinalIgnoreCase))
+            {
+                return feet.Above();
+            }
+        }
+        catch
+        {
+            // Ignore exceptions from null world or cross-thread access
+        }
+
+        return feet;
     }
 
     public Vector3<double>? PlayerHead()

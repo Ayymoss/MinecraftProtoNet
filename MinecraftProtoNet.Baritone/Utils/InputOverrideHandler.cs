@@ -67,6 +67,8 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
             inputState.SetJump(false);
             inputState.SetSneak(false);
             inputState.SetSprint(false);
+            inputState.SetClickLeft(false);
+            inputState.SetClickRight(false);
         }
     }
 

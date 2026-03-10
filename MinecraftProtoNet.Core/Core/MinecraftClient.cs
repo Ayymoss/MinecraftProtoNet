@@ -305,15 +305,17 @@ public class MinecraftClient : IMinecraftClient
     {
         if (!bodyMessage.StartsWith("!")) return;
 
-        // Block external ! commands on remote servers (other players can't control the bot)
+        // Block external ! commands on remote servers (only bot + authorized players allowed)
         if (_humanizerConfig.BlockExternalCommandsOnRemote && _humanizer.IsRemoteServer)
         {
-            // Only allow commands from our own player
             var ourUuid = AuthResult?.Uuid;
-            if (ourUuid.HasValue && senderGuid != ourUuid.Value)
+            var isSelf = ourUuid.HasValue && senderGuid == ourUuid.Value;
+            var isAuthorized = _humanizerConfig.AuthorizedPlayerUuids
+                .Any(id => Guid.TryParse(id, out var parsed) && parsed == senderGuid);
+
+            if (!isSelf && !isAuthorized)
             {
-                _logger.LogDebug("Blocked external command from {Sender} on remote server: {Message}",
-                    senderGuid, bodyMessage);
+                _logger.LogDebug("Blocked external command from {Sender}: {Message}", senderGuid, bodyMessage);
                 return;
             }
         }

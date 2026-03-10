@@ -69,7 +69,7 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
                             // Log occasionally to verify it's being called (every 100 ticks = ~5 seconds)
                             if (client.State.Level.ClientTickCounter % 100 == 0)
                             {
-                                logger.LogWarning("GameLoop: Invoking PreTick event (subscribers: {Count}, tick: {Tick})",
+                                logger.LogDebug("GameLoop: Invoking PreTick event (subscribers: {Count}, tick: {Tick})",
                                     PreTick.GetInvocationList().Length, client.State.Level.ClientTickCounter);
                             }
                             PreTick.Invoke(client);
@@ -80,12 +80,12 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
                         // Invoke post-tick hook for external systems (e.g., Baritone)
                         if (PostTick != null)
                         {
-                            logger.LogTrace("GameLoop: Invoking PostTick event (subscribers: {Count})", PostTick.GetInvocationList().Length);
+                            logger.LogDebug("GameLoop: Invoking PostTick event (subscribers: {Count})", PostTick.GetInvocationList().Length);
                             PostTick.Invoke(client);
                         }
 
                         // Send ClientTickEndPacket at end of tick BEFORE sleep (matches vanilla Minecraft.java:1864)
-                        await client.SendPacketAsync(new ClientTickEndPacket());
+                        await client.SendPacketAsync(new ClientTickEndPacket(), token);
                     }
                     catch (ObjectDisposedException)
                     {

@@ -40,7 +40,10 @@ public class ChatSinkTests
         var mockHumanizer = new Mock<IHumanizer>();
         mockHumanizer.Setup(x => x.IsRemoteServer).Returns(false);
         mockHumanizer.Setup(x => x.GetChatCommandDelayMs()).Returns(0);
-        var sink = new DefaultChatSink(mockClient.Object, mockHumanizer.Object);
+        var mockApi = new Mock<IWebcoreChatApi>();
+        var mockLogger = new Mock<ILogger<WebcoreChatSink>>();
+        var webcoreSink = new WebcoreChatSink(mockApi.Object, mockLogger.Object);
+        var sink = new DefaultChatSink(mockClient.Object, mockHumanizer.Object, webcoreSink);
         var message = "Test Message";
 
         // Act
@@ -51,6 +54,63 @@ public class ChatSinkTests
                 It.Is<ChatPacket>(p => p.Message == message),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task DefaultChatSink_EmitAsync_ShouldRedirectToWebcore_WhenRemoteAndNonSlash()
+    {
+        // Arrange
+        var mockClient = new Mock<IMinecraftClient>();
+        mockClient.Setup(x => x.State).Returns(new ClientState());
+        var mockHumanizer = new Mock<IHumanizer>();
+        mockHumanizer.Setup(x => x.IsRemoteServer).Returns(true);
+        var mockApi = new Mock<IWebcoreChatApi>();
+        var mockLogger = new Mock<ILogger<WebcoreChatSink>>();
+        var webcoreSink = new WebcoreChatSink(mockApi.Object, mockLogger.Object);
+        var sink = new DefaultChatSink(mockClient.Object, mockHumanizer.Object, webcoreSink);
+        var message = "Bot status output";
+
+        // Act
+        await sink.EmitAsync(message, CancellationToken.None);
+
+        // Assert - should redirect to webcore, not send to server
+        mockApi.Verify(x => x.PostRedirectedChatAsync(
+                It.Is<ChatRedirectRequest>(r => r.Message == message),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        mockClient.Verify(x => x.SendPacketAsync(
+                It.IsAny<ChatPacket>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DefaultChatSink_EmitAsync_ShouldSendSlashCommands_WhenRemote()
+    {
+        // Arrange
+        var mockClient = new Mock<IMinecraftClient>();
+        mockClient.Setup(x => x.State).Returns(new ClientState());
+        var mockHumanizer = new Mock<IHumanizer>();
+        mockHumanizer.Setup(x => x.IsRemoteServer).Returns(true);
+        mockHumanizer.Setup(x => x.GetChatCommandDelayMs()).Returns(0);
+        var mockApi = new Mock<IWebcoreChatApi>();
+        var mockLogger = new Mock<ILogger<WebcoreChatSink>>();
+        var webcoreSink = new WebcoreChatSink(mockApi.Object, mockLogger.Object);
+        var sink = new DefaultChatSink(mockClient.Object, mockHumanizer.Object, webcoreSink);
+        var message = "/bazaar";
+
+        // Act
+        await sink.EmitAsync(message, CancellationToken.None);
+
+        // Assert - slash commands should still go to server
+        mockClient.Verify(x => x.SendPacketAsync(
+                It.Is<ChatPacket>(p => p.Message == message),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        mockApi.Verify(x => x.PostRedirectedChatAsync(
+                It.IsAny<ChatRedirectRequest>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Commands.Implementations;
 
@@ -14,6 +15,21 @@ public class CmdCommand : ICommand
         }
 
         var command = ctx.GetRemainingArgsAsString(0);
+        if (command.StartsWith('/'))
+        {
+            command = command[1..];
+        }
+
+        if (ctx.State.ServerSettings.EnforcesSecureChat && ctx.AuthResult is not null)
+        {
+            var packet = ChatSigning.CreateSignedChatCommandPacket(ctx.AuthResult, command);
+            if (packet != null)
+            {
+                await ctx.SendPacketAsync(packet);
+                return;
+            }
+        }
+
         await ctx.SendPacketAsync(new ChatCommandPacket(command));
     }
 }

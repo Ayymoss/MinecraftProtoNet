@@ -9,19 +9,23 @@ namespace MinecraftProtoNet.Core.Services;
 
 /// <summary>
 /// A chat sink that sends messages directly to the Minecraft server.
-/// Applies humanized delays before sending and blocks non-command chat on remote servers.
+/// On remote servers, non-slash messages are redirected to the webcore sink for review
+/// instead of being sent to the server (preventing accidental chat leaks).
+/// Applies humanized delays before sending.
 /// </summary>
 /// <param name="client">The Minecraft client instance.</param>
 /// <param name="humanizer">Humanizer for timing delays and remote server detection.</param>
-public sealed class DefaultChatSink(IMinecraftClient client, IHumanizer humanizer) : IChatSink
+/// <param name="webcoreSink">Webcore sink for redirecting messages on remote servers.</param>
+public sealed class DefaultChatSink(IMinecraftClient client, IHumanizer humanizer, WebcoreChatSink webcoreSink) : IChatSink
 {
     /// <inheritdoc />
     public async Task EmitAsync(string message, CancellationToken ct = default)
     {
-        // Safety: block non-slash messages on remote servers to prevent accidental chat leaks
+        // On remote servers, redirect non-slash messages to webcore for review instead of sending to server
         if (humanizer.IsRemoteServer && !message.StartsWith('/'))
         {
-            Log.Warning("[ChatSink] Blocked non-command message on remote server: {Message}", message);
+            Log.Debug("[ChatSink] Redirecting to webcore: {Message}", message);
+            await webcoreSink.EmitAsync(message, ct);
             return;
         }
 

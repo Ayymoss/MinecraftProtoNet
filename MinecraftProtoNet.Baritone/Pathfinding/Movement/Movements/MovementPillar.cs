@@ -22,7 +22,6 @@ using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
-using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.State;
 using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
@@ -260,6 +259,10 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
             
             if (feet != null && (feet.Equals(against.Above()) || feet.Equals(Dest)))
             {
+                var playerEntity = (Ctx.Player() as Entity);
+                Serilog.Log.Debug(
+                    "[MovementPillar] Ladder SUCCESS: Feet=({FeetX},{FeetY},{FeetZ}) RawY={RawY:F4} Dest=({DestX},{DestY},{DestZ})",
+                    feet.X, feet.Y, feet.Z, playerEntity?.Position.Y ?? double.NaN, Dest.X, Dest.Y, Dest.Z);
                 return state.SetStatus(MovementStatus.Success);
             }
             
@@ -270,17 +273,12 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
                 state.SetInput(BaritoneInput.Jump, true);
             }
 
-            // Move towards the center of the ladder block.
-            // With the correct collision model in Core, hitting the ladder will naturally trigger HorizontalCollision.
-            var playerHeadClimb = Ctx.PlayerHead();
-            var playerRotClimb = Ctx.PlayerRotations();
-            if (playerHeadClimb != null && playerRotClimb != null)
-            {
-                var ladderTarget = new Vector3<double>(Src.X + 0.5, Src.Y + 0.5, Src.Z + 0.5);
-                var rotClimb = RotationUtils.CalcRotationFromVec3d(playerHeadClimb, ladderTarget, playerRotClimb).WithPitch(playerRotClimb.GetPitch());
-                state.SetTarget(new MovementState.MovementTarget(rotClimb, false));
-                state.SetInput(BaritoneInput.MoveForward, true);
-            }
+            // Move towards the wall block the ladder is attached to.
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementPillar.java:217
+            // Java uses: MovementHelper.moveTowards(ctx, state, against);
+            // This keeps the player pressed against the ladder, maintaining HorizontalCollision
+            // which is needed for the climb boost in PhysicsService.
+            MovementHelper.MoveTowards(Ctx, state, against);
 
             return state;
         }

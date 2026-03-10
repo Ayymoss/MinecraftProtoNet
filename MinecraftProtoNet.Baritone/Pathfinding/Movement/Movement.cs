@@ -244,6 +244,9 @@ public abstract class Movement : IMovement
             {
                 somethingInTheWay = true;
                 var blockState = BlockStateInterface.Get(Ctx, blockPos);
+                _movementLogger.LogDebug(
+                    "[Movement] {Type} Prepared: block at ({X},{Y},{Z}) = {Block} can't walk through, trying to break",
+                    GetType().Name, blockPos.X, blockPos.Y, blockPos.Z, blockState?.Name ?? "null");
                 MovementHelper.SwitchToBestToolFor(Ctx, blockState);
                 
                 // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java:211-222

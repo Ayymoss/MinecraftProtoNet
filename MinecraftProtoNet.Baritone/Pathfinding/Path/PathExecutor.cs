@@ -98,9 +98,12 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
 
             if (!IsInValidPositions(movement.GetValidPositions(), whereAmI))
             {
+                var playerEntity = _ctx.Player() as Entity;
+                var rawY = playerEntity?.Position.Y ?? double.NaN;
                 _logger.LogDebug(
-                    "[PathExec] NOT in valid pos! Feet=({FeetX},{FeetY},{FeetZ}) PathPos={PathPos} Move={Type} ({SrcX},{SrcY},{SrcZ})->({DestX},{DestY},{DestZ}) ValidPos=[{Valid}]",
-                    whereAmI.X, whereAmI.Y, whereAmI.Z, _pathPosition, movement.GetType().Name,
+                    "[PathExec] NOT in valid pos! Feet=({FeetX},{FeetY},{FeetZ}) RawY={RawY:F4} (RawY+0.1251={AdjY:F4}) PathPos={PathPos} Move={Type} ({SrcX},{SrcY},{SrcZ})->({DestX},{DestY},{DestZ}) ValidPos=[{Valid}]",
+                    whereAmI.X, whereAmI.Y, whereAmI.Z, rawY, rawY + 0.1251,
+                    _pathPosition, movement.GetType().Name,
                     movement.GetSrc().X, movement.GetSrc().Y, movement.GetSrc().Z,
                     movement.GetDest().X, movement.GetDest().Y, movement.GetDest().Z,
                     string.Join("; ", movement.GetValidPositions().Select(p => $"({p.X},{p.Y},{p.Z})")));

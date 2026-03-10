@@ -8,14 +8,15 @@ public sealed class HumanizerConfig
 {
     public const string SectionName = "Humanizer";
 
-    /// <summary>Master switch. When false, all humanization is bypassed (zero delays, no jitter).</summary>
-    public bool Enabled { get; set; } = true;
+    /// <summary>Master switch. When false, all humanization is bypassed (zero delays, no jitter).
+    /// Use ForceOnRemote=true to auto-enable on non-local servers without enabling everywhere.</summary>
+    public bool Enabled { get; set; }
 
     /// <summary>Force humanization on when connected to a non-local server, even if Enabled=false.</summary>
     public bool ForceOnRemote { get; set; } = true;
 
     /// <summary>IP prefixes considered "local" (humanizer can be disabled). CIDR not parsed — prefix match only.</summary>
-    public string[] LocalNetworks { get; set; } = ["127.0.0.1", "localhost", "10.10.1."];
+    public string[] LocalNetworks { get; set; } = ["127.0.0.1", "localhost"];
 
     // --- Tick timing ---
     /// <summary>Minimum extra ms added to game loop tick sleep (can be negative for slight speedup).</summary>
@@ -59,9 +60,14 @@ public sealed class HumanizerConfig
     public double IdleLookMaxDistance { get; set; } = 20.0;
 
     // --- Chat safety on remote servers ---
-    /// <summary>When true, non-slash messages are blocked on remote servers to prevent accidental chat leaks.</summary>
+    /// <summary>When true, non-slash messages are redirected to webcore on remote servers instead of being sent in-game.</summary>
     public bool BlockNonCommandChatOnRemote { get; set; } = true;
 
-    /// <summary>When true, ! bot commands from OTHER players' chat are ignored on remote servers.</summary>
+    /// <summary>When true, ! bot commands from unauthorized players are ignored on remote servers.
+    /// The bot's own UUID and any UUIDs in AuthorizedPlayerUuids are always allowed.</summary>
     public bool BlockExternalCommandsOnRemote { get; set; } = true;
+
+    /// <summary>Player UUIDs allowed to send ! commands on remote servers (in addition to the bot itself).
+    /// Add your own player UUID here so you can control the bot on public servers.</summary>
+    public string[] AuthorizedPlayerUuids { get; set; } = [];
 }

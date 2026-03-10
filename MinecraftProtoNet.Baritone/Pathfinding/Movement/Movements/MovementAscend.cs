@@ -83,10 +83,30 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         }
         
         var srcUp2 = context.Get(x, y + 2, z);
-        string srcUp2Name = srcUp2.Name;
-        if (srcUp2Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) || srcUp2Name.Contains("sand", StringComparison.OrdinalIgnoreCase)) { }
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java:95-113
+        // Check for falling blocks (sand/gravel) at y+3 that would fall on us
+        var srcUp3 = context.Get(x, y + 3, z);
+        string srcUp3Name = srcUp3.Name;
+        if ((srcUp3Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
+             srcUp3Name.Contains("sand", StringComparison.OrdinalIgnoreCase) ||
+             srcUp3Name.Contains("concrete_powder", StringComparison.OrdinalIgnoreCase)) &&
+            (MovementHelper.CanWalkThrough(context, x, y + 1, z) ||
+             !(srcUp2.Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
+               srcUp2.Name.Contains("sand", StringComparison.OrdinalIgnoreCase) ||
+               srcUp2.Name.Contains("concrete_powder", StringComparison.OrdinalIgnoreCase))))
+        {
+            return ActionCosts.CostInf;
+        }
         
         var srcDown = context.Get(x, y - 1, z);
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java:114-117
+        // Can't jump/ascend from a ladder or vine position
+        string srcDownName = srcDown.Name;
+        if (srcDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
+            srcDownName.Contains("vine", StringComparison.OrdinalIgnoreCase))
+        {
+            return ActionCosts.CostInf;
+        }
         bool jumpingFromBottomSlab = MovementHelper.IsBottomSlab(srcDown);
         bool jumpingToBottomSlab = MovementHelper.IsBottomSlab(toPlace);
         if (jumpingFromBottomSlab && !jumpingToBottomSlab) return ActionCosts.CostInf;

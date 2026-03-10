@@ -192,6 +192,109 @@ public static class ChatSigning
         return packet;
     }
 
+    // Commands with signable arguments (MessageArgument in Java's Brigadier).
+    // Reference: net.minecraft.commands.arguments.MessageArgument implements SignedArgument
+    // The key is the command name, the value is (argumentName, extractContent func).
+    // The extractContent func takes the full command args (after command name) and returns the signable content.
+    private static readonly Dictionary<string, (string ArgName, Func<string, string?> ExtractContent)> SignableCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // /me <action> — Reference: net.minecraft.server.commands.EmoteCommands
+        ["me"] = ("action", args => args),
+        // /msg <target> <message> — Reference: net.minecraft.server.commands.MsgCommand
+        ["msg"] = ("message", SkipFirstArg),
+        ["tell"] = ("message", SkipFirstArg),
+        ["w"] = ("message", SkipFirstArg),
+        // /say <message> — Reference: net.minecraft.server.commands.SayCommand
+        ["say"] = ("message", args => args),
+        // /teammsg <message> — Reference: net.minecraft.server.commands.TeamMsgCommand
+        ["teammsg"] = ("message", args => args),
+        ["tm"] = ("message", args => args),
+    };
+
+    /// <summary>
+    /// Skips the first space-delimited argument, returning the remainder.
+    /// Used for commands like /msg &lt;target&gt; &lt;message&gt; where only &lt;message&gt; is signed.
+    /// </summary>
+    private static string? SkipFirstArg(string args)
+    {
+        var spaceIndex = args.IndexOf(' ');
+        if (spaceIndex < 0 || spaceIndex + 1 >= args.Length) return null;
+        return args[(spaceIndex + 1)..];
+    }
+
+    /// <summary>
+    /// Creates and populates a ChatCommandSignedPacket for sending a signed command.
+    /// Automatically detects commands with signable arguments (MessageArgument in vanilla)
+    /// and creates argument signatures for them.
+    /// </summary>
+    /// <param name="auth">Authentication context.</param>
+    /// <param name="command">The command string (without leading slash).</param>
+    /// <returns>A populated ChatCommandSignedPacket ready for serialization, or null on failure.</returns>
+    public static ChatCommandSignedPacket? CreateSignedChatCommandPacket(AuthResult auth, string command)
+    {
+        if (auth?.PlayerPrivateKey == null || auth.ChatSession == null)
+        {
+            Log.Error("Cannot create signed chat command packet: Auth context invalid.");
+            return null;
+        }
+
+        var chatContext = auth.ChatSession.ChatContext;
+        var nextIndex = chatContext.Index + 1;
+
+        // Generate the update - this clears the offset and builds the acknowledged bitset
+        var (offset, acknowledged, signaturesForSigning, checksum) = chatContext.GenerateAndApplyUpdate();
+
+        chatContext.Index = nextIndex;
+
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var salt = Random.Shared.NextInt64();
+
+        List<ArgumentSignature> argumentSignatures = [];
+
+        // Check if this command has a signable argument (MessageArgument in vanilla Brigadier)
+        // Reference: net.minecraft.commands.arguments.MessageArgument implements SignedArgument
+        var spaceIndex = command.IndexOf(' ');
+        if (spaceIndex > 0)
+        {
+            var commandName = command[..spaceIndex];
+            var commandArgs = command[(spaceIndex + 1)..];
+
+            if (SignableCommands.TryGetValue(commandName, out var signable))
+            {
+                var content = signable.ExtractContent(commandArgs);
+                if (!string.IsNullOrEmpty(content))
+                {
+                    var signature = CreateChatSignatureWithLastSeen(auth, content, timestamp, salt, signaturesForSigning);
+                    if (signature != null)
+                    {
+                        argumentSignatures.Add(new ArgumentSignature(signable.ArgName, signature));
+                    }
+                }
+            }
+        }
+
+        var packet = new ChatCommandSignedPacket
+        {
+            Command = command,
+            Timestamp = timestamp,
+            Salt = salt,
+            ArgumentSignatures = argumentSignatures,
+            MessageCount = offset,
+            Acknowledged = acknowledged,
+            Checksum = checksum,
+        };
+
+        return packet;
+    }
+
+    /// <summary>
+    /// Creates a signature for a specific command argument.
+    /// </summary>
+    public static byte[]? CreateArgumentSignature(AuthResult auth, string content, long timestamp, long salt, List<byte[]> lastSeenSignatures)
+    {
+        return CreateChatSignatureWithLastSeen(auth, content, timestamp, salt, lastSeenSignatures);
+    }
+
     /// <summary>
     /// Updates the chat context when a signed chat message is received from the server.
     /// Call this method when you decode a client-bound chat packet that has a signature.

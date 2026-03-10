@@ -108,41 +108,14 @@ public sealed class HumanizerService : IHumanizer
         Vector2<float> currentYawPitch,
         WorldEntityRegistry worldEntities)
     {
-        var entities = worldEntities.GetAllEntities();
-        if (entities.Count == 0) return null;
+        // Idle look: small random offsets from current yaw/pitch to simulate natural head drift.
+        // Instead of snapping to a random entity (which causes jarring instant rotations),
+        // we jitter relative to the current looking direction, like a real player glancing around.
+        var yawOffset = (float)(Random.Shared.NextDouble() * 20.0 - 10.0);   // ±10° yaw
+        var pitchOffset = (float)(Random.Shared.NextDouble() * 8.0 - 4.0);   // ±4° pitch
 
-        var maxDist = _config.IdleLookMaxDistance;
-        var maxDistSq = maxDist * maxDist;
-
-        // Collect nearby entities
-        var nearby = new List<WorldEntity>();
-        foreach (var entity in entities)
-        {
-            var dx = entity.Position.X - playerPosition.X;
-            var dy = entity.Position.Y - playerPosition.Y;
-            var dz = entity.Position.Z - playerPosition.Z;
-            var distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq > 1.0 && distSq < maxDistSq) // At least 1 block away
-                nearby.Add(entity);
-        }
-
-        if (nearby.Count == 0) return null;
-
-        // Pick a random entity
-        var target = nearby[Random.Shared.Next(nearby.Count)];
-
-        // Calculate yaw/pitch from player to target (eye height ~1.62)
-        var dirX = target.Position.X - playerPosition.X;
-        var dirY = (target.Position.Y + 1.0) - (playerPosition.Y + 1.62); // Target center, player eyes
-        var dirZ = target.Position.Z - playerPosition.Z;
-
-        var horizontalDist = Math.Sqrt(dirX * dirX + dirZ * dirZ);
-        var yaw = (float)(Math.Atan2(-dirX, dirZ) * (180.0 / Math.PI));
-        var pitch = (float)(Math.Atan2(-dirY, horizontalDist) * (180.0 / Math.PI));
-
-        // Add a tiny bit of imprecision (humans don't look dead-center at things)
-        yaw += (float)(Random.Shared.NextDouble() * 3.0 - 1.5);
-        pitch += (float)(Random.Shared.NextDouble() * 2.0 - 1.0);
+        var yaw = currentYawPitch.X + yawOffset;
+        var pitch = Math.Clamp(currentYawPitch.Y + pitchOffset, -90f, 90f);   // Keep pitch in valid range
 
         return (yaw, pitch);
     }

@@ -62,7 +62,6 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Update fluid state
             UpdateFluidState(entity, level);
 
-            // TODO: REMOVE
             var tick = level.ClientTickCounter;
             if (tick % 20 == 0)
             {
