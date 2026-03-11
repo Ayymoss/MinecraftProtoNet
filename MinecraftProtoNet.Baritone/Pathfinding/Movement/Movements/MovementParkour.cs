@@ -23,6 +23,8 @@ using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Baritone.Utils.Pathing;
+using Microsoft.Extensions.Logging;
+using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
@@ -35,6 +37,7 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 /// </summary>
 public class MovementParkour : Movement
 {
+    private static readonly ILogger _logger = LoggingConfiguration.CreateLogger("MinecraftProtoNet.Baritone.MovementParkour");
     private static readonly BetterBlockPos[] Empty = [];
 
     private readonly BlockFace _direction;
