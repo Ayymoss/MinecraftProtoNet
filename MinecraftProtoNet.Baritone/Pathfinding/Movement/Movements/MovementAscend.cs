@@ -172,25 +172,25 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
             var jumpingOnto = BlockStateInterface.Get(Ctx, PositionToPlace);
             if (!MovementHelper.CanWalkOn(Ctx, PositionToPlace, jumpingOnto))
             {
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java:174-189
+                // During placement: sneak to decelerate, attempt placement, do NOT jump.
+                // Java does NOT jump during the placement phase — the jump only happens after the block is placed.
                 _ticksWithoutPlacement++;
-                var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
-                
-                // CRITICAL: Priority is placement. Disable movement forward to avoid jittering across the placement origin.
-                state.SetInput(Input.MoveForward, false);
-                
-                if (placeResult == MovementHelper.PlaceResult.ReadyToPlace)
+                if (MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true) == MovementHelper.PlaceResult.ReadyToPlace)
                 {
                     state.SetInput(Input.Sneak, true);
-                    if (state.GetInput(Input.Sneak) || player.IsSneaking) state.SetInput(Input.ClickRight, true);
+                    // Only click when the player is ACTUALLY crouching (server has applied the sneak state),
+                    // not just when the input is set. This ensures the player has decelerated before placing.
+                    if (player.IsSneaking)
+                    {
+                        state.SetInput(Input.ClickRight, true);
+                    }
                 }
-                
                 if (_ticksWithoutPlacement > 10)
                 {
-                    Baritone.GetGameEventHandler().LogDirect($"Ascend: Stalled placement ({_ticksWithoutPlacement} ticks), moving back");
+                    // After 10 ticks without placement, we might be standing in the way, move back
                     state.SetInput(Input.MoveBack, true);
                 }
-
-                if (feet != null && (int)Math.Floor((double)feet.Y) == Dest.Y - 1) state.SetInput(Input.Jump, true);
                 return state;
             }
         }
