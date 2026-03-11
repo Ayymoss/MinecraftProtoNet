@@ -51,10 +51,12 @@ public class BaritonePlayerContext : IPlayerContext
     public object? ObjectMouseOver()
     {
         var player = _mc.State.LocalPlayer?.Entity;
-        var level = _mc.State.Level;
-        if (player == null || level == null) return null;
-        
-        return player.GetLookingAtBlock(level, _playerController.GetBlockReachDistance());
+        if (player == null) return null;
+
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java
+        // In vanilla, objectMouseOver returns the cached hitResult from pick(), computed once per tick.
+        // This ensures Baritone's placement validation and InteractAsync use the same result.
+        return player.CachedBlockHitResult;
     }
 
     public BetterBlockPos? PlayerFeet()
@@ -109,10 +111,10 @@ public class BaritonePlayerContext : IPlayerContext
     public BetterBlockPos? GetSelectedBlock()
     {
         var player = _mc.State.LocalPlayer?.Entity;
-        var level = _mc.State.Level;
-        if (player == null || level == null) return null;
+        if (player == null) return null;
 
-        var hit = player.GetLookingAtBlock(level, _playerController.GetBlockReachDistance());
+        // Use cached hit result from pick() for consistency with ObjectMouseOver
+        var hit = player.CachedBlockHitResult;
         if (hit == null) return null;
 
         return new BetterBlockPos(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z);

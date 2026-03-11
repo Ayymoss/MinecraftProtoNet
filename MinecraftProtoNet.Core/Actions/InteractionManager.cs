@@ -420,7 +420,12 @@ public class InteractionManager : IInteractionManager
         }
 
         // 2. Fallback to Block Interaction
-        var hit = entity.GetLookingAtBlock(_client.State.Level, ReachDistance);
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java
+        // Use the cached hit result from pick() (computed once per tick before PreTick)
+        // to match vanilla behavior. This ensures the same face that Baritone validated
+        // in AttemptToPlaceABlock is used for the actual interaction, avoiding face-mismatch
+        // bugs when the player is moving fast (e.g., mid-air parkour placement).
+        var hit = entity.CachedBlockHitResult ?? entity.GetLookingAtBlock(_client.State.Level, ReachDistance);
         if (hit is null)
         {
             _logger.LogWarning("InteractAsync: No block found in reach ({ReachDistance})", ReachDistance);

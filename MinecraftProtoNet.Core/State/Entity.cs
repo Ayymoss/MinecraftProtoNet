@@ -372,6 +372,24 @@ public class Entity
 
     // ===== Raycasting =====
 
+    /// <summary>
+    /// Cached block hit result, computed once per tick via <see cref="UpdatePickResult"/>.
+    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java pick() method.
+    /// In vanilla, pick() runs once per tick and the result is reused for both crosshair display
+    /// and right-click interactions (handleKeybinds). This cache ensures Baritone's placement
+    /// validation and the actual InteractAsync use the same hit result.
+    /// </summary>
+    public RaycastHit? CachedBlockHitResult { get; private set; }
+
+    /// <summary>
+    /// Updates the cached block hit result. Should be called once per tick before PreTick,
+    /// matching vanilla's Minecraft.pick() behavior.
+    /// </summary>
+    public void UpdatePickResult(Level level, double maxDistance = 5.0)
+    {
+        CachedBlockHitResult = level.RayCast(EyePosition, GetLookDirection(), maxDistance);
+    }
+
     public RaycastHit? GetLookingAtBlock(Level level, double maxDistance = 5.0)
     {
         return level.RayCast(EyePosition, GetLookDirection(), maxDistance);

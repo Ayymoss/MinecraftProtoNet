@@ -295,13 +295,13 @@ public sealed class Settings
     /// But it's very unreliable and falls off when cornering like all the time so.
     /// It also overshoots the landing pretty much always (making contact with the next block over), so be careful
     /// </summary>
-    public readonly Setting<bool> AllowParkour = new(false);
+    public readonly Setting<bool> AllowParkour = new(true);
 
     /// <summary>
     /// Actually pretty reliable.
     /// Doesn't make it any more dangerous compared to just normal allowParkour th
     /// </summary>
-    public readonly Setting<bool> AllowParkourPlace = new(false);
+    public readonly Setting<bool> AllowParkourPlace = new(true);
 
     /// <summary>
     /// For example, if you have Mining Fatigue or Haste, adjust the costs of breaking blocks accordingly.

@@ -63,6 +63,17 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
                         // Increment tick counter FIRST (matches vanilla Minecraft.java:1740)
                         client.State.Level.IncrementClientTickCounter();
 
+                        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java pick()
+                        // Compute the block hit result once per tick before PreTick.
+                        // In vanilla, pick() runs before handleKeybinds and player.tick().
+                        // Both Baritone's objectMouseOver check (in AttemptToPlaceABlock) and
+                        // InteractAsync must use the same hit result to avoid face-mismatch bugs
+                        // when the player is moving fast (e.g., mid-air parkour placement).
+                        if (client.State.LocalPlayer?.HasEntity == true)
+                        {
+                            client.State.LocalPlayer.Entity.UpdatePickResult(client.State.Level);
+                        }
+
                         // Invoke pre-tick hook for external systems (e.g., Baritone)
                         if (PreTick != null)
                         {
