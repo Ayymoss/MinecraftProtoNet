@@ -89,8 +89,8 @@ public class ConfigurationHandler(
         client.ProtocolState = ProtocolState.Play;
         logger.LogDebug("Protocol state changed to {State}", client.ProtocolState);
 
-        // 4. Send chat session update (Play state packet)
-        await client.SendChatSessionUpdate();
+        // ChatSessionUpdate is sent after receiving the Login packet in PlayHandler,
+        // matching vanilla's timing (ClientPacketListener.handleLogin → prepareKeyPair).
     }
 
     private async Task InitializeBlockStatesAsync()
