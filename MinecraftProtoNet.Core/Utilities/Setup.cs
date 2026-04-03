@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Connection>();
         services.AddSingleton<IPacketSender>(sp => sp.GetRequiredService<Connection>());
         services.AddSingleton<IPacketService, PacketService>();
+        services.AddSingleton<IPacketProcessor, PacketProcessor>();
         services.AddSingleton<IMinecraftClient, MinecraftClient>();
 
         // Humanizer (timing variance, rotation jitter, anti-cheat evasion)

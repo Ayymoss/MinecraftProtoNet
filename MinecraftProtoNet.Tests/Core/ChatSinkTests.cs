@@ -152,6 +152,7 @@ public class ChatSinkTests
             state,
             new Mock<IPacketSender>().Object,
             new Mock<IPacketService>().Object,
+            new Mock<IPacketProcessor>().Object,
             new Mock<IPhysicsService>().Object,
             new Mock<IGameLoop>().Object,
             new Mock<IHumanizer>().Object,

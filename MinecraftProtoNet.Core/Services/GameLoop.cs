@@ -11,7 +11,7 @@ namespace MinecraftProtoNet.Core.Services;
 /// <summary>
 /// Manages the main game loop that drives physics ticks at the server's tick rate.
 /// </summary>
-public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoop
+public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketProcessor packetProcessor) : IGameLoop
 {
     private CancellationTokenSource? _cts;
     private Thread? _gameLoopThread;
@@ -60,6 +60,10 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
 
                     try
                     {
+                        // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java:1247
+                        // Vanilla drains all queued packets BEFORE running tick logic.
+                        await packetProcessor.ProcessQueuedPacketsAsync();
+
                         // Increment tick counter FIRST (matches vanilla Minecraft.java:1740)
                         client.State.Level.IncrementClientTickCounter();
 
@@ -141,6 +145,8 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
             IsBackground = true
         };
 
+        // Register the game thread identity before starting so packets begin queueing immediately
+        packetProcessor.SetGameThread(_gameLoopThread);
         _gameLoopThread.Start();
     }
 
@@ -152,6 +158,7 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer) : IGameLoo
         }
 
         logger.LogInformation("Stopping game loop...");
+        packetProcessor.Close();
         await _cts.CancelAsync();
 
         // Give the loop a moment to observe cancellation and exit

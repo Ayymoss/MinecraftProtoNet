@@ -51,6 +51,17 @@ public class PacketService : IPacketService
         }
     }
 
+    public IPacketHandler? GetHandler(ProtocolState state, int packetId)
+    {
+        if (_handlers.TryGetValue(state, out var stateHandlers) &&
+            stateHandlers.TryGetValue(packetId, out var handler))
+        {
+            return handler;
+        }
+
+        return null;
+    }
+
     public IClientboundPacket CreateIncomingPacket(ProtocolState state, int packetId)
     {
         return PacketRegistry.CreateIncomingPacket(state, packetId);

@@ -36,6 +36,10 @@ public sealed class Connection : IPacketSender, IDisposable
 
     private bool _disposed;
 
+    // Serializes concurrent SendPacketAsync calls from GameLoop, packet handlers, and external callers.
+    // Vanilla uses Netty's event loop for this; we use a semaphore since we don't have Netty.
+    private SemaphoreSlim _sendLock = new(1, 1);
+
     #region Setup
 
     public async Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
@@ -189,55 +193,63 @@ public sealed class Connection : IPacketSender, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var outputStream = GetOutputStream();
-
-        // 1. Serialize Packet ID + Data payload into a temporary buffer
-        var payloadWriter = new PacketBufferWriter();
-        payloadWriter.WriteVarInt(packet.GetPacketAttributeValue(p => p.PacketId));
-        packet.Serialize(ref payloadWriter);
-        var packetPayload = payloadWriter.WrittenSpan.ToArray();
-
-        // 2. Determine final bytes to send based on compression state
-        var finalPacketStream = new MemoryStream();
-
-        if (!UseCompression)
+        await _sendLock.WaitAsync(cancellationToken);
+        try
         {
-            await WriteVarIntAsync(finalPacketStream, packetPayload.Length, cancellationToken);
-            await finalPacketStream.WriteAsync(packetPayload, cancellationToken);
-        }
-        else
-        {
-            var shouldCompress = packetPayload.Length >= _compressionThreshold;
+            var outputStream = GetOutputStream();
 
-            if (shouldCompress)
+            // 1. Serialize Packet ID + Data payload into a temporary buffer
+            var payloadWriter = new PacketBufferWriter();
+            payloadWriter.WriteVarInt(packet.GetPacketAttributeValue(p => p.PacketId));
+            packet.Serialize(ref payloadWriter);
+            var packetPayload = payloadWriter.WrittenSpan.ToArray();
+
+            // 2. Determine final bytes to send based on compression state
+            var finalPacketStream = new MemoryStream();
+
+            if (!UseCompression)
             {
-                var compressedData = CompressZLib(packetPayload);
-                var dataLengthVarIntBytes = WriteVarIntToArray(packetPayload.Length);
-                var packetLength = dataLengthVarIntBytes.Length + compressedData.Length;
-
-                await WriteVarIntAsync(finalPacketStream, packetLength, cancellationToken);
-                await finalPacketStream.WriteAsync(dataLengthVarIntBytes, cancellationToken);
-                await finalPacketStream.WriteAsync(compressedData, cancellationToken);
+                await WriteVarIntAsync(finalPacketStream, packetPayload.Length, cancellationToken);
+                await finalPacketStream.WriteAsync(packetPayload, cancellationToken);
             }
             else
             {
-                const byte dataLengthVarInt = 0x00;
-                var packetLength = 1 + packetPayload.Length;
+                var shouldCompress = packetPayload.Length >= _compressionThreshold;
 
-                await WriteVarIntAsync(finalPacketStream, packetLength, cancellationToken);
-                finalPacketStream.WriteByte(dataLengthVarInt);
-                await finalPacketStream.WriteAsync(packetPayload, cancellationToken);
+                if (shouldCompress)
+                {
+                    var compressedData = CompressZLib(packetPayload);
+                    var dataLengthVarIntBytes = WriteVarIntToArray(packetPayload.Length);
+                    var packetLength = dataLengthVarIntBytes.Length + compressedData.Length;
+
+                    await WriteVarIntAsync(finalPacketStream, packetLength, cancellationToken);
+                    await finalPacketStream.WriteAsync(dataLengthVarIntBytes, cancellationToken);
+                    await finalPacketStream.WriteAsync(compressedData, cancellationToken);
+                }
+                else
+                {
+                    const byte dataLengthVarInt = 0x00;
+                    var packetLength = 1 + packetPayload.Length;
+
+                    await WriteVarIntAsync(finalPacketStream, packetLength, cancellationToken);
+                    finalPacketStream.WriteByte(dataLengthVarInt);
+                    await finalPacketStream.WriteAsync(packetPayload, cancellationToken);
+                }
             }
+
+            LogPacketSend(packet);
+
+            // 3. Write the final constructed packet
+            finalPacketStream.Position = 0;
+            await finalPacketStream.CopyToAsync(outputStream, cancellationToken);
+
+            // 4. Flush the actual output stream - This shouldn't be necessary
+            await outputStream.FlushAsync(cancellationToken);
         }
-
-        LogPacketSend(packet);
-
-        // 3. Write the final constructed packet
-        finalPacketStream.Position = 0;
-        await finalPacketStream.CopyToAsync(outputStream, cancellationToken);
-
-        // 4. Flush the actual output stream - This shouldn't be necessary
-        await outputStream.FlushAsync(cancellationToken);
+        finally
+        {
+            _sendLock.Release();
+        }
     }
 
     #endregion
@@ -389,6 +401,10 @@ public sealed class Connection : IPacketSender, IDisposable
         _useEncryption = false;
         _compressionThreshold = -1;
 
+        // Reset send lock for the next connection
+        _sendLock.Dispose();
+        _sendLock = new SemaphoreSlim(1, 1);
+
         // Create a fresh TcpClient for the next connection
         _client = new TcpClient();
         _disposed = false;
@@ -407,6 +423,7 @@ public sealed class Connection : IPacketSender, IDisposable
         if (disposing)
         {
             _logger.LogInformation("Disposing connection");
+            _sendLock.Dispose();
             _decryptStream?.Dispose();
             _encryptStream?.Dispose();
             _decryptTransform?.Dispose();

@@ -25,6 +25,7 @@ public class MinecraftClient : IMinecraftClient
     private readonly IServiceProvider _serviceProvider;
     private readonly IPacketSender _connection;
     private readonly IPacketService _packetService;
+    private readonly IPacketProcessor _packetProcessor;
     private readonly IPhysicsService _physicsService;
     private readonly IGameLoop _gameLoop;
     private readonly IHumanizer _humanizer;
@@ -51,6 +52,7 @@ public class MinecraftClient : IMinecraftClient
         ClientState state,
         IPacketSender connection,
         IPacketService packetService,
+        IPacketProcessor packetProcessor,
         IPhysicsService physicsService,
         IGameLoop gameLoop,
         IHumanizer humanizer,
@@ -62,6 +64,7 @@ public class MinecraftClient : IMinecraftClient
         State = state;
         _connection = connection;
         _packetService = packetService;
+        _packetProcessor = packetProcessor;
         _physicsService = physicsService;
         _gameLoop = gameLoop;
         _humanizer = humanizer;
@@ -133,6 +136,9 @@ public class MinecraftClient : IMinecraftClient
         // Create a fresh CancellationTokenSource for this connection session
         _cancellationTokenSource = new CancellationTokenSource();
 
+        // Reset packet processor for the new connection session
+        _packetProcessor.Reset();
+
         if (_connection is Connection conn)
         {
             await conn.ConnectAsync(host, port);
@@ -187,6 +193,7 @@ public class MinecraftClient : IMinecraftClient
     private async Task CleanupAfterServerDisconnect()
     {
         IsConnected = false;
+        _packetProcessor.Close();
         await _gameLoop.StopAsync();
 
         // Reset connection so it can be reused
@@ -201,6 +208,9 @@ public class MinecraftClient : IMinecraftClient
     public async Task DisconnectAsync()
     {
         IsConnected = false;
+
+        // Close packet processor to stop enqueuing
+        _packetProcessor.Close();
 
         // Stop the game loop FIRST so it stops sending packets
         await _gameLoop.StopAsync();
@@ -269,7 +279,21 @@ public class MinecraftClient : IMinecraftClient
                         packet.GetPropertiesAsString());
                 }
 
-                await _packetService.HandlePacketAsync(packet, this);
+                // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/network/protocol/PacketUtils.java
+                // Vanilla queues Play-state packets for the game thread via PacketProcessor.
+                // Before the GameLoop starts (IsActive=false), handle immediately (safe: single thread).
+                if (ProtocolState == ProtocolState.Play && _packetProcessor.IsActive)
+                {
+                    var handler = _packetService.GetHandler(ProtocolState, packetId);
+                    if (handler != null)
+                    {
+                        _packetProcessor.Enqueue(packet, handler, this);
+                    }
+                }
+                else
+                {
+                    await _packetService.HandlePacketAsync(packet, this);
+                }
             }
             catch (EndOfStreamException ex)
             {
@@ -409,8 +433,13 @@ public class MinecraftClient : IMinecraftClient
     /// </summary>
     public bool IsSameThread()
     {
-        // Check if current thread matches the main thread stored during construction.
-        // In Java Minecraft, this checks if code is running on the render/game thread.
+        // Once the GameLoop is running, the game thread is the authoritative "main" thread.
+        // Before that, fall back to the constructor thread.
+        if (_packetProcessor.IsActive)
+        {
+            return _packetProcessor.IsSameThread();
+        }
+
         return _mainThread != null && Thread.CurrentThread == _mainThread;
     }
 }
