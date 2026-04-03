@@ -217,7 +217,7 @@ public class BotService : IDisposable
         const int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            await _client.ConnectAsync(ServerAddress, ServerPort, true);
+            await _client.ConnectAsync(ServerAddress, ServerPort, false);
 
             if (IsConnected)
             {

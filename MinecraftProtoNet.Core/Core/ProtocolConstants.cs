@@ -14,7 +14,7 @@ public static class ProtocolConstants
     /// Snapshot base protocol version for 26.1 Snapshot 1.
     /// Combined with bit 30 set: (1 << 30) | SnapshotVersion
     /// </summary>
-    public const int SnapshotVersion = 296;
+    public const int SnapshotVersion = 303;
 
     /// <summary>
     /// Bit mask for identifying snapshot protocol versions.
