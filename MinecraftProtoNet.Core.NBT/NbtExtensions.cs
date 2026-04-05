@@ -94,6 +94,38 @@ public static class NbtExtensions
     }
 
     /// <summary>
+    /// Extracts only the visible display text from a chat component NBT structure.
+    /// Reads "text" from the root and each entry in "extra", recursively following
+    /// nested "extra" arrays but skipping non-display fields (hover_event, click_event, etc.).
+    /// This matches what the vanilla client renders on screen.
+    /// </summary>
+    public static string GetVisibleText(this NbtTag? rootTag)
+    {
+        if (rootTag is null) return string.Empty;
+        var sb = new StringBuilder();
+        AppendVisibleText(sb, rootTag);
+        return sb.ToString();
+    }
+
+    private static void AppendVisibleText(StringBuilder sb, NbtTag tag)
+    {
+        if (tag is not NbtCompound compound) return;
+
+        // Append this component's own "text" field
+        var textTag = compound.Value.FirstOrDefault(t => t.Name == "text") as NbtString;
+        if (textTag is not null)
+            sb.Append(textTag.Value);
+
+        // Recurse into "extra" array (these are sibling components rendered in sequence)
+        var extraTag = compound.Value.FirstOrDefault(t => t.Name == "extra") as NbtList;
+        if (extraTag is null) return;
+        foreach (var child in extraTag.Value)
+        {
+            AppendVisibleText(sb, child);
+        }
+    }
+
+    /// <summary>
     /// Converts an NBT tag tree to a human-readable SNBT-style string for logging.
     /// </summary>
     public static string ToSnbt(this NbtTag? tag, int maxDepth = 6)

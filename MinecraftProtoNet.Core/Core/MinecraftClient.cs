@@ -264,8 +264,23 @@ public class MinecraftClient : IMinecraftClient
                 }
                 var reader = new PacketBufferReader(packetBuffer);
                 var packetId = reader.ReadVarInt();
+
+
                 var packet = _packetService.CreateIncomingPacket(ProtocolState, packetId);
-                packet.Deserialize(ref reader);
+
+                // Layer 1: Packet-level resilience — each packet is length-prefixed so
+                // the stream position is always correct even if Deserialize fails.
+                // A bad component reader in one packet must not kill the connection.
+                try
+                {
+                    packet.Deserialize(ref reader);
+                }
+                catch (Exception ex) when (packet is not UnknownPacket)
+                {
+                    _logger.LogWarning(ex, "[->CLIENT] Failed to deserialize {PacketType} (0x{PacketId:X2}) — skipping packet",
+                        packet.GetType().Name, packetId);
+                    continue;
+                }
 
                 if (packet is UnknownPacket)
                 {
@@ -320,7 +335,7 @@ public class MinecraftClient : IMinecraftClient
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error while listening for packets");
+                _logger.LogError(ex, "Error while listening for packets (state={State})", ProtocolState);
             }
         }
     }

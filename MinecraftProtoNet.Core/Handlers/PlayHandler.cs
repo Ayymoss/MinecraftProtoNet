@@ -31,20 +31,20 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                 client.State.ServerSettings.IsHardcore = loginPacket.IsHardcore;
                 client.State.ServerSettings.ViewDistance = loginPacket.ViewDistance;
                 client.State.ServerSettings.SimulationDistance = loginPacket.SimulationDistance;
-                
-                if (client.AuthResult?.ChatSession is not null)
-                {
-                    await client.SendPacketAsync(new ChatSessionUpdatePacket
-                    {
-                        SessionId = client.AuthResult.ChatSession.ChatContext.ChatSessionGuid,
-                        ExpiresAt = client.AuthResult.ChatSession.ExpiresAtEpochMs,
-                        PublicKey = client.AuthResult.ChatSession.PublicKeyDer,
-                        KeySignature = client.AuthResult.ChatSession.MojangSignature
-                    });
-                }
 
                 if (client.State.LocalPlayer.Entity is not { } entity) break;
                 entity.EntityId = loginPacket.EntityId;
+
+                // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:474-535
+                // Vanilla's handleLogin sends NO packets here. ChatSessionUpdate is prepared
+                // asynchronously (prepareKeyPair) and sent later. Channel registration
+                // (minecraft:register) is done in Configuration, not Play for 1.20.2+.
+                //
+                // IMPORTANT: Do NOT send ChatSessionUpdate here. In vanilla, it's sent async
+                // (after prepareKeyPair completes). Sending it immediately can hit a Velocity
+                // proxy race condition where getConnectedServer() is still null, causing ALL
+                // subsequent client packets (including AcceptTeleportation) to be silently dropped.
+                // ChatSessionUpdate is deferred to after the first teleport confirmation below.
                 break;
             }
 
@@ -122,11 +122,40 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
 
                 if (!gameLoop.IsRunning)
                 {
-                    await client.SendPacketAsync(new PlayerLoadedPacket());
-
                     // Start the game loop (physics tick loop)
                     // Note: Baritone hook should already be attached via BaritoneGameLoopHook singleton
+                    // PlayerLoadedPacket is deferred to ChunkHandler — vanilla only sends it
+                    // after enough chunks are loaded (levelLoadTracker.isLevelReady()).
+                    // Sending it prematurely can cause proxy servers to skip chunk delivery.
                     gameLoop.Start(client);
+
+                    // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:523-535
+                    // Vanilla sends ChatSessionUpdate asynchronously after prepareKeyPair completes.
+                    // We defer it to give ViaVersion plugin channels (vv:server_details) time to arrive.
+                    // ViaVersion sets EnforcesSecureChat:true even when the backend can't handle
+                    // ChatSessionUpdate — sending it causes a forced disconnect. By waiting ~2 seconds
+                    // after the first teleport, the vv:server_details channel will have arrived and set
+                    // HasViaVersion, allowing us to safely skip ChatSessionUpdate on proxied servers.
+                    if (client.State.ServerSettings.EnforcesSecureChat)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(2000);
+                            if (client.State.ServerSettings.HasViaVersion)
+                            {
+                                logger.LogInformation("Skipping ChatSessionUpdate — ViaVersion detected, backend may not support it");
+                                return;
+                            }
+                            try
+                            {
+                                await client.SendChatSessionUpdate();
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogWarning(ex, "Failed to send ChatSessionUpdate — server may not support signed chat");
+                            }
+                        });
+                    }
                 }
 
                 // Notify listeners (pathfinding) that server sent a teleport packet

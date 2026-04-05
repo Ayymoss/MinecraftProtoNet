@@ -5,7 +5,7 @@ using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Packets.Play.Serverbound;
 
-[Packet(0x2D, ProtocolState.Play)]
+[Packet(0x2D, ProtocolState.Play, true)]
 public class PongPacket : IServerboundPacket
 {
     public int Payload { get; set; }

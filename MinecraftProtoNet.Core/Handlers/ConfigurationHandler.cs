@@ -19,6 +19,7 @@ namespace MinecraftProtoNet.Core.Handlers;
 [HandlesPacket(typeof(Packets.Configuration.Clientbound.KeepAlivePacket))]
 [HandlesPacket(typeof(Packets.Configuration.Clientbound.FinishConfigurationPacket))]
 [HandlesPacket(typeof(RegistryDataPacket))]
+[HandlesPacket(typeof(Packets.Configuration.Clientbound.CustomPayloadPacket))]
 public class ConfigurationHandler(
     ILogger<ConfigurationHandler> logger,
     IRegistryDataLoader registryDataLoader) : IPacketHandler
@@ -44,6 +45,17 @@ public class ConfigurationHandler(
 
             case RegistryDataPacket registryDataPacket:
                 HandleRegistryData(client, registryDataPacket);
+                break;
+
+            case Packets.Configuration.Clientbound.CustomPayloadPacket customPayloadPacket:
+                // Detect ViaVersion early during Configuration phase.
+                // ViaVersion registers plugin channels like "vv:server_details" when proxying.
+                if (customPayloadPacket.Channel is "vv:server_details" or "viaversion:config")
+                {
+                    client.State.ServerSettings.HasViaVersion = true;
+                    logger.LogInformation("ViaVersion detected during configuration via channel: {Channel}",
+                        customPayloadPacket.Channel);
+                }
                 break;
         }
     }
@@ -79,10 +91,8 @@ public class ConfigurationHandler(
         await InitializeItemsAsync();
         await InitializeEntityTypesAsync();
 
-        // 1. Send client information (required during configuration)
-        await client.SendPacketAsync(new ClientInformationPacket());
-
-        // 2. Signal configuration complete
+        // ClientInformation is already sent early in LoginHandler (matching vanilla timing).
+        // Signal configuration complete
         await client.SendPacketAsync(new Packets.Configuration.Serverbound.FinishConfigurationPacket());
 
         // 3. Transition to Play state

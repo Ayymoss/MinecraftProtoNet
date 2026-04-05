@@ -4,6 +4,7 @@ using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Handlers.Base;
 using MinecraftProtoNet.Core.Packets.Base;
 using MinecraftProtoNet.Core.Packets.Play.Clientbound;
+using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.Services;
 
 namespace MinecraftProtoNet.Core.Handlers.Play;
@@ -19,15 +20,27 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(SetChunkCacheCenterPacket))]
 public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
 {
+    private bool _playerLoadedSent;
+
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(ChunkHandler));
 
-    public Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
+    public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {
             case LevelChunkWithLightPacket levelChunkWithLightPacket:
                 client.State.Level.AddChunk(levelChunkWithLightPacket.Chunk);
+
+                // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:2540-2543
+                // Vanilla sends PlayerLoadedPacket when levelLoadTracker.isLevelReady() — i.e., after
+                // the first chunks around the player are loaded. We approximate by sending on first chunk.
+                if (!_playerLoadedSent)
+                {
+                    _playerLoadedSent = true;
+                    await client.SendPacketAsync(new PlayerLoadedPacket());
+                    logger.LogInformation("Sent PlayerLoadedPacket after first chunk received");
+                }
                 // Store block entity NBT data (signs, chests, etc.)
                 foreach (var be in levelChunkWithLightPacket.BlockEntities)
                 {
@@ -81,6 +94,5 @@ public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
                 break;
         }
 
-        return Task.CompletedTask;
     }
 }

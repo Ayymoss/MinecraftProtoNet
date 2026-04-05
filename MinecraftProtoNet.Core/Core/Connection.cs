@@ -278,7 +278,7 @@ public sealed class Connection : IPacketSender, IDisposable
         if (silent) return;
 
         var packetNamePretty = packet.GetType().FullName?.NamespaceToPrettyString(packet.GetPacketAttributeValue(p => p.PacketId));
-        _logger.LogDebug("[->SERVER] {PacketName} {Properties}", packetNamePretty, packet.GetPropertiesAsString());
+        _logger.LogInformation("[->SERVER] {PacketName} {Properties}", packetNamePretty, packet.GetPropertiesAsString());
     }
 
     #endregion

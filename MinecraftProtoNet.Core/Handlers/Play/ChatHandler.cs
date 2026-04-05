@@ -31,9 +31,10 @@ public class ChatHandler(ILogger<ChatHandler> logger, IChatEventBus chatEventBus
         {
             case DisguisedChatPacket disguisedChatPacket:
             {
-                var textParts = disguisedChatPacket.Message.FindTags<NbtString>("text").Reverse().Select(x => x.Value).ToList();
-                logger.LogInformation("[DisguisedChat] {ChatType}: {Messages}",
-                    disguisedChatPacket.ChatType.ChatTypeId, string.Join(" ", textParts));
+                var visibleText = disguisedChatPacket.Message.GetVisibleText();
+                var textParts = new List<string> { visibleText };
+                logger.LogInformation("[DisguisedChat] {ChatType}: {Message}",
+                    disguisedChatPacket.ChatType.ChatTypeId, visibleText);
 
                 chatEventBus.PublishSystemChat(
                     disguisedChatPacket.Message,
@@ -46,9 +47,10 @@ public class ChatHandler(ILogger<ChatHandler> logger, IChatEventBus chatEventBus
             case SystemChatPacket systemChatPacket:
             {
                 var translateLookup = systemChatPacket.Tags.FindTag<NbtString>("translate")?.Value;
-                var textParts = systemChatPacket.Tags.FindTags<NbtString>("text").Reverse().Select(x => x.Value).ToList();
-                logger.LogInformation("System message: ({TranslateKey}) {Messages}",
-                    translateLookup ?? "<NULL>", string.Join(" ", textParts));
+                var visibleText = systemChatPacket.Tags.GetVisibleText();
+                var textParts = new List<string> { visibleText };
+                logger.LogInformation("System message: ({TranslateKey}) {Message}",
+                    translateLookup ?? "<NULL>", visibleText);
 
                 chatEventBus.PublishSystemChat(
                     systemChatPacket.Tags,
@@ -83,9 +85,9 @@ public class ChatHandler(ILogger<ChatHandler> logger, IChatEventBus chatEventBus
             case DisconnectPacket disconnectPacket:
             {
                 var translateLookup = disconnectPacket.DisconnectReason.FindTag<NbtString>("translate")?.Value;
-                var messages = disconnectPacket.DisconnectReason.FindTags<NbtString>(null).Reverse().Select(x => x.Value);
-                logger.LogWarning("Disconnected from server: ({TranslateKey}) {Messages}",
-                    translateLookup, string.Join(" ", messages));
+                var visibleText = disconnectPacket.DisconnectReason.GetVisibleText();
+                logger.LogWarning("Disconnected from server: ({TranslateKey}) {Message}",
+                    translateLookup, visibleText);
                 break;
             }
 

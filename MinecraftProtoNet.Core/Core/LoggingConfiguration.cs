@@ -63,7 +63,7 @@ public static class LoggingConfiguration
                 .Enrich.FromLogContext()
                 .Enrich.With<ShortContextEnricher>()
                 .WriteTo.Console(
-                    outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {CategoryTag} {ShortContext,-20} {Message:lj}{NewLine}{Exception}",
+                    outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] {CategoryTag} {ShortContext,-20} {Message:lj}{NewLine}{Exception}",
                     theme: AnsiConsoleTheme.Code)
                 .WriteTo.File(
                     logPath,

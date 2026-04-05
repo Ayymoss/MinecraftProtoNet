@@ -85,7 +85,7 @@ public ref struct NbtReader(ReadOnlySpan<byte> bytes)
     private long[] ReadLongArray()
     {
         var length = BinaryPrimitives.ReadInt32BigEndian(ReadBytes(sizeof(int)));
-        if (length is 0) throw new ArgumentOutOfRangeException(nameof(length));
+        if (length == 0) return [];
 
         var array = new long[length];
         for (var i = 0; i < length; i++)
@@ -99,7 +99,7 @@ public ref struct NbtReader(ReadOnlySpan<byte> bytes)
     private int[] ReadIntArray()
     {
         var length = BinaryPrimitives.ReadInt32BigEndian(ReadBytes(sizeof(int)));
-        if (length is 0) throw new ArgumentOutOfRangeException(nameof(length));
+        if (length == 0) return [];
 
         var array = new int[length];
         for (var i = 0; i < length; i++)

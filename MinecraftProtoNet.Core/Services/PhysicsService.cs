@@ -17,8 +17,6 @@ namespace MinecraftProtoNet.Core.Services;
 /// </summary>
 public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer) : IPhysicsService
 {
-    private readonly ILogger<PhysicsService> _logger = logger;
-
     // Terminal velocity in blocks/tick (Minecraft's max fall speed)
     private const double TerminalVelocity = -3.92;
     private const double PositionUpdateThreshold = 2.0E-4;
@@ -43,7 +41,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             {
                 entity.HasPendingTeleport = false;
 
-                _logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
+                logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
                     entity.Position, entity.Velocity);
 
                 // Still invoke the pre-physics callback so Baritone can observe the new position,
@@ -53,6 +51,22 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                 // Send position from the teleported state (no movement applied).
                 // This ensures the server sees us at the exact teleported position on the next game tick.
                 await SendPositionAsync(entity, packetSender);
+                return;
+            }
+
+            // ===== CHUNK GUARD =====
+            // Don't apply physics if the chunk at the player's feet isn't loaded yet.
+            // Without collision data the entity would free-fall through void, and the server
+            // kicks for illegal movement ("moved too quickly" / "moved wrongly").
+            // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
+            // Vanilla's levelLoadTracker gates physics until chunks around the player are ready.
+            var chunkX = (int)Math.Floor(entity.Position.X) >> 4;
+            var chunkZ = (int)Math.Floor(entity.Position.Z) >> 4;
+            if (!level.HasChunk(chunkX, chunkZ))
+            {
+                logger.LogDebug("[Physics] Skipping tick - chunk ({ChunkX}, {ChunkZ}) not loaded. Position={Position}",
+                    chunkX, chunkZ, entity.Position);
+                prePhysicsCallback?.Invoke(entity);
                 return;
             }
 
@@ -79,7 +93,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                     entity.IsOnGround,
                 };
 
-                _logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
+                logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
             }
 
             // Handle jump input BEFORE travel (matches Java: jump happens before travel)
@@ -334,7 +348,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         // Debug logging: Only log when falling and velocity changed significantly (avoid spam)
         if (isFalling && Math.Abs(entity.Velocity.Y - velocityYBefore) > 0.001)
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "[Physics] TravelInAir - EntityId={EntityId}, Y={Y}, " +
                 "VelBefore={VelBefore:F6}, MovementY={MovementY:F6}, " +
                 "AfterGravity={AfterGravity:F6}, AfterFriction={AfterFriction:F6}, " +
@@ -498,7 +512,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         // Debug logging: Only log when falling and there's significant change
         if (!onClimbable && isFalling && Math.Abs(movement.Y - velocityYBeforeMoveRelative) > 0.001)
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "[Physics] HandleRelativeFriction - EntityId={EntityId}, " +
                 "VelBefore={VelBefore:F6}, VelAfterMoveRelative={VelAfterMoveRelative:F6}, " +
                 "VelBeforeMove={VelBeforeMove:F6}, MovementY={MovementY:F6}, " +
@@ -897,7 +911,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         // Debug logging: Only log when falling and block speed factor is not 1.0 (to catch issues)
         if (isFalling && (blockSpeedFactor != 1.0f || Math.Abs(entity.Velocity.Y - velocityYBeforeBlockSpeed) > 0.0001))
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "[Physics] Move - EntityId={EntityId}, Y={Y}, " +
                 "DeltaY={DeltaY:F6}, MovementY={MovementY:F6}, " +
                 "VelYBeforeBlockSpeed={VelYBeforeBlockSpeed:F6}, " +
@@ -1158,7 +1172,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         bool currentlySprinting = currentInput.Sprint;
         if (currentlySprinting != entity.WasSprinting)
         {
-            _logger.LogInformation("[Sprint] State change: {Old} -> {New}, sending {Action}",
+            logger.LogInformation("[Sprint] State change: {Old} -> {New}, sending {Action}",
                 entity.WasSprinting ? "SPRINTING" : "NOT_SPRINTING",
                 currentlySprinting ? "SPRINTING" : "NOT_SPRINTING",
                 currentlySprinting ? "StartSprint" : "StopSprint");
@@ -1183,7 +1197,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         
         if (keyPresses != lastKeyPresses)
         {
-            _logger.LogDebug("[Input] Flags changed: 0x{Old:X2} -> 0x{New:X2} (Sprint={Sprint}, Forward={Forward}, Shift={Shift})",
+            logger.LogDebug("[Input] Flags changed: 0x{Old:X2} -> 0x{New:X2} (Sprint={Sprint}, Forward={Forward}, Shift={Shift})",
                 lastKeyPresses, keyPresses, currentInput.Sprint, currentInput.Forward, currentInput.Shift);
             var flag = (PlayerInputPacket.MovementFlag)keyPresses;
             await packetSender.SendPacketAsync(new PlayerInputPacket(flag));

@@ -43,9 +43,17 @@ public class LoginHandler : IPacketHandler
                 break;
             }
             case LoginFinishedPacket loginFinished:
+                // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientHandshakePacketListenerImpl.java:169-172
+                // Vanilla order: LoginAcknowledged → Brand → ClientInformation
                 await client.SendPacketAsync(new LoginAcknowledgedPacket());
                 client.ProtocolState = ProtocolState.Configuration;
                 _logger.LogDebug("Switching protocol state: {ProtocolState}", client.ProtocolState);
+
+                // Send brand immediately (vanilla sends it right after switching to Configuration)
+                await client.SendPacketAsync(
+                    Packets.Configuration.Serverbound.CustomPayloadPacket.CreateBrand("vanilla"));
+                // Send client information early (vanilla sends it right after brand)
+                await client.SendPacketAsync(new Packets.Configuration.Serverbound.ClientInformationPacket());
                 break;
             case LoginCompressionPacket compressionPacket:
             {

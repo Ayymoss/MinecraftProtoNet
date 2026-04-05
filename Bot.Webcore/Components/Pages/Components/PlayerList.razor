@@ -45,7 +45,19 @@
             var localUuid = Bot.State.LocalPlayer?.Uuid ?? Guid.Empty;
             var players = Bot.State.Level.GetAllPlayers()
                 .Where(p => p.Uuid != localUuid)
+                .Where(p => string.IsNullOrWhiteSpace(_searchFilter) ||
+                            (p.Username ?? "").Contains(_searchFilter, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+
+            <!-- Search filter -->
+            <div class="relative group mb-5">
+                <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <i class="ph-duotone ph-magnifying-glass text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                </div>
+                <input type="text" @bind="_searchFilter" @bind:event="oninput"
+                       class="w-full bg-slate-950/50 border border-slate-800/80 rounded-2xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all shadow-inner"
+                       placeholder="Search players..." />
+            </div>
 
             @if (players.Count == 0)
             {

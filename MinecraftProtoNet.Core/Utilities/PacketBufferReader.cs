@@ -7,6 +7,7 @@ using MinecraftProtoNet.Core.Models.World.Meta;
 using MinecraftProtoNet.Core.NBT;
 using MinecraftProtoNet.Core.NBT.Tags;
 using MinecraftProtoNet.Core.NBT.Tags.Abstract;
+using MinecraftProtoNet.Core.NBT.Tags.Primitive;
 
 namespace MinecraftProtoNet.Core.Utilities;
 
@@ -245,11 +246,10 @@ public ref struct PacketBufferReader(ReadOnlySpan<byte> bytes)
     /// </summary>
     private static string NbtToPlainText(NbtTag nbt)
     {
-        // Simple extraction - just return the tag's value as string
         return nbt switch
         {
-            NbtCompound compound when compound.Value.FirstOrDefault(t => t.Name == "text") is { } textTag
-                => NbtToPlainText(textTag),
+            NbtString s => s.Value,
+            NbtCompound => nbt.GetVisibleText(),
             { } tag => tag.ToString() ?? string.Empty,
             _ => string.Empty
         };

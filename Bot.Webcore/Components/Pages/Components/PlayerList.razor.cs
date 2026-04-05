@@ -4,6 +4,7 @@ namespace Bot.Webcore.Components.Pages.Components;
 
 public partial class PlayerList
 {
+    private string _searchFilter = string.Empty;
     private bool IsFollowing => Bot.FollowProcess?.Following().Count > 0;
 
     protected override void OnInitialized()

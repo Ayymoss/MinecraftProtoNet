@@ -31,6 +31,13 @@ public class ServerSettings
     /// The simulation distance configured by the server.
     /// </summary>
     public int SimulationDistance { get; set; }
+
+    /// <summary>
+    /// Whether the server is behind ViaVersion (detected via vv:server_details plugin channel).
+    /// When true, ChatSessionUpdate should NOT be sent even if EnforcesSecureChat is true,
+    /// because ViaVersion backends may not support it.
+    /// </summary>
+    public bool HasViaVersion { get; set; }
 }
 
 public class ClientState
