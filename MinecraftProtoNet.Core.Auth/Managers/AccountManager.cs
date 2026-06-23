@@ -8,7 +8,10 @@ namespace MinecraftProtoNet.Core.Auth.Managers;
 
 public class AccountManager : IAccountManager
 {
-    private static readonly string ConfigDirectory = Path.Combine(AppContext.BaseDirectory, "Configuration");
+    // MCPROTO_CONFIG_DIR lets a sibling process (e.g. the test harness) point at another binary's
+    // Configuration dir to share the active account + token cache. Defaults to the per-binary path.
+    private static readonly string ConfigDirectory =
+        Environment.GetEnvironmentVariable("MCPROTO_CONFIG_DIR") ?? Path.Combine(AppContext.BaseDirectory, "Configuration");
     private static readonly string ActiveAccountPath = Path.Combine(ConfigDirectory, "active-account.json");
 
     private readonly MicrosoftAuthenticator _msAuth;

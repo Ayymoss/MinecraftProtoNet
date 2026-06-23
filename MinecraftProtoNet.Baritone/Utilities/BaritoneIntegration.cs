@@ -100,19 +100,19 @@ public static class BaritoneIntegration
                                 ? TickEvent.TickEventType.In
                                 : TickEvent.TickEventType.Out;
                             
-                            // Reference: MixinClientPlayerEntity.java:73 - in Java the TickEvent.IN handlers
-                            // (PathingBehavior -> Movement -> lookBehavior.updateTarget) run BEFORE player.tick()
-                            // fires PlayerUpdateEvent PRE, where LookBehavior peeks + applies the just-computed
-                            // target and POST resets it. So OnTick must precede PlayerUpdate(PRE). (AIM4: this was
-                            // reversed, which left the PRE/POST machinery dead and forced an eager write in
-                            // updateTarget. Both run in PreTick, before the physics tick sends the position packet.)
-                            baritone.GetGameEventHandler().OnTick(tickProvider(EventState.Pre, tickType));
-
+                            // Fire PlayerUpdateEvent PRE before the bot tick (lets LookBehavior apply rotations).
+                            // NOTE: AIM4 tried reordering this (OnTick first) to match Java's mixin order + drop the
+                            // eager rotation write — but the C# pipeline relies on the eager write for same-tick
+                            // place-aim checks (MovementPillar.IsLookingAt). That reorder regressed pillaring
+                            // (jump-but-never-place); caught by ClaudeHarness and reverted 2026-06-23.
+                            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinClientPlayerEntity.java:73
                             if (tickType == TickEvent.TickEventType.In)
                             {
                                 baritone.GetGameEventHandler().OnPlayerUpdate(
                                     new Api.Event.Events.PlayerUpdateEvent(EventState.Pre));
                             }
+
+                            baritone.GetGameEventHandler().OnTick(tickProvider(EventState.Pre, tickType));
                         }
                         catch (Exception ex)
                         {

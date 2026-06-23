@@ -104,6 +104,23 @@ public class Rotation
     }
 
     /// <summary>
+    /// Signed yaw distance from an offset yaw, handling the -180/180 wrap.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/Rotation.java:170
+    /// </summary>
+    public static float YawDistanceFromOffset(float yaw, float offsetYaw)
+    {
+        if ((yaw > 0 ^ offsetYaw > 0) && ((yaw > 90 || yaw < -90) ^ (offsetYaw > 90 || offsetYaw < -90)))
+        {
+            if (yaw < 0)
+            {
+                return 360 + (yaw - offsetYaw);
+            }
+            return 360 - (yaw - offsetYaw);
+        }
+        return yaw - offsetYaw;
+    }
+
+    /// <summary>
     /// Checks if this rotation is really close to another rotation.
     /// </summary>
     public bool IsReallyCloseTo(Rotation other)

@@ -51,11 +51,19 @@ public class LookBehavior : Behavior, ILookBehavior
 
     public void UpdateTarget(Rotation rotation, bool blockInteract)
     {
-        // Reference: LookBehavior.java:66-69 - only store the target. The rotation is peeked + applied in
-        // OnPlayerUpdate PRE, which (after the AIM4 tick-order fix in BaritoneIntegration) now fires after
-        // this call within the same PreTick — so the former eager write here is no longer needed, and the
-        // PRE/POST reset + smoothing machinery is now live.
         _target = new Target(rotation, Target.Resolve(Ctx, blockInteract));
+
+        // Eager peek+write is LOAD-BEARING: the C# tick pipeline fires PlayerUpdate PRE before the bot tick
+        // computes its target, so apply the rotation now too. Same-tick place-aim checks — e.g.
+        // MovementPillar's `Ctx.IsLookingAt(Src.Below())` — depend on the player rotation already reflecting
+        // the target. (AIM4 removed this and reordered the events; that regressed pillaring — the bot jumped
+        // but never placed the support block. Caught by ClaudeHarness 2026-06-23 and reverted.)
+        var player = Ctx.Player() as Entity;
+        if (player != null && _target.Mode != Target.TargetMode.None)
+        {
+            var actual = _processor.PeekRotation(_target.Rotation);
+            player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
+        }
     }
 
     public IAimProcessor GetAimProcessor() => _processor;

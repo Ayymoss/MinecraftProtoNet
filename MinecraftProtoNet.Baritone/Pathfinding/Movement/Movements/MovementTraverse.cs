@@ -554,7 +554,12 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             {
                 state.SetInput(Input.Sneak, true);
             }
-            MovementHelper.MoveTowards(Ctx, state, PositionsToBreak[0]);
+            // Reference: MovementTraverse.java:354 - moveTowardsWithSlightRotation(ctx, state, dest).
+            // Crucial: this keeps the head near its current facing (only nudged to a 45° increment) and
+            // strafes/back-walks toward dest, instead of snapping the head forward. Using the head-snapping
+            // MoveTowards here caused the head to flip ~180° every bridge block (it alternated with the
+            // backward-facing backplace look above), which any rotation anticheat would flag.
+            MovementHelper.MoveTowardsWithSlightRotation(Ctx, state, Dest);
             return state;
         }
     }

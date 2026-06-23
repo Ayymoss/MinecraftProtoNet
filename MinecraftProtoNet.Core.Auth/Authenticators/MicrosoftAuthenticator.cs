@@ -11,7 +11,9 @@ public class MicrosoftAuthenticator
     private static readonly string[] Scopes = ["XboxLive.signin", "offline_access"];
 
     private const string CacheFileName = "MinecraftAuthCache.dat";
-    private static readonly string CacheDir = Path.Combine(AppContext.BaseDirectory, "Configuration");
+    // Shared via MCPROTO_CONFIG_DIR (see AccountManager) so a sibling process reuses the same token cache.
+    private static readonly string CacheDir =
+        Environment.GetEnvironmentVariable("MCPROTO_CONFIG_DIR") ?? Path.Combine(AppContext.BaseDirectory, "Configuration");
 
     public MicrosoftAuthenticator()
     {

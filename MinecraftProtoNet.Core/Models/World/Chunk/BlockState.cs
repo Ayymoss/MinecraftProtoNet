@@ -12,6 +12,40 @@ public class BlockState
     public string Name { get; }
     public Dictionary<string, string> Properties { get; }
 
+    // ===== Memoized derived data =====
+    // BlockState is a shared singleton per state-id (from ClientState.BlockStateRegistry), and its Name +
+    // the BlockDefinitions/BlockHardness tables are immutable after config load. So the per-access string-dict
+    // lookups for BlockType/Fluid/hardness (22.7M/pathfind — the dominant cost) are computed once and cached.
+    // Guarded on Count>0 so a pre-registry-load access doesn't cache a wrong (empty) value.
+    private bool _defResolved;
+    private string? _blockTypeCache;
+    private string? _fluidCache;
+    private bool _hardnessResolved;
+    private float _destroySpeedCache = 1.0f;
+    private bool _requiresToolCache;
+
+    private void ResolveDef()
+    {
+        if (_defResolved || ClientState.BlockDefinitions.Count == 0) return;
+        if (ClientState.BlockDefinitions.TryGetValue(Name, out var def))
+        {
+            _blockTypeCache = def.Type;
+            _fluidCache = def.Fluid;
+        }
+        _defResolved = true;
+    }
+
+    private void ResolveHardness()
+    {
+        if (_hardnessResolved || ClientState.BlockHardness.Count == 0) return;
+        if (ClientState.BlockHardness.TryGetValue(Name, out var h))
+        {
+            _destroySpeedCache = h.Hardness;
+            _requiresToolCache = h.RequiresCorrectTool;
+        }
+        _hardnessResolved = true;
+    }
+
     // ===== Physics Properties (from Mojang Block.Properties) =====
     
     /// <summary>
@@ -43,8 +77,10 @@ public class BlockState
     /// Sourced from the generated <see cref="ClientState.BlockHardness"/> table (MC 26.2 Blocks.java);
     /// falls back to 1.0 if the table isn't loaded or the block is unknown.
     /// </summary>
-    public float DestroySpeed =>
-        ClientState.BlockHardness.TryGetValue(Name, out var h) ? h.Hardness : 1.0f;
+    public float DestroySpeed
+    {
+        get { ResolveHardness(); return _destroySpeedCache; }
+    }
 
     /// <summary>
     /// Light level emitted by this block (0-15).
@@ -98,14 +134,18 @@ public class BlockState
     /// Block-class identity (e.g. minecraft:slab, minecraft:ladder, minecraft:liquid) from the data
     /// report's "definition.type"; the non-heuristic equivalent of the Java Block subclass. Null if unknown.
     /// </summary>
-    public string? BlockType =>
-        ClientState.BlockDefinitions.TryGetValue(Name, out var def) ? def.Type : null;
+    public string? BlockType
+    {
+        get { ResolveDef(); return _blockTypeCache; }
+    }
 
     /// <summary>
     /// The fluid id for liquid blocks (minecraft:water / minecraft:lava); null for non-liquids.
     /// </summary>
-    public string? Fluid =>
-        ClientState.BlockDefinitions.TryGetValue(Name, out var def) ? def.Fluid : null;
+    public string? Fluid
+    {
+        get { ResolveDef(); return _fluidCache; }
+    }
 
     /// <summary>
     /// Whether this block is a pure liquid block (a water or lava block). Mirrors Mojang's notion of a
@@ -187,8 +227,10 @@ public class BlockState
     /// Reference: BlockBehaviour.Properties.requiresCorrectToolForDrops(). Sourced from the generated
     /// <see cref="ClientState.BlockHardness"/> table.
     /// </summary>
-    public bool RequiresCorrectToolForDrops =>
-        ClientState.BlockHardness.TryGetValue(Name, out var h) && h.RequiresCorrectTool;
+    public bool RequiresCorrectToolForDrops
+    {
+        get { ResolveHardness(); return _requiresToolCache; }
+    }
 
     // ===== Constructor =====
 

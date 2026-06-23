@@ -11,7 +11,10 @@ namespace MinecraftProtoNet.Core.Auth;
 
 public static class AuthenticationFlow
 {
-    private static readonly string ConfigDirectory = Path.Combine(AppContext.BaseDirectory, "Configuration");
+    // Shared via MCPROTO_CONFIG_DIR (see AccountManager) so chat-session keys live alongside the shared
+    // account + token cache when a sibling process points here. Defaults to the per-binary path.
+    private static readonly string ConfigDirectory =
+        Environment.GetEnvironmentVariable("MCPROTO_CONFIG_DIR") ?? Path.Combine(AppContext.BaseDirectory, "Configuration");
 
     /// <summary>
     /// Authenticates using the first cached MSAL account. Kept for legacy callers.

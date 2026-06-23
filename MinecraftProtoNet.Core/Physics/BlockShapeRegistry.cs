@@ -27,9 +27,16 @@ public class BlockShapeRegistry : IBlockShapeRegistry
     /// </summary>
     public static readonly BlockShapeRegistry Shared = new();
 
-    // Caches could be added here for complex calculated shapes
+    // Shape depends only on the block-state id (which encodes all properties), so cache per id.
+    // ConcurrentDictionary: the network thread and the pathfinding thread can both call this.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, VoxelShape> _shapeCache = new();
 
     public VoxelShape GetShape(BlockState blockState)
+    {
+        return _shapeCache.GetOrAdd(blockState.Id, _ => GetShapeCore(blockState));
+    }
+
+    private VoxelShape GetShapeCore(BlockState blockState)
     {
         // DEVIATION FROM VANILLA: In vanilla, ladders have hasCollision=false (no collision shape).
         // The player walks through the ladder and hits the solid wall behind it, which triggers

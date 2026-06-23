@@ -36,9 +36,12 @@ public class BlockStateInterface
     private readonly Level _world;
     public readonly BetterWorldBorder WorldBorder;
 
-#pragma warning disable CS0169 // Field is never used - reserved for future chunk caching optimization
-    private object? _prevChunk; // Will be Chunk
-#pragma warning restore CS0169
+    // Last-accessed chunk cache (Baritone's BlockStateInterface optimization). The A* hot path does hundreds
+    // of block lookups per node, almost all within the same chunk; caching the chunk reference skips the
+    // chunk-map ConcurrentDictionary lookup for those. Reference: BlockStateInterface.java prev/prevCached.
+    private MinecraftProtoNet.Core.Models.World.Chunk.Chunk? _prevChunk;
+    private int _prevChunkX = int.MinValue;
+    private int _prevChunkZ = int.MinValue;
     private CachedRegion? _prevCached;
 
     private readonly bool _useTheRealWorld;
@@ -80,11 +83,22 @@ public class BlockStateInterface
 
         if (_useTheRealWorld)
         {
-            // Try to get from real world first
-            var block = _world.GetBlockAt(x, y, z);
-            if (block != null)
+            // Try the real world first, via the cached chunk when the lookup is in the same chunk as the last.
+            int cx = x >> 4;
+            int cz = z >> 4;
+            if (_prevChunk == null || _prevChunkX != cx || _prevChunkZ != cz)
             {
-                return block;
+                _prevChunk = _world.GetChunk(cx, cz);
+                _prevChunkX = cx;
+                _prevChunkZ = cz;
+            }
+            if (_prevChunk != null)
+            {
+                var block = _prevChunk.GetBlock(x, y, z);
+                if (block != null)
+                {
+                    return block;
+                }
             }
         }
 

@@ -69,9 +69,60 @@ public static class MovementHelper
         if (playerHead == null || playerRot == null) return;
         
         var rot = RotationUtils.CalcRotationFromVec3d(playerHead, center, playerRot).WithPitch(playerRot.GetPitch());
-        
+
         state.SetTarget(new MovementState.MovementTarget(rot, false));
         state.SetInput(Input.MoveForward, true);
+    }
+
+    private const float DegToRadF = (float)(Math.PI / 180.0);
+
+    /// <summary>
+    /// Move toward an ideal yaw using strafe/back inputs WITHOUT rotating the player's head — picks the
+    /// input combination whose resulting motion vector best matches the ideal direction.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:671
+    /// </summary>
+    public static void MoveTowardsWithoutRotation(IPlayerContext ctx, MovementState state, float idealYaw)
+    {
+        var playerRot = ctx.PlayerRotations();
+        if (playerRot == null) return;
+        float yawRad = playerRot.GetYaw() * DegToRadF;
+        float idealSin = (float)Math.Sin(idealYaw * DegToRadF);
+        float idealCos = (float)Math.Cos(idealYaw * DegToRadF);
+        var best = MovementOption
+            .GetOptions((float)Math.Sin(yawRad), (float)Math.Cos(yawRad), Core.Baritone.Settings().AllowSprint.Value)
+            .MinBy(option => option.DistanceToSq(idealSin, idealCos));
+        best?.SetInputs(state);
+    }
+
+    // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:682
+    public static void MoveTowardsWithoutRotation(IPlayerContext ctx, MovementState state, BetterBlockPos dest)
+    {
+        var playerHead = ctx.PlayerHead();
+        var playerRot = ctx.PlayerRotations();
+        if (playerHead == null || playerRot == null) return;
+        float idealYaw = RotationUtils.CalcRotationFromVec3d(playerHead, VecUtils.GetBlockPosCenter(dest), playerRot).GetYaw();
+        MoveTowardsWithoutRotation(ctx, state, idealYaw);
+    }
+
+    /// <summary>
+    /// Move toward <paramref name="dest"/> while keeping the head almost where it is — the view is only
+    /// nudged onto the nearest 45° increment, and the actual travel is done via strafe/back inputs. This
+    /// avoids the head snapping to face the destination (which produced rapid 180° yaw flips while
+    /// sneak-bridging, since the backplace look faces backward).
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:691
+    /// </summary>
+    public static void MoveTowardsWithSlightRotation(IPlayerContext ctx, MovementState state, BetterBlockPos dest)
+    {
+        var playerHead = ctx.PlayerHead();
+        var playerRot = ctx.PlayerRotations();
+        if (playerHead == null || playerRot == null) return;
+        float idealYaw = RotationUtils.CalcRotationFromVec3d(playerHead, VecUtils.GetBlockPosCenter(dest), playerRot).GetYaw();
+        float distance = Rotation.YawDistanceFromOffset(playerRot.GetYaw(), idealYaw) % 45f;
+        float newYaw = distance > 0f
+            ? (distance > 22.5f ? distance - 45f : distance)
+            : (distance < -22.5f ? distance + 45f : distance);
+        state.SetTarget(new MovementState.MovementTarget(new Rotation(playerRot.GetYaw() - newYaw, playerRot.GetPitch()), true));
+        MoveTowardsWithoutRotation(ctx, state, idealYaw);
     }
 
     public static bool CanWalkOn(IPlayerContext ctx, BetterBlockPos pos)
@@ -478,10 +529,45 @@ public static class MovementHelper
         }
     }
 
+    // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java mustBeSolidToWalkOn
+    // Returns true for ordinary blocks AND for air — deliberate. When sneak-bridging over a gap, the A* expands a
+    // node "standing on" a block it just placed, which reads as air in the unmutated world; returning true here
+    // lets the backplace chain continue past the first block (MovementTraverse.cs:191, MovementDiagonal.cs).
+    // Only climbables and a few fluid/frostwalker edge-cases return false. (The old impl wrongly returned
+    // HasCollision && !IsLiquid, which is false for air — that capped sneak-bridges at a single block.)
     public static bool MustBeSolidToWalkOn(CalculationContext context, int x, int y, int z, BlockState state)
     {
-        if (state == null) return false;
-        return state.HasCollision && !IsLiquid(state);
+        if (state == null) return true;
+        if (IsClimbable(state))
+        {
+            return false;
+        }
+        // getFluidState().isEmpty() == false → the block is/contains a fluid (liquid block or waterlogged).
+        // Used for frostwalker: only include blocks where we are still on ground when leaving them to any side.
+        if (IsLiquid(state))
+        {
+            if (state.IsSlab)
+            {
+                if (!(state.Properties.TryGetValue("type", out var slabType) && slabType == "bottom")) return true;
+            }
+            else if (state.IsStairs)
+            {
+                if (state.IsTop) return true;
+                if (state.Properties.TryGetValue("shape", out var shape) && (shape == "inner_left" || shape == "inner_right")) return true;
+            }
+            else if (state.Name.Equals("minecraft:scaffolding", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            else if (state.Name.EndsWith("leaves", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (context.AssumeWalkOnWater) return false;
+            var above = context.Get(x, y + 1, z);
+            if (above != null && above.IsLiquid) return false;
+        }
+        return true;
     }
 
     public static bool CanUseFrostWalker(CalculationContext context, BetterBlockPos pos)

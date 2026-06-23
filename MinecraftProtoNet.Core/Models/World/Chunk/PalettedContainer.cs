@@ -4,8 +4,9 @@ namespace MinecraftProtoNet.Core.Models.World.Chunk;
 
 public class PalettedContainer
 {
-    private IPalette _palette;
-    private BitStorage? _storage;
+    // volatile so the lock-free Get() reads see consistent, current references (Set swaps these under _lock).
+    private volatile IPalette _palette;
+    private volatile BitStorage? _storage;
     private readonly PaletteType _paletteType;
     private readonly Lock _lock = new();
 
@@ -17,23 +18,25 @@ public class PalettedContainer
 
     public int? Get(int index)
     {
-        lock (_lock)
+        // Lock-free read, matching Minecraft's PalettedContainer.get() (only writes acquire the lock). The A*
+        // hot path does tens of millions of reads per search; a per-read lock was a large share of pathfinding
+        // time. Snapshot the volatile fields into locals so a concurrent Set (which swaps them) can't tear the read.
+        var storage = _storage;
+        var palette = _palette;
+        if (storage is null)
         {
-            if (_storage is null)
+            try
             {
-                try
-                {
-                    return _palette.RegistryIdFor(0);
-                }
-                catch (IndexOutOfRangeException)
-                {
-                    return null;
-                }
+                return palette.RegistryIdFor(0);
             }
-
-            var paletteId = _storage.Get(index);
-            return _palette.RegistryIdFor(paletteId);
+            catch (IndexOutOfRangeException)
+            {
+                return null;
+            }
         }
+
+        var paletteId = storage.Get(index);
+        return palette.RegistryIdFor(paletteId);
     }
 
     public void Read(ref PacketBufferReader reader)
