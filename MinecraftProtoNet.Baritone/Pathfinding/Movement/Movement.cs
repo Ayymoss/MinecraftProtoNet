@@ -151,10 +151,10 @@ public abstract class Movement : IMovement
         // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/Movement.java:147
         var player = Ctx.Player() as Entity;
         
-        // Reset inputs and target for the new tick
-        _currentState.GetInputStates().Clear();
+        // Reset the target for the new tick. Input states are cleared at the END of the tick
+        // (after being applied to the input handler) to match Java. Reference: Movement.java:143
         _currentState.SetTarget(new MovementState.MovementTarget());
-        
+
         _currentState = UpdateState(_currentState);
         
         // If in liquid and below destination, jump
@@ -163,29 +163,17 @@ public abstract class Movement : IMovement
             _currentState.SetInput(Input.Jump, true);
         }
         
-        // If player is in wall, break it
-        var playerEntity = Ctx.Player() as Entity;
-        if (playerEntity != null)
+        // Reference: Movement.java:129-132 - if the player is suffocating in a wall, break the block
+        // we're looking at (the raycast from inside the block selects it). More correct than a feet
+        // heuristic, which misses the head-in-wall case.
+        if (IsInWall())
         {
-            var feet = Ctx.PlayerFeet();
-            if (feet != null)
+            var selected = Ctx.GetSelectedBlock();
+            if (selected != null)
             {
-                var blockState = BlockStateInterface.Get(Ctx, feet);
-                if (blockState != null && !MovementHelper.CanWalkThrough(Ctx, feet))
-                {
-                    // Don't try to break bottom slabs the player is standing ON TOP of.
-                    // When on a bottom slab at block Y, player.Y = Y + 0.5, and
-                    // floor(Y + 0.5) = Y, so feet falls inside the slab block.
-                    // But the player is above the slab's collision box, not stuck inside.
-                    bool onTopOfSlab = MovementHelper.IsBottomSlab(blockState)
-                                       && playerEntity.Position.Y >= feet.Y + 0.5;
-                    if (!onTopOfSlab)
-                    {
-                        MovementHelper.SwitchToBestToolFor(Ctx, blockState);
-                        _currentState.SetInput(Input.ClickLeft, true);
-                    }
-                }
+                MovementHelper.SwitchToBestToolFor(Ctx, BlockStateInterface.Get(Ctx, selected));
             }
+            _currentState.SetInput(Input.ClickLeft, true);
         }
 
         // Apply rotation target
@@ -212,13 +200,40 @@ public abstract class Movement : IMovement
         {
             Baritone.GetInputOverrideHandler().SetInputForceState(kvp.Key, kvp.Value);
         }
-        
+        // Reference: Movement.java:143 - clear input states after applying them to the handler
+        _currentState.GetInputStates().Clear();
+
         if (_currentState.GetStatus().IsComplete())
         {
             Baritone.GetInputOverrideHandler().ClearAllKeys();
         }
 
         return _currentState.GetStatus();
+    }
+
+    /// <summary>
+    /// Whether the player is suffocating in a wall. Reference: minecraft Entity.isInWall — a full-collision
+    /// (suffocating) block intersecting a thin AABB at eye level (width*0.8). Approximated via IsBlockNormalCube.
+    /// </summary>
+    private bool IsInWall()
+    {
+        var player = Ctx.Player() as Entity;
+        if (player == null) return false;
+        double half = Entity.PlayerWidth * 0.8 / 2.0;
+        var eye = player.EyePosition;
+        int by = (int)Math.Floor(eye.Y);
+        for (int bx = (int)Math.Floor(eye.X - half); bx <= (int)Math.Floor(eye.X + half); bx++)
+        {
+            for (int bz = (int)Math.Floor(eye.Z - half); bz <= (int)Math.Floor(eye.Z + half); bz++)
+            {
+                var state = BlockStateInterface.Get(Ctx, new BetterBlockPos(bx, by, bz));
+                if (state != null && !state.IsAir && MovementHelper.IsBlockNormalCube(state))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected virtual bool Prepared(MovementState state)
@@ -353,7 +368,7 @@ public abstract class Movement : IMovement
         ToWalkIntoCached = null;
     }
 
-    public List<BetterBlockPos> ToBreak(BlockStateInterface bsi)
+    public virtual List<BetterBlockPos> ToBreak(BlockStateInterface bsi)
     {
         if (ToBreakCached != null)
         {

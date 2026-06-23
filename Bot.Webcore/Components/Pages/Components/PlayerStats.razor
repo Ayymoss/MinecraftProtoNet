@@ -2,9 +2,9 @@
 @using Bot.Webcore.Services
 @implements IDisposable
 
-<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl p-6 flex flex-col gap-8 h-full">
+<div class="bg-slate-900/40 backdrop-blur-md rounded-md border border-slate-800/80 shadow-md p-6 flex flex-col gap-8 h-full">
     <div class="flex items-center gap-3">
-        <div class="flex px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20">
+        <div class="flex px-2 py-1 bg-rose-500/10 rounded border border-rose-500/20">
             <i class="ph-duotone ph-heartbeat text-xl text-rose-400"></i>
         </div>
         <h2 class="text-lg font-bold text-slate-100 tracking-tight">Vitals & Navigation</h2>
@@ -72,7 +72,7 @@
                 var isCalculating = pathingBehavior?.GetInProgress() != null;
                 var goal = pathingBehavior?.GetGoal();
             }
-            <div class="bg-slate-950/40 rounded-2xl border border-slate-800/60 p-5 shadow-inner group mt-2">
+            <div class="bg-slate-950/40 rounded-md border border-slate-800/60 p-5 shadow-inner group mt-2">
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-2">
                         <i class="ph-duotone ph-compass text-slate-500 group-hover:text-blue-400 transition-colors"></i>
@@ -87,7 +87,7 @@
                 <div class="space-y-4">
                     @if (isCalculating)
                     {
-                        <div class="flex items-center gap-3 p-3 bg-blue-500/5 rounded-xl border border-blue-500/20">
+                        <div class="flex items-center gap-3 p-3 bg-blue-500/5 rounded border border-blue-500/20">
                             <i class="ph-duotone ph-spinner-gap animate-spin text-blue-400 text-lg"></i>
                             <span class="text-[11px] font-bold text-blue-300 uppercase tracking-tight">Calculating optimal path...</span>
                         </div>
@@ -95,7 +95,7 @@
 
                     @if (goal != null)
                     {
-                        <div class="p-3 bg-purple-500/5 rounded-xl border border-purple-500/20">
+                        <div class="p-3 bg-purple-500/5 rounded border border-purple-500/20">
                             <p class="text-[9px] font-black text-purple-500/60 uppercase tracking-widest mb-1.5">Primary Goal</p>
                             <div class="flex items-start gap-2">
                                 <i class="ph-duotone ph-flag text-purple-400 mt-0.5"></i>

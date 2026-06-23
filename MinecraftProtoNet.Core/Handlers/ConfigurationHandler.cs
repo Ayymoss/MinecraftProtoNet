@@ -90,6 +90,8 @@ public class ConfigurationHandler(
         InitializeBiomesFromServerRegistry(client);
         await InitializeItemsAsync();
         await InitializeEntityTypesAsync();
+        InitializeEnchantmentsFromServerRegistry(client);
+        InitializeMobEffectsFromServerRegistry(client);
 
         // ClientInformation is already sent early in LoginHandler (matching vanilla timing).
         // Signal configuration complete
@@ -107,6 +109,41 @@ public class ConfigurationHandler(
     {
         var blockStates = await registryDataLoader.LoadBlockStatesAsync();
         ClientState.InitializeBlockStateRegistry(blockStates);
+
+        var blockDefinitions = await registryDataLoader.LoadBlockDefinitionsAsync();
+        ClientState.InitializeBlockDefinitions(blockDefinitions);
+
+        var blockHardness = await registryDataLoader.LoadBlockHardnessAsync();
+        ClientState.InitializeBlockHardness(blockHardness);
+    }
+
+    private static void InitializeEnchantmentsFromServerRegistry(IMinecraftClient client)
+    {
+        // The enchantment registry's ordered keys give each enchant its holder index — the key used in an
+        // item's Enchantments component map. Sent during configuration like any synced datapack registry.
+        if (client.State.RegistryKeyOrder.TryGetValue("minecraft:enchantment", out var orderedKeys))
+        {
+            var map = new Dictionary<string, int>(orderedKeys.Count);
+            for (int i = 0; i < orderedKeys.Count; i++)
+            {
+                map[orderedKeys[i]] = i;
+            }
+            ClientState.InitializeEnchantmentRegistry(map);
+        }
+    }
+
+    private static void InitializeMobEffectsFromServerRegistry(IMinecraftClient client)
+    {
+        // mob_effect registry's ordered keys give each effect its holder index (the id in UpdateMobEffect packets).
+        if (client.State.RegistryKeyOrder.TryGetValue("minecraft:mob_effect", out var orderedKeys))
+        {
+            var map = new Dictionary<string, int>(orderedKeys.Count);
+            for (int i = 0; i < orderedKeys.Count; i++)
+            {
+                map[orderedKeys[i]] = i;
+            }
+            ClientState.InitializeMobEffectRegistry(map);
+        }
     }
 
     private static void InitializeBiomesFromServerRegistry(IMinecraftClient client)

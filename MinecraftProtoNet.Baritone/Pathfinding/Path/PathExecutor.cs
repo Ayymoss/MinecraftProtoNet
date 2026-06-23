@@ -109,7 +109,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                     string.Join("; ", movement.GetValidPositions().Select(p => $"({p.X},{p.Y},{p.Z})")));
 
                 bool foundLagPos = false;
-                for (int i = _pathPosition - 1; i >= 0; i--)
+                // Reference: PathExecutor.java:102 - scan forward from 0 (earliest matching position).
+                // With PA1's loop-detection enforcing unique positions, at most one matches.
+                for (int i = 0; i < _pathPosition && i < path.Length(); i++)
                 {
                     if (IsInValidPositions(((MovementType)path.Movements()[i]).GetValidPositions(), whereAmI))
                     {
@@ -123,7 +125,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                         break;
                     }
                 }
-                if (foundLagPos) continue;
+                // Reference: PathExecutor.java:111 - after a lag rewind, return false (don't reprocess this
+                // tick); next tick re-enters at the rewound position, letting state settle after the teleport.
+                if (foundLagPos) return false;
 
                 bool foundSkipPos = false;
                 for (int i = _pathPosition + 3; i < path.Length() - 1; i++)
@@ -137,7 +141,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                         break;
                     }
                 }
-                if (foundSkipPos) continue;
+                // Reference: PathExecutor.java:124 - after a skip-forward, return false (Java does not recurse
+                // here, unlike the movement-SUCCESS case below); next tick processes the new position.
+                if (foundSkipPos) return false;
 
                 _logger.LogDebug("[PathExec] No valid position found, executing movement anyway");
             }
@@ -181,6 +187,18 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 _toBreak = newBreak; _toPlace = newPlace; _toWalkInto = newWalkInto; _recalcBP = false;
             }
 
+            // Reference: PathExecutor.java:185-192 - pause if the next movement's destination is at the
+            // edge of the loaded chunks, so we don't commit to walking blind into ungenerated terrain.
+            if (_pathPosition < path.Movements().Count - 1)
+            {
+                var next = path.Movements()[_pathPosition + 1];
+                if (!bsi.WorldContainsLoadedChunk(next.GetDest().X, next.GetDest().Z))
+                {
+                    ClearKeys();
+                    return true;
+                }
+            }
+
             bool canCancel = movement.SafeToCancel();
             if (_costEstimateIndex == null || _costEstimateIndex != _pathPosition)
             {
@@ -195,6 +213,15 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
 
             double currentCost = movement.RecalculateCost(context);
             if (currentCost >= ActionCosts.CostInf && canCancel) { Cancel(); return true; }
+            // Reference: PathExecutor.java:212-218 - cancel if a (not-calculated-while-loaded) movement has
+            // degraded by more than maxCostIncrease vs its cached estimate (a cache error, not path interference).
+            if (!movement.CalculatedWhileLoaded()
+                && currentCost - _currentMovementOriginalCostEstimate > BaritoneSettings.Settings().MaxCostIncrease.Value
+                && canCancel)
+            {
+                Cancel();
+                return true;
+            }
             if (ShouldPause()) { ClearKeys(); return true; }
 
             var movementStatus = movement.Update();
@@ -284,6 +311,15 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 }
                 if (CanSprintFromDescendInto(current, next, context))
                 {
+                    // Reference: PathExecutor.java:419-425 - don't sprint into a descend chain we can't sprint through
+                    if (next is MovementDescend && _pathPosition < path.Length() - 3)
+                    {
+                        var nextNext = path.Movements()[_pathPosition + 2];
+                        if (nextNext is MovementDescend && !CanSprintFromDescendInto(next, nextNext, context))
+                        {
+                            return SkipResult.NoSprint;
+                        }
+                    }
                     if (_ctx.PlayerFeet()?.Equals(current.GetDest()) == true)
                     {
                         _pathPosition++; OnChangeInPathPosition(); return SkipResult.Skipped;
@@ -293,7 +329,7 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             }
         }
 
-        if (current is MovementAscend && _pathPosition != 0)
+        if (current is MovementAscend ascendCur && _pathPosition != 0)
         {
             var prev = path.Movements()[_pathPosition - 1];
             if (prev is MovementDescend && prev.GetDirection().X == current.GetDirection().X && prev.GetDirection().Z == current.GetDirection().Z)
@@ -305,6 +341,12 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                     return SkipResult.Sprint;
                 }
             }
+            // Reference: PathExecutor.java:449-451 - continue sprinting through a traverse->ascend sprint sequence
+            if (_pathPosition < path.Length() - 2 && prev is MovementTraverse prevTraverse &&
+                SprintableAscend(prevTraverse, ascendCur, path.Movements()[_pathPosition + 1], context))
+            {
+                return SkipResult.Sprint;
+            }
         }
         
         if (current is MovementFall fall)
@@ -312,9 +354,17 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             var data = OverrideFall(fall, context);
             if (data != null)
             {
-                if (_ctx.PlayerFeet()?.Equals(data.Value.Pos) == true)
+                var fallDest = data.Value.Pos;
+                // Reference: PathExecutor.java:457-461 - guard against an illegal fall destination before
+                // IndexOf (which would otherwise set _pathPosition = -1 and corrupt the executor).
+                if (!path.Positions().Contains(fallDest))
                 {
-                    _pathPosition = path.Positions().ToList().IndexOf(data.Value.Pos);
+                    throw new InvalidOperationException(
+                        $"Fall override at {fall.GetSrc()} returned illegal destination {fallDest}");
+                }
+                if (_ctx.PlayerFeet()?.Equals(fallDest) == true)
+                {
+                    _pathPosition = path.Positions().ToList().IndexOf(fallDest);
                     OnChangeInPathPosition(); return SkipResult.Skipped;
                 }
                 ClearKeys();
@@ -423,12 +473,19 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
         if (current == null) return false;
         var player = _ctx.Player() as Entity;
         if (player != null && !player.IsOnGround) return false;
+        var playerFeet = _ctx.PlayerFeet();
+        if (playerFeet == null) return false;
+        // Reference: PathExecutor.java:283-285 - sketchy situation, maybe parkouring
+        if (!MovementHelper.CanWalkOn(_ctx, playerFeet.Below())) return false;
+        // Reference: PathExecutor.java:286-289 - suffocating?
+        if (!MovementHelper.CanWalkThrough(_ctx, playerFeet) || !MovementHelper.CanWalkThrough(_ctx, playerFeet.Above())) return false;
+        // Reference: PathExecutor.java:290-292 - don't pause a movement that isn't safe to cancel
+        if (!path.Movements()[_pathPosition].SafeToCancel()) return false;
         var currentBest = current.BestPathSoFar();
         if (currentBest == null) return false;
         var positions = currentBest.Positions();
         if (positions.Count < 3) return false;
-        var playerFeet = _ctx.PlayerFeet();
-        if (playerFeet == null) return false;
+        // the first block of the next path will always overlap
         return positions.Skip(1).Any(p => p.Equals(playerFeet));
     }
 
@@ -436,7 +493,14 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
     {
         if (status.Distance > leniency)
         {
-            if (_pathPosition < path.Movements().Count && path.Movements()[_pathPosition] is MovementFall) return false;
+            // Reference: PathExecutor.java:303-311 - midair in a fall we're far from both ends but not off path;
+            // ignore Y by using flat distance to the fall destination.
+            if (_pathPosition < path.Movements().Count && path.Movements()[_pathPosition] is MovementFall)
+            {
+                var fallDest = path.Positions()[_pathPosition + 1]; // [_pathPosition] is the block we fell off of
+                var player = _ctx.Player() as Entity;
+                return player != null && VecUtils.EntityFlatDistanceToCenter(player, fallDest) >= leniency;
+            }
             return true;
         }
         return false;

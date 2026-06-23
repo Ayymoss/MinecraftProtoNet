@@ -23,6 +23,7 @@ using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Baritone.Api.Utils.Input;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
 using BaritoneInput = MinecraftProtoNet.Baritone.Api.Utils.Input.Input;
 
@@ -90,25 +91,41 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
         var world = Ctx.World() as Level;
         if (world != null)
         {
+            // Reference: MovementFall.java:98-100 - sneak when standing on a magma block and all stepping
+            // blocks are walk-through (so we won't be held in place by a wall).
+            if (playerFeet != null
+                && BlockStateInterface.Get(Ctx, playerFeet.Below()).IsMagmaBlock
+                && MovementHelper.SteppingOnBlocks(Ctx).All(b => MovementHelper.CanWalkThrough(Ctx, b)))
+            {
+                state.SetInput(BaritoneInput.Sneak, true);
+            }
+
             var destState = world.GetBlockAt(Dest.X, Dest.Y, Dest.Z);
             bool isWater = destState != null && MovementHelper.IsWater(destState);
             bool willPlace = WillPlaceBucket();
-            
-            if (!isWater && willPlace && !playerFeet?.Equals(Dest) == true)
+
+            // Reference: MovementFall.java:103-117 - MLG water-bucket clutch
+            if (!isWater && willPlace && playerFeet != null && !playerFeet.Equals(Dest))
             {
                 var context = new CalculationContext(Baritone);
+                // context.HasWaterBucket is false in the Nether (CheckWaterBucket guards the dimension),
+                // which subsumes java's explicit `dimension() == NETHER` check.
                 if (!context.HasWaterBucket)
                 {
                     return state.SetStatus(MovementStatus.Unreachable);
                 }
-                
-                // Select water bucket and aim down
-                // TODO: Select water bucket slot when item registry is available
-                targetRotation = new Rotation(toDest.GetYaw(), 90.0f);
-                
-                if (Ctx.IsLookingAt(Dest) || Ctx.IsLookingAt(Dest.Below()))
+
+                // Only aim down + place once within reach of dest AND actually airborne (java :108).
+                // Without this gate the bot aims the bucket too early, while still falling from far above.
+                if (player.Position.Y - Dest.Y < Ctx.PlayerController().GetBlockReachDistance() && !player.IsOnGround)
                 {
-                    state.SetInput(BaritoneInput.ClickRight, true);
+                    // TODO: select the water bucket hotbar slot (item-selection infra)
+                    targetRotation = new Rotation(toDest.GetYaw(), 90.0f);
+
+                    if (Ctx.IsLookingAt(Dest) || Ctx.IsLookingAt(Dest.Below()))
+                    {
+                        state.SetInput(BaritoneInput.ClickRight, true);
+                    }
                 }
             }
             
@@ -121,25 +138,31 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
                 state.SetTarget(new MovementState.MovementTarget(toDest, false));
             }
             
-            if (playerFeet != null && playerFeet.Equals(Dest))
+            // Reference: MovementFall.java:123-140
+            if (playerFeet != null && playerFeet.Equals(Dest)
+                && (player.Position.Y - playerFeet.Y < 0.094 || isWater)) // 0.094 because lilypads
             {
-                double yDiff = player.Position.Y - playerFeet.Y;
-                if (yDiff < 0.094 || isWater) // 0.094 because lilypads
+                if (isWater) // only still water — flowing water can't be picked up with a bucket
                 {
-                    if (isWater)
+                    if (HasEmptyBucketInHotbar())
                     {
-                        // Try to pick up water with empty bucket
-                        // TODO: Select empty bucket slot when item registry is available
+                        // TODO: select the empty bucket hotbar slot (item-selection infra)
                         if (player.Velocity.Y >= 0)
                         {
-                            state.SetInput(BaritoneInput.ClickRight, true);
+                            return state.SetInput(BaritoneInput.ClickRight, true);
                         }
                         return state;
                     }
-                    else
+                    else if (player.Velocity.Y >= 0)
                     {
+                        // No empty bucket to recover — once we've stopped sinking, the fall is done.
                         return state.SetStatus(MovementStatus.Success);
                     }
+                    // else: no bucket and still sinking — fall through to stay centered (this water may be flowing under the surface)
+                }
+                else
+                {
+                    return state.SetStatus(MovementStatus.Success);
                 }
             }
             
@@ -154,37 +177,40 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
                 state.SetInput(BaritoneInput.MoveForward, true);
             }
 
-            var avoid = Avoid();
-            Vector3<int> avoidVec;
-            if (!avoid.HasValue)
+            // Reference: MovementFall.java:148-162 - bias away from an adjacent ladder while falling
+            var avoidDir = Avoid();
+            Vector3<int> avoid;
+            if (avoidDir == null)
             {
-                avoidVec = new Vector3<int>(Src.X - Dest.X, 0, Src.Z - Dest.Z);
+                avoid = new Vector3<int>(Src.X - Dest.X, Src.Y - Dest.Y, Src.Z - Dest.Z); // src.subtract(dest); only x/z used
             }
             else
             {
-                // TODO: Convert BlockFace to unit vector
-                avoidVec = new Vector3<int>(0, 0, 0); 
+                var n = Direction.GetNormal(avoidDir.Value);
+                avoid = new Vector3<int>(n.X, n.Y, n.Z);
+                double dist = Math.Abs(avoid.X * (destCenter.X - avoid.X / 2.0 - player.Position.X))
+                            + Math.Abs(avoid.Z * (destCenter.Z - avoid.Z / 2.0 - player.Position.Z));
+                if (dist < 0.6)
+                {
+                    state.SetInput(BaritoneInput.MoveForward, true);
+                }
+                else if (!player.IsOnGround)
+                {
+                    state.SetInput(BaritoneInput.Sneak, false);
+                }
             }
-            
-            if (targetRotation == null && playerFeet != null)
+
+            if (targetRotation == null)
             {
-                var avoidOffset = new Vector3<double>(avoidVec.X * 0.125, 0, avoidVec.Z * 0.125);
-                var destCenterOffset = new Vector3<double>(destCenter.X + avoidOffset.X, destCenter.Y, destCenter.Z + avoidOffset.Z);
+                var destCenterOffset = new Vector3<double>(destCenter.X + 0.125 * avoid.X, destCenter.Y, destCenter.Z + 0.125 * avoid.Z);
                 var playerHead2 = Ctx.PlayerHead();
                 var playerRot2 = Ctx.PlayerRotations();
                 if (playerHead2 != null && playerRot2 != null)
                 {
-                    double diffX = player.Position.X - destCenterOffset.X;
-                    double diffZ = player.Position.Z - destCenterOffset.Z;
-                    double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
-
-                    if (!playerFeet.Equals(Dest) || ab > 0.25)
-                    {
-                        state.SetTarget(new MovementState.MovementTarget(
-                            Utils.RotationUtils.CalcRotationFromVec3d(playerHead2, destCenterOffset, playerRot2),
-                            false
-                        ));
-                    }
+                    state.SetTarget(new MovementState.MovementTarget(
+                        Utils.RotationUtils.CalcRotationFromVec3d(playerHead2, destCenterOffset, playerRot2),
+                        false
+                    ));
                 }
             }
         }
@@ -192,6 +218,7 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
         return state;
     }
 
+    // Reference: MovementFall.java:166-174 - if falling alongside a ladder, return its FACING direction
     private MinecraftProtoNet.Core.Enums.BlockFace? Avoid()
     {
         var world = Ctx.World() as Level;
@@ -201,13 +228,44 @@ public class MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos
         for (int i = 0; i < 15; i++)
         {
             var blockState = world.GetBlockAt(feet.X, feet.Y - i, feet.Z);
-            if (blockState != null && blockState.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase))
+            if (blockState != null && blockState.IsLadder)
             {
-                // TODO: Get ladder facing direction
+                if (blockState.Properties.TryGetValue("facing", out var facing))
+                {
+                    return facing.ToLowerInvariant() switch
+                    {
+                        "north" => MinecraftProtoNet.Core.Enums.BlockFace.North,
+                        "south" => MinecraftProtoNet.Core.Enums.BlockFace.South,
+                        "west" => MinecraftProtoNet.Core.Enums.BlockFace.West,
+                        "east" => MinecraftProtoNet.Core.Enums.BlockFace.East,
+                        _ => (MinecraftProtoNet.Core.Enums.BlockFace?)null
+                    };
+                }
                 return null;
             }
         }
         return null;
+    }
+
+    // Reference: MovementFall.java:125 - is an empty bucket available in the hotbar (to recover the MLG water)
+    private bool HasEmptyBucketInHotbar()
+    {
+        var player = Ctx.Player() as Entity;
+        if (player == null) return false;
+        var itemRegistry = Baritone.GetItemRegistryService();
+        for (int i = 36; i <= 44; i++)
+        {
+            var slot = player.Inventory.GetSlot((short)i);
+            if (slot.ItemId != null && slot.ItemCount > 0)
+            {
+                var name = itemRegistry.GetItemName(slot.ItemId.Value);
+                if (name != null && name.Equals("minecraft:bucket", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected override bool SafeToCancel(MovementState state)

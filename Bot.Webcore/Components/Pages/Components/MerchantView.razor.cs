@@ -23,7 +23,7 @@ public partial class MerchantView
 
     private string GetTradeClass(bool isSelected, bool isDisabled)
     {
-        var baseClass = "flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 cursor-pointer group ";
+        var baseClass = "flex items-center gap-4 p-4 rounded-md transition-all duration-200 cursor-pointer group ";
 
         if (isDisabled)
             return baseClass + "bg-slate-900/20 opacity-50 cursor-not-allowed border border-slate-800/40 grayscale-[0.5]";
@@ -35,7 +35,7 @@ public partial class MerchantView
 
     private string GetItemSlotClass(bool isResult)
     {
-        var baseClass = "relative w-12 h-12 rounded-xl flex items-center justify-center p-1 transition-all duration-200 overflow-hidden ";
+        var baseClass = "relative w-12 h-12 rounded flex items-center justify-center p-1 transition-all duration-200 overflow-hidden ";
         
         if (isResult)
             return baseClass + "bg-amber-500/10 border border-amber-500/30 group-hover:border-amber-400";

@@ -27,6 +27,8 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(DamageEventPacket))]
 [HandlesPacket(typeof(SetEntityDataPacket))]
 [HandlesPacket(typeof(UpdateAttributesPacket))]
+[HandlesPacket(typeof(UpdateMobEffectPacket))]
+[HandlesPacket(typeof(RemoveMobEffectPacket))]
 public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physicsService) : IPacketHandler
 {
     /// <summary>
@@ -49,10 +51,28 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(EntityHandler));
 
+    private static Entity? ResolveEntity(IMinecraftClient client, int entityId)
+    {
+        var localPlayer = client.State.LocalPlayer;
+        if (localPlayer.HasEntity && localPlayer.Entity.EntityId == entityId)
+        {
+            return localPlayer.Entity;
+        }
+        return client.State.Level.GetEntityOfId(entityId);
+    }
+
     public async Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
         switch (packet)
         {
+            case UpdateMobEffectPacket updateMobEffect:
+                ResolveEntity(client, updateMobEffect.EntityId)?.AddEffect(updateMobEffect.EffectId, updateMobEffect.Amplifier);
+                break;
+
+            case RemoveMobEffectPacket removeMobEffect:
+                ResolveEntity(client, removeMobEffect.EntityId)?.RemoveEffect(removeMobEffect.EffectId);
+                break;
+
             case AddEntityPacket addEntityPacket:
                 // Track player entities in PlayerRegistry
                 bool isPlayer = addEntityPacket.Type == EntityTypes.Player;

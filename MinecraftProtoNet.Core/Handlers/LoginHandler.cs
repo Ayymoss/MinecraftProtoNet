@@ -31,10 +31,14 @@ public class LoginHandler : IPacketHandler
         {
             case DisconnectPacket disconnectPacket:
                 _logger.LogWarning("Disconnected: {Reason}", disconnectPacket.Reason);
+                client.State.LastDisconnectReason = disconnectPacket.Reason?.ToString();
+                client.State.LastDisconnectAt = DateTimeOffset.UtcNow;
                 await client.DisconnectAsync();
                 break;
             case LoginDisconnectPacket disconnectLoginPacket:
                 _logger.LogWarning("Login disconnected: {Reason}", disconnectLoginPacket.Reason);
+                client.State.LastDisconnectReason = disconnectLoginPacket.Reason?.ToString();
+                client.State.LastDisconnectAt = DateTimeOffset.UtcNow;
                 await client.DisconnectAsync();
                 break;
             case HelloPacket helloPacket:

@@ -21,6 +21,9 @@ using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.State;
+using CoreAxis = MinecraftProtoNet.Core.Physics.Axis;
+using BlockShapeRegistry = MinecraftProtoNet.Core.Physics.BlockShapeRegistry;
+using CoreShapes = MinecraftProtoNet.Core.Physics.Shapes.Shapes;
 
 namespace MinecraftProtoNet.Baritone.Utils;
 
@@ -199,15 +202,24 @@ public static class RotationUtils
         var state = world.GetBlockAt(pos.X, pos.Y, pos.Z);
         if (state == null) return null;
 
-        // For now, use simple block center calculation
-        // Full implementation would use VoxelShape calculations
+        // Reference: RotationUtils.java:210-223 - interpolate each side-center over the block's real
+        // (outline) shape bounds, so partial blocks (slabs/stairs/snow/fences) aim at their actual
+        // faces instead of full-cube faces that may sit in empty air.
+        var shape = BlockShapeRegistry.Shared.GetOutlineShape(state);
+        if (shape.IsEmpty())
+        {
+            shape = CoreShapes.Block();
+        }
+        double minX = shape.Min(CoreAxis.X), maxX = shape.Max(CoreAxis.X);
+        double minY = shape.Min(CoreAxis.Y), maxY = shape.Max(CoreAxis.Y);
+        double minZ = shape.Min(CoreAxis.Z), maxZ = shape.Max(CoreAxis.Z);
         for (int i = 0; i < BlockSideMultipliers.Length; i++)
         {
             var sideOffset = BlockSideMultipliers[i];
             var offsetPos = new Vector3<double>(
-                pos.X + sideOffset.X,
-                pos.Y + sideOffset.Y,
-                pos.Z + sideOffset.Z
+                pos.X + minX * sideOffset.X + maxX * (1 - sideOffset.X),
+                pos.Y + minY * sideOffset.Y + maxY * (1 - sideOffset.Y),
+                pos.Z + minZ * sideOffset.Z + maxZ * (1 - sideOffset.Z)
             );
             possibleRotation = ReachableOffset(ctx, pos, offsetPos, blockReachDistance, wouldSneak);
             if (possibleRotation != null)

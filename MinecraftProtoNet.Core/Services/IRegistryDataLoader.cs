@@ -14,6 +14,18 @@ public interface IRegistryDataLoader
     Task<Dictionary<int, BlockState>> LoadBlockStatesAsync();
 
     /// <summary>
+    /// Loads block-class definitions (block-type identity + fluid) from static files.
+    /// </summary>
+    /// <returns>A dictionary mapping block names to their <see cref="BlockDefinition"/>.</returns>
+    Task<Dictionary<string, BlockDefinition>> LoadBlockDefinitionsAsync();
+
+    /// <summary>
+    /// Loads per-block hardness (destroy speed) + requiresCorrectToolForDrops from static files.
+    /// </summary>
+    /// <returns>A dictionary mapping block names to their <see cref="BlockHardness"/>.</returns>
+    Task<Dictionary<string, BlockHardness>> LoadBlockHardnessAsync();
+
+    /// <summary>
     /// Loads item registry from static files.
     /// </summary>
     /// <returns>A dictionary mapping protocol IDs to item names.</returns>

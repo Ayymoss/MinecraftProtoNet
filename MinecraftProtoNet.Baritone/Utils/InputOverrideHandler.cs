@@ -132,8 +132,9 @@ public class InputOverrideHandler : Behavior, IInputOverrideHandler
     /// </summary>
     private bool InControl()
     {
-        // Check if any movement input is forced
-        foreach (var input in new[] { Input.MoveForward, Input.MoveBack, Input.MoveLeft, Input.MoveRight, Input.Sneak, Input.Jump, Input.Sprint })
+        // Check if any movement input is forced. Reference: InputOverrideHandler.java:110 - SPRINT is excluded
+        // (sprint alone shouldn't count as "in control"; it's resolved per-tick from movement state).
+        foreach (var input in new[] { Input.MoveForward, Input.MoveBack, Input.MoveLeft, Input.MoveRight, Input.Sneak, Input.Jump })
         {
             if (IsInputForcedDown(input))
             {

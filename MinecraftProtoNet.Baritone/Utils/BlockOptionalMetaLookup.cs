@@ -17,7 +17,6 @@
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/BlockOptionalMetaLookup.java
  */
 
-using System.Collections.Immutable;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 
 namespace MinecraftProtoNet.Baritone.Utils;
@@ -28,20 +27,14 @@ namespace MinecraftProtoNet.Baritone.Utils;
 /// </summary>
 public class BlockOptionalMetaLookup
 {
-    private readonly ImmutableHashSet<BlockState> _blockStateSet;
     private readonly string[] _blockNames;
 
     public BlockOptionalMetaLookup(params string[] blockNames)
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/BlockOptionalMetaLookup.java:34-42
+        // Reference: BlockOptionalMetaLookup.java:34-42 - in Java each entry is a Block; matching is by
+        // block identity. We store block names and match exactly (NOT substring — "stone" must not match
+        // cobblestone/redstone). Per-state metadata (BlockOptionalMeta) is not modelled here.
         _blockNames = blockNames;
-        var blockStates = new HashSet<BlockState>();
-        
-        // Convert block names to BlockState
-        // In Java, this uses Block.BLOCK_STATE_REGISTRY to get all states for each block name
-        // For now, we'll match by name string comparison since we don't have full block registry access
-        // The Has(BlockState) method will handle the matching
-        _blockStateSet = ImmutableHashSet<BlockState>.Empty;
     }
 
 
@@ -52,7 +45,7 @@ public class BlockOptionalMetaLookup
 
     public bool Has(BlockState state)
     {
-        return _blockStateSet.Contains(state) || _blockNames.Any(name => state.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        return state != null && _blockNames.Any(name => state.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
     public bool Has(object stack)

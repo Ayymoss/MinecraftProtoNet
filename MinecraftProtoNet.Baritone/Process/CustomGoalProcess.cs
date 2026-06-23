@@ -21,6 +21,7 @@ using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Pathing.Goals;
 using MinecraftProtoNet.Baritone.Api.Process;
 using MinecraftProtoNet.Baritone.Utils;
+using MinecraftProtoNet.Core.Core;
 
 namespace MinecraftProtoNet.Baritone.Process;
 
@@ -102,10 +103,11 @@ public class CustomGoalProcess : BaritoneProcessHelper, ICustomGoalProcess
                     // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/process/CustomGoalProcess.java:93-95
                     // Check disconnectOnArrival, notificationOnPathComplete
                     var settings = Core.Baritone.Settings();
-                    if (settings.DisconnectOnArrival.Value)
+                    // Reference: CustomGoalProcess.java:93-95 - ctx.world().disconnect() on arrival.
+                    if (settings.DisconnectOnArrival.Value && Ctx.Minecraft() is IMinecraftClient client)
                     {
-                        // TODO: Implement disconnect when client disconnect functionality is available
                         LogDirect("Goal reached, disconnecting...");
+                        _ = client.DisconnectAsync(); // fire-and-forget: process tick is synchronous
                     }
                     if (settings.NotificationOnPathComplete.Value)
                     {

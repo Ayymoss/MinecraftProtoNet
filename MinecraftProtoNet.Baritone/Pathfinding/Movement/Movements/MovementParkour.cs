@@ -115,30 +115,30 @@ public class MovementParkour : Movement
         }
         
         var standingOn = context.Get(x, y - 1, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementParkour.java:114
-        // Check for vine, ladder, stair, bottom slab
-        string standingOnName = standingOn.Name;
-        bool isClimbable = standingOnName.Contains("vine", StringComparison.OrdinalIgnoreCase) ||
-                          standingOnName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                          standingOn.IsStairs ||
-                          (standingOn.IsSlab && !standingOn.IsTop);
-        if (isClimbable)
-        {
-            return; // Can't parkour from climbable blocks
-        }
-        if (context.AssumeWalkOnWater && standingOn.IsLiquid)
+        // Reference: MovementParkour.java:94 - can't parkour from climbable/stairs/bottom slab
+        if (MovementHelper.IsClimbable(standingOn) || standingOn.IsStairs || MovementHelper.IsBottomSlab(standingOn))
         {
             return;
         }
-        if (context.Get(x, y, z).IsLiquid)
+        // Reference: MovementParkour.java:98 - can't jump from (frozen) water with assumeWalkOnWater
+        // (getFluidState().isEmpty() == has-fluid; MovementHelper.IsLiquid is waterlogged-aware)
+        if (context.AssumeWalkOnWater && MovementHelper.IsLiquid(standingOn))
         {
-            return; // can't jump out of water
+            return;
         }
-        
+        // Reference: MovementParkour.java:101 - can't jump out of water
+        if (MovementHelper.IsLiquid(context.Get(x, y, z)))
+        {
+            return;
+        }
+
         int maxJump;
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java:104-113
-        bool onSoulSand = standingOnName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
-        if (onSoulSand)
+        // Reference: MovementParkour.java:105-113
+        if (context.AllowWalkOnMagmaBlocks && standingOn.IsMagmaBlock)
+        {
+            maxJump = 2;
+        }
+        else if (standingOn.IsSoulSand)
         {
             maxJump = 2; // 1 block gap
         }
@@ -187,11 +187,10 @@ public class MovementParkour : Movement
 
             // Check for flat landing position
             var landingOn = context.Bsi.Get0(destX, y - 1, destZ);
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementParkour.java:143-157
+            // Reference: MovementParkour.java:144-147
             // farmland needs to be canWalkOn otherwise farm can never work at all, but we want to specifically disallow ending a jump on farmland
             // frostwalker works here because we can't jump from possibly unfrozen water
-            string landingOnName = landingOn.Name;
-            bool isFarmland = landingOnName.Contains("farmland", StringComparison.OrdinalIgnoreCase);
+            bool isFarmland = landingOn.Name.Equals("minecraft:farmland", StringComparison.OrdinalIgnoreCase);
             bool canUseFrostWalker = Math.Min(16, context.FrostWalker + 2) >= i && MovementHelper.CanUseFrostWalker(context, landingOn);
             if ((!isFarmland && MovementHelper.CanWalkOn(context, destX, y - 1, destZ, landingOn)) || canUseFrostWalker)
             {
@@ -333,6 +332,12 @@ public class MovementParkour : Movement
         {
             state.SetInput(Input.Sprint, true);
         }
+        // Reference: MovementParkour.java:265-267 - sneak when magma blocks are under feet
+        if (Core.Baritone.Settings().AllowWalkOnMagmaBlocks.Value
+            && feet != null && BlockStateInterface.Get(Ctx, feet.Below()).IsMagmaBlock)
+        {
+            state.SetInput(Input.Sneak, true);
+        }
 
         MovementHelper.MoveTowards(Ctx, state, Dest);
 
@@ -340,11 +345,10 @@ public class MovementParkour : Movement
 
         if (feet != null && feet.Equals(Dest))
         {
-            // Reference: MovementParkour.java:267-275
+            // Reference: MovementParkour.java:271-276
             var destBlock = BlockStateInterface.Get(Ctx, Dest);
-            string destName = destBlock.Name;
-            if (destName.Contains("vine", StringComparison.OrdinalIgnoreCase) ||
-                destName.Contains("ladder", StringComparison.OrdinalIgnoreCase))
+            if (destBlock.Name.Equals("minecraft:vine", StringComparison.OrdinalIgnoreCase) ||
+                destBlock.Name.Equals("minecraft:ladder", StringComparison.OrdinalIgnoreCase))
             {
                 // it physically hurt me to add support for parkour jumping onto a vine
                 // but i did it anyway

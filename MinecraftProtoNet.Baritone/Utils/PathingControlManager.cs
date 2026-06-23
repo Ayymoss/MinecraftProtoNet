@@ -148,14 +148,7 @@ public class PathingControlManager : IPathingControlManager
             pathingBehavior.CancelSegmentIfSafe();
         }
         
-        // Debug logging - only log occasionally to reduce spam (every 20 ticks = ~1 second)
-        var currentPath = pathingBehavior.GetCurrent()?.GetPath();
-        var tickCount = currentPath?.Length() ?? 0;
-        if (tickCount % 20 == 0 || _command.CommandType != PathingCommandType.SetGoalAndPath)
-        {
-            _baritone.GetGameEventHandler().LogDirect($"PathingControlManager.PreTick: Processing {_command.CommandType} from {_inControlThisTick?.DisplayName() ?? "unknown"}, goal={_command.Goal}");
-        }
-        
+        // Reference: PathingControlManager.java - no per-tick logging here (debug spam removed)
         switch (_command.CommandType)
         {
             case PathingCommandType.SetGoalAndPause:
@@ -175,15 +168,9 @@ public class PathingControlManager : IPathingControlManager
                 // Only start pathfinding if not already pathing
                 var isPathing = pathingBehavior.IsPathing();
                 var inProgress = pathingBehavior.GetInProgress();
-                _baritone.GetGameEventHandler().LogDirect($"PathingControlManager: ForceRevalidateGoalAndPath - isPathing={isPathing}, inProgress={inProgress != null}");
                 if (!isPathing && inProgress == null)
                 {
-                    _baritone.GetGameEventHandler().LogDirect("PathingControlManager: Starting pathfinding via SecretInternalSetGoalAndPath");
                     pathingBehavior.SecretInternalSetGoalAndPath(_command);
-                }
-                else
-                {
-                    _baritone.GetGameEventHandler().LogDirect("PathingControlManager: Skipping pathfinding start (already pathing or in progress)");
                 }
                 break;
             case PathingCommandType.SetGoalAndPath:

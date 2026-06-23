@@ -1,0 +1,61 @@
+@using MinecraftProtoNet.Core.Packets.Base.Definitions
+
+@*
+    Renders a player-head face for a skull item or a Hypixel custom-skin Bazaar item.
+    Chooses the source in this order:
+      1. <see cref="OverrideUrl"/>           — caller-supplied URL, bypasses everything.
+      2. Profile.UUID                        — mc-heads.net/avatar/{uuid}/{size}.
+      3. Profile textures URL hash           — mc-heads.net/avatar/{hash}/{size}.
+      4. Generic skull icon fallback.
+
+    mc-heads.net is a third-party avatar renderer; switch to crafatar.com by changing the
+    URL template below if Mojang's textures move.
+*@
+
+@if (FaceUrl is not null)
+{
+    <img src="@FaceUrl" alt="head"
+         width="@Size" height="@Size"
+         loading="lazy"
+         class="pixelated rounded-sm" />
+}
+else
+{
+    <div class="flex items-center justify-center bg-slate-800/60 rounded-sm border border-slate-700"
+         style="width:@(Size)px; height:@(Size)px;">
+        <i class="ph-duotone ph-skull text-slate-500" style="font-size:@(Size * 0.55)px;"></i>
+    </div>
+}
+
+@code {
+    [Parameter] public PlayerProfile? Profile { get; set; }
+    [Parameter] public string? OverrideUrl { get; set; }
+    [Parameter] public int Size { get; set; } = 32;
+
+    private string? FaceUrl
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(OverrideUrl)) return OverrideUrl;
+            if (Profile is null) return null;
+
+            // Prefer UUID — stable and ownership-persistent across skin changes.
+            if (Profile.Uuid.HasValue && Profile.Uuid.Value != Guid.Empty)
+            {
+                var id = Profile.Uuid.Value.ToString("N");
+                return $"https://mc-heads.net/avatar/{id}/{Size}";
+            }
+
+            // Fall back to the Mojang texture hash embedded in the base64 textures property.
+            var url = Profile.GetSkinTextureUrl();
+            if (!string.IsNullOrEmpty(url))
+            {
+                // Mojang texture URLs end with "/texture/{hash}" — mc-heads accepts the hash directly.
+                var slash = url.LastIndexOf('/');
+                var hash = slash >= 0 && slash < url.Length - 1 ? url[(slash + 1)..] : url;
+                return $"https://mc-heads.net/avatar/{hash}/{Size}";
+            }
+            return null;
+        }
+    }
+}

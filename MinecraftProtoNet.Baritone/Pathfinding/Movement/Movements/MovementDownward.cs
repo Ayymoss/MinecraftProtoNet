@@ -59,18 +59,11 @@ public class MovementDownward(IBaritone baritone, BetterBlockPos start, BetterBl
             return ActionCosts.CostInf;
         }
         var down = context.Get(x, y - 1, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDownward.java:62
-        // Check for ladder/vine
-        string downName = down.Name;
-        bool isClimbable = downName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                          downName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-        if (isClimbable)
+        // Reference: MovementDownward.java:62-64 - climbing down a ladder/vine
+        if (MovementHelper.IsClimbable(down))
         {
-            // Can descend on climbable blocks
             return ActionCosts.LadderDownOneCost;
         }
-        //     return ActionCosts.LadderDownOneCost;
-        // }
         return ActionCosts.FallNBlocksCost[1] + MovementHelper.GetMiningDurationTicks(context, x, y - 1, z, down, false);
     }
 

@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
 using MinecraftProtoNet.Core.Auth;
+using MinecraftProtoNet.Core.Auth.Authenticators;
 using MinecraftProtoNet.Core.Auth.Dtos;
+using MinecraftProtoNet.Core.Auth.Managers;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Base;
@@ -93,14 +95,35 @@ public class MinecraftClient : IMinecraftClient
 
     public async Task<bool> AuthenticateAsync()
     {
-        var authResult = await AuthenticationFlow.AuthenticateAsync();
+        // Resolve the active account (if any) and the shared MSAL authenticator from DI.
+        // If no active account is set, fail fast with a clear log so the UI can direct the
+        // user to /accounts instead of silently authenticating as whichever account happens
+        // to be first in the MSAL cache.
+        var accountManager = _serviceProvider.GetService<IAccountManager>();
+        var msAuth = _serviceProvider.GetService<MicrosoftAuthenticator>();
+
+        string? activeId = null;
+        if (accountManager != null)
+        {
+            activeId = await accountManager.GetActiveAccountIdAsync();
+            if (activeId is null)
+            {
+                _logger.LogError("No active Microsoft account selected. Add or select one in the web UI at /accounts.");
+                return false;
+            }
+        }
+
+        var authResult = msAuth != null
+            ? await AuthenticationFlow.AuthenticateAsync(msAuth, activeId)
+            : await AuthenticationFlow.AuthenticateAsync(activeId);
+
         if (authResult is null) return false;
         AuthResult = authResult;
-        
+
         // Sync local player info
         State.LocalPlayer.Uuid = authResult.Uuid;
         State.LocalPlayer.Username = authResult.Username;
-        
+
         return true;
     }
 
@@ -145,6 +168,11 @@ public class MinecraftClient : IMinecraftClient
         }
         IsConnected = true;
         State.ConnectedServerHost = host;
+        // Clear stale disconnect state from the previous session so the UI doesn't keep showing
+        // a reason from an earlier kick/ban after the user reconnects.
+        State.LastDisconnectReason = null;
+        State.LastDisconnectTranslateKey = null;
+        State.LastDisconnectAt = null;
 
         _ = Task.Run(() => ListenForPacketsAsync(_cancellationTokenSource.Token));
 

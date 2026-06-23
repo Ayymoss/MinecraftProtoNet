@@ -32,23 +32,10 @@ public static class RayTraceUtils
 {
     /// <summary>
     /// Performs a block raytrace with the specified rotations.
-    /// </summary>
-    public static RaycastHit? RayTraceTowards(Entity entity, Rotation rotation, double blockReachDistance)
-    {
-        return RayTraceTowards(entity, rotation, blockReachDistance, false);
-    }
-
-    /// <summary>
-    /// Performs a block raytrace with the specified rotations.
-    /// </summary>
-    public static RaycastHit? RayTraceTowards(Entity entity, Rotation rotation, double blockReachDistance, bool wouldSneak)
-    {
-        return RayTraceTowards(entity, null, rotation, blockReachDistance, wouldSneak);
-    }
-
-    /// <summary>
-    /// Performs a block raytrace with the specified rotations.
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/RayTraceUtils.java:48-63
+    /// Java sources the world from entity.level(); our Entity has no Level reference, so the caller passes it
+    /// explicitly. The former level-less overloads were removed (AIM9): they returned null = "no hit" always,
+    /// a silent footgun, and had no callers.
     /// </summary>
     public static RaycastHit? RayTraceTowards(Entity entity, Level? level, Rotation rotation, double blockReachDistance, bool wouldSneak)
     {

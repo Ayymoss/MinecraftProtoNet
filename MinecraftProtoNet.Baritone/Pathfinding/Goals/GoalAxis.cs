@@ -44,7 +44,8 @@ public class GoalAxis : Goal
         int lng = Math.Max(x, z);
         int diff = lng - shrt;
 
-        double flatAxisDistance = Math.Min(x, Math.Min(z, (int)(diff * Sqrt2Over2)));
+        // Reference: GoalAxis.java:40 - kept as double (no int cast) to match the Java heuristic exactly
+        double flatAxisDistance = Math.Min((double)x, Math.Min((double)z, diff * Sqrt2Over2));
 
         return flatAxisDistance * BaritoneAPI.GetSettings().CostHeuristic.Value + GoalYLevel.Calculate(BaritoneAPI.GetSettings().AxisHeight.Value, y);
     }

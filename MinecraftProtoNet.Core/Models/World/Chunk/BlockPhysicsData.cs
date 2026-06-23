@@ -84,7 +84,7 @@ public static class BlockPhysicsData
             state.SpeedFactor = data.SpeedFactor;
             state.JumpFactor = data.JumpFactor;
             state.HasCollision = data.HasCollision;
-            state.DestroySpeed = data.DestroySpeed;
+            // DestroySpeed is now sourced from ClientState.BlockHardness (generated table), not here.
         }
         else
         {

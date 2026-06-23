@@ -2,7 +2,6 @@
 using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Packets.Base.Definitions;
 using MinecraftProtoNet.Core.State;
-using MinecraftProtoNet.Core.Utilities;
 
 namespace Bot.Webcore.Components.Pages.Components;
 
@@ -48,39 +47,21 @@ public partial class ContainerView
         _ => "ph-cube"
     };
 
-    private string GetSlotClass(bool isDragging = false)
+    private string GetSlotClass(bool isDragging = false, bool isHovered = false)
     {
         var baseClass =
-            "w-full aspect-square rounded-xl flex flex-col items-center justify-center p-1 transition-all duration-200 overflow-hidden min-h-[54px] ";
+            "w-full aspect-square rounded flex flex-col items-center justify-center p-1 transition-all duration-150 overflow-hidden min-h-[58px] ";
 
         if (isDragging)
             return baseClass + "bg-blue-950/40 border-2 border-blue-400 opacity-60 scale-95 shadow-lg shadow-blue-500/10";
 
-        return baseClass + "bg-slate-950/40 border border-slate-800/60 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-[1.03] shadow-inner";
-    }
+        // When hovered, keep the border highlight strong so the user sees which slot drives the
+        // detail sidebar even if their mouse has moved slightly.
+        var hoverClass = isHovered
+            ? "bg-amber-500/10 border-2 border-amber-400/70 scale-[1.03] shadow-lg shadow-amber-500/10"
+            : "bg-slate-950/40 border border-slate-800/60 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-[1.02] shadow-inner";
 
-    private string GetItemDisplayName(Slot slot)
-    {
-        // Try custom name first, then registry lookup
-        var customName = ItemTextHelper.GetDisplayName(slot);
-        if (!string.IsNullOrEmpty(customName)) return customName;
-
-        var name = Bot.ItemRegistry.GetItemName(slot.ItemId ?? 0);
-        if (string.IsNullOrEmpty(name)) return $"#{slot.ItemId}";
-        return name.Replace("minecraft:", "").Replace("_", " ");
-    }
-
-    private string GetSlotTooltip(Slot slot)
-    {
-        if (!slot.ItemId.HasValue || slot.ItemCount <= 0) return "Empty";
-
-        var lines = new List<string> { GetItemDisplayName(slot) };
-
-        // Add lore
-        var lore = ItemTextHelper.GetLore(slot);
-        lines.AddRange(lore);
-
-        return string.Join("\n", lines);
+        return baseClass + hoverClass;
     }
 
     private async Task OnSlotClick(short slotIndex, MouseEventArgs e)

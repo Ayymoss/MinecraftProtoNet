@@ -37,11 +37,13 @@ namespace MinecraftProtoNet.Baritone.Pathfinding.Movement.Movements;
 /// </summary>
 public class MovementDiagonal : Movement
 {
+    private static readonly double Sqrt2 = Math.Sqrt(2);
+
     private readonly BlockFace _face1;
     private readonly BlockFace _face2;
 
     public MovementDiagonal(IBaritone baritone, BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
-        : base(baritone, src, GetDest(src, face1, face2, yOffset), GetToBreak(src, face1, face2, yOffset), GetToWalkOn(src, face1, face2, yOffset))
+        : base(baritone, src, GetDest(src, face1, face2, yOffset), GetToBreak(src, face1, face2, yOffset))
     {
         _face1 = face1;
         _face2 = face2;
@@ -54,29 +56,13 @@ public class MovementDiagonal : Movement
         return new BetterBlockPos(pos.X, pos.Y + yOffset, pos.Z);
     }
 
+    // Reference: MovementDiagonal.java:56 - positionsToBreak = {dir1, dir1.up, dir2, dir2.up, end, end.up}
     private static BetterBlockPos[] GetToBreak(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
     {
         var dest = GetDest(src, face1, face2, yOffset);
         var diag1 = GetRelative(src, face1);
         var diag2 = GetRelative(src, face2);
-        
-        var list = new List<BetterBlockPos> { dest, dest.Above() };
-        
-        if (yOffset > 0)
-        {
-            list.Add(src.Above(2));
-        }
-        else if (yOffset < 0)
-        {
-            list.Add(dest.Above(2));
-        }
-        
-        return list.ToArray();
-    }
-
-    private static BetterBlockPos? GetToWalkOn(BetterBlockPos src, BlockFace face1, BlockFace face2, int yOffset)
-    {
-        return GetDest(src, face1, face2, yOffset).Below();
+        return [diag1, diag1.Above(), diag2, diag2.Above(), dest, dest.Above()];
     }
 
     private static BetterBlockPos GetRelative(BetterBlockPos pos, BlockFace face)
@@ -98,31 +84,32 @@ public class MovementDiagonal : Movement
         {
             return true;
         }
-        
+
         var feet = Ctx.PlayerFeet();
         if (feet == null)
         {
             return true;
         }
-        
+
         double offset = 0.25;
         double x = player.Position.X;
         double y = player.Position.Y - 1;
         double z = player.Position.Z;
-        
+
+        // standard
         if (feet.Equals(Src))
         {
             return true;
         }
-        
-        // Both corners are walkable
+
+        // both corners are walkable
         if (MovementHelper.CanWalkOn(Ctx, new BetterBlockPos(Src.X, Src.Y - 1, Dest.Z)) &&
             MovementHelper.CanWalkOn(Ctx, new BetterBlockPos(Dest.X, Src.Y - 1, Src.Z)))
         {
             return true;
         }
-        
-        // We are in a likely unwalkable corner, check for a supporting block
+
+        // we are in a likely unwalkable corner, check for a supporting block
         var corner1 = new BetterBlockPos(Src.X, Src.Y, Dest.Z);
         var corner2 = new BetterBlockPos(Dest.X, Src.Y, Src.Z);
         if (feet.Equals(corner1) || feet.Equals(corner2))
@@ -173,15 +160,18 @@ public class MovementDiagonal : Movement
         BlockState destWalkOn;
         bool descend = false;
         bool frostWalker = false;
-        
+        bool sneaking = false;
         if (!MovementHelper.CanWalkThrough(context, destX, y, destZ, destInto))
         {
-            double cost = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, destInto, false);
-            if (cost >= ActionCosts.CostInf)
+            // Reference: MovementDiagonal.java:122-128 - diagonal ascend
+            ascend = true;
+            if (!context.AllowDiagonalAscend
+                || !MovementHelper.CanWalkThrough(context, x, y + 2, z)
+                || !MovementHelper.CanWalkOn(context, destX, y, destZ, destInto)
+                || !MovementHelper.CanWalkThrough(context, destX, y + 2, destZ))
             {
                 return;
             }
-            res.Cost += cost;
             destWalkOn = destInto;
             fromDown = context.Get(x, y - 1, z);
         }
@@ -193,48 +183,158 @@ public class MovementDiagonal : Movement
             frostWalker = standingOnABlock && MovementHelper.CanUseFrostWalker(context, destWalkOn);
             if (!frostWalker && !MovementHelper.CanWalkOn(context, destX, y - 1, destZ, destWalkOn))
             {
+                // Reference: MovementDiagonal.java:134-139 - diagonal descend
                 descend = true;
-                if (!context.AllowDiagonalDescend || 
-                    !MovementHelper.CanWalkOn(context, destX, y - 2, destZ) || 
-                    !MovementHelper.CanWalkThrough(context, destX, y - 1, destZ, destWalkOn))
+                if (!context.AllowDiagonalDescend
+                    || !MovementHelper.CanWalkOn(context, destX, y - 2, destZ)
+                    || !MovementHelper.CanWalkThrough(context, destX, y - 1, destZ, destWalkOn))
                 {
                     return;
                 }
             }
+            // do this after checking for descends because jesus can't prevent the water from freezing
             frostWalker &= !context.AssumeWalkOnWater;
         }
-        
         double multiplier = ActionCosts.WalkOneBlockCost;
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:181
-        // Check for soul sand, water, frost walker
-        string destWalkOnName = destWalkOn.Name;
-        bool onSoulSand = destWalkOnName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
-        if (onSoulSand)
+        // Reference: MovementDiagonal.java:143-153 - soul sand / magma / water each affect half of our walking
+        if (destWalkOn.IsSoulSand)
         {
-            multiplier *= 2.0; // Soul sand slows movement
+            multiplier += (ActionCosts.WalkOneOverSoulSandCost - ActionCosts.WalkOneBlockCost) / 2;
         }
-        if (MovementHelper.IsWater(destInto) || MovementHelper.IsWater(destWalkOn))
+        else if (context.AllowWalkOnMagmaBlocks && destWalkOn.IsMagmaBlock)
         {
+            multiplier += (ActionCosts.SneakOneBlockCost - ActionCosts.WalkOneBlockCost) / 2;
+            sneaking = true;
+        }
+        else if (frostWalker)
+        {
+            // frostwalker lets us walk on water without the penalty
+        }
+        else if (destWalkOn.Name.Equals("minecraft:water", StringComparison.OrdinalIgnoreCase))
+        {
+            multiplier += context.WalkOnWaterOnePenalty * Sqrt2;
+        }
+        // Reference: MovementDiagonal.java:154-163 - climbable below aborts; soul sand / magma add half penalty
+        if (MovementHelper.IsClimbable(fromDown))
+        {
+            return;
+        }
+        if (fromDown.IsSoulSand)
+        {
+            multiplier += (ActionCosts.WalkOneOverSoulSandCost - ActionCosts.WalkOneBlockCost) / 2;
+        }
+        else if (context.AllowWalkOnMagmaBlocks && fromDown.IsMagmaBlock)
+        {
+            multiplier += (ActionCosts.SneakOneBlockCost - ActionCosts.WalkOneBlockCost) / 2;
+            sneaking = true;
+        }
+        // Reference: MovementDiagonal.java:164-171 - can't cut across a corner that is magma/lava
+        var cuttingOver1 = context.Get(x, y - 1, destZ);
+        if ((!context.AllowWalkOnMagmaBlocks && cuttingOver1.IsMagmaBlock) || MovementHelper.IsLava(cuttingOver1))
+        {
+            return;
+        }
+        var cuttingOver2 = context.Get(destX, y - 1, z);
+        // NOTE: faithful to Java:169 which re-checks cuttingOver1 for the magma condition (upstream quirk); lava check uses cuttingOver2
+        if ((!context.AllowWalkOnMagmaBlocks && cuttingOver1.IsMagmaBlock) || MovementHelper.IsLava(cuttingOver2))
+        {
+            return;
+        }
+        bool water = false;
+        var startState = context.Get(x, y, z);
+        if (MovementHelper.IsWater(startState) || MovementHelper.IsWater(destInto))
+        {
+            if (ascend)
+            {
+                return;
+            }
+            // Ignore previous multiplier - we're floating on water, not touching the blocks below
             multiplier = context.WaterWalkSpeed;
+            water = true;
         }
-        if (frostWalker)
+        var pb0 = context.Get(x, y, destZ);
+        var pb2 = context.Get(destX, y, z);
+        if (ascend)
         {
-            multiplier = ActionCosts.WalkOneBlockCost; // Frost walker allows normal walking on water
+            // Reference: MovementDiagonal.java:187-208
+            bool aTop = MovementHelper.CanWalkThrough(context, x, y + 2, destZ);
+            bool aMid = MovementHelper.CanWalkThrough(context, x, y + 1, destZ);
+            bool aLow = MovementHelper.CanWalkThrough(context, x, y, destZ, pb0);
+            bool bTop = MovementHelper.CanWalkThrough(context, destX, y + 2, z);
+            bool bMid = MovementHelper.CanWalkThrough(context, destX, y + 1, z);
+            bool bLow = MovementHelper.CanWalkThrough(context, destX, y, z, pb2);
+            if ((!(aTop && aMid && aLow) && !(bTop && bMid && bLow)) // no option
+                || MovementHelper.AvoidWalkingInto(pb0) // bad
+                || MovementHelper.AvoidWalkingInto(pb2) // bad
+                || (aTop && aMid && MovementHelper.CanWalkOn(context, x, y, destZ, pb0)) // we could just ascend
+                || (bTop && bMid && MovementHelper.CanWalkOn(context, destX, y, z, pb2)) // we could just ascend
+                || (!aTop && aMid && aLow) // head bonk A
+                || (!bTop && bMid && bLow)) // head bonk B
+            {
+                return;
+            }
+            res.Cost = multiplier * Sqrt2 + ActionCosts.JumpOneBlockCost;
+            res.X = destX;
+            res.Z = destZ;
+            res.Y = y + 1;
+            return;
         }
-        
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDiagonal.java:183
-        // Check for fromDown block type
-        string fromDownName = fromDown.Name;
-        bool onClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) || 
-                          fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-        if (onClimbable)
+        // Reference: MovementDiagonal.java:209-250 - corner-cutting / edging-around checks
+        double optionA = MovementHelper.GetMiningDurationTicks(context, x, y, destZ, pb0, false);
+        double optionB = MovementHelper.GetMiningDurationTicks(context, destX, y, z, pb2, false);
+        if (optionA != 0 && optionB != 0)
         {
-            multiplier *= 2.0; // Climbable blocks slow movement
+            return;
         }
-
-        res.Cost += multiplier * Math.Sqrt(2);
+        var pb1 = context.Get(x, y + 1, destZ);
+        optionA += MovementHelper.GetMiningDurationTicks(context, x, y + 1, destZ, pb1, true);
+        if (optionA != 0 && optionB != 0)
+        {
+            return;
+        }
+        var pb3 = context.Get(destX, y + 1, z);
+        if (optionA == 0 && ((MovementHelper.AvoidWalkingInto(pb2) && !pb2.Name.Equals("minecraft:water", StringComparison.OrdinalIgnoreCase)) || MovementHelper.AvoidWalkingInto(pb3)))
+        {
+            return;
+        }
+        optionB += MovementHelper.GetMiningDurationTicks(context, destX, y + 1, z, pb3, true);
+        if (optionA != 0 && optionB != 0)
+        {
+            return;
+        }
+        if (optionB == 0 && ((MovementHelper.AvoidWalkingInto(pb0) && !pb0.Name.Equals("minecraft:water", StringComparison.OrdinalIgnoreCase)) || MovementHelper.AvoidWalkingInto(pb1)))
+        {
+            return;
+        }
+        if (optionA != 0 || optionB != 0)
+        {
+            multiplier *= Sqrt2 - 0.001; // TODO tune
+            if (MovementHelper.IsClimbable(startState))
+            {
+                // edging around doesn't work if doing so would climb a ladder or vine instead of moving sideways
+                return;
+            }
+        }
+        else
+        {
+            // only can sprint if not edging around
+            if (context.CanSprint && !water && !sneaking)
+            {
+                // soul sand is sprintable too, so we don't check for it
+                multiplier *= ActionCosts.SprintMultiplier;
+            }
+        }
+        res.Cost = multiplier * Sqrt2;
+        if (descend)
+        {
+            res.Cost += Math.Max(ActionCosts.FallNBlocksCost[1], ActionCosts.CenterAfterFallCost);
+            res.Y = y - 1;
+        }
+        else
+        {
+            res.Y = y;
+        }
         res.X = destX;
-        res.Y = descend ? y - 1 : (ascend ? y + 1 : y);
         res.Z = destZ;
     }
 
@@ -251,16 +351,14 @@ public class MovementDiagonal : Movement
         {
             return state.SetStatus(MovementStatus.Success);
         }
-        else if (!PlayerInValidPosition())
+        if (!PlayerInValidPosition()
+            && !(MovementHelper.IsLiquid(Ctx, Src) && GetValidPositions().Contains((feet ?? Src).Above())))
         {
-            // Check for liquid special case
-            if (!(MovementHelper.IsLiquid(Ctx, Src) && GetValidPositions().Contains(feet?.Above() ?? Src)))
-            {
-                return state.SetStatus(MovementStatus.Unreachable);
-            }
+            return state.SetStatus(MovementStatus.Unreachable);
         }
 
-        if (Dest.Y > Src.Y && ((Entity)Ctx.Player()!).Position.Y < Src.Y + 0.1 && ((Entity)Ctx.Player()!).HorizontalCollision)
+        var player = Ctx.Player() as Entity;
+        if (player != null && Dest.Y > Src.Y && player.Position.Y < Src.Y + 0.1 && player.HorizontalCollision)
         {
             state.SetInput(BaritoneInput.Jump, true);
         }
@@ -270,18 +368,11 @@ public class MovementDiagonal : Movement
             state.SetInput(BaritoneInput.Sprint, true);
         }
 
-        var player = Ctx.Player() as Entity;
-        if (player != null)
-        {
-            double diffX = player.Position.X - (Dest.X + 0.5);
-            double diffZ = player.Position.Z - (Dest.Z + 0.5);
-            double ab = Math.Sqrt(diffX * diffX + diffZ * diffZ);
+        // Reference: MovementDiagonal.java:280 - sneak if walking on magma
+        state.SetInput(BaritoneInput.Sneak, Core.Baritone.Settings().AllowWalkOnMagmaBlocks.Value
+            && MovementHelper.SteppingOnBlocks(Ctx).Any(b => BlockStateInterface.Get(Ctx, b).IsMagmaBlock));
 
-            if (feet == null || !feet.Equals(Dest) || ab > 0.25)
-            {
-                MovementHelper.MoveTowards(Ctx, state, Dest);
-            }
-        }
+        MovementHelper.MoveTowards(Ctx, state, Dest);
         return state;
     }
 
@@ -300,6 +391,40 @@ public class MovementDiagonal : Movement
             }
         }
         return true;
+    }
+
+    // Reference: MovementDiagonal.java:302-315 - only the destination column (indices 4,5) is broken
+    public override List<BetterBlockPos> ToBreak(BlockStateInterface bsi)
+    {
+        if (ToBreakCached != null)
+        {
+            return ToBreakCached;
+        }
+        var result = new List<BetterBlockPos>();
+        for (int i = 4; i < 6; i++)
+        {
+            if (!MovementHelper.CanWalkThrough(bsi, PositionsToBreak[i].X, PositionsToBreak[i].Y, PositionsToBreak[i].Z))
+            {
+                result.Add(PositionsToBreak[i]);
+            }
+        }
+        ToBreakCached = result;
+        return result;
+    }
+
+    // Reference: MovementDiagonal.java:317-330 - the four corner-column blocks (indices 0..3) we might edge into
+    public override List<BetterBlockPos> ToWalkInto(BlockStateInterface bsi)
+    {
+        var result = new List<BetterBlockPos>();
+        for (int i = 0; i < 4; i++)
+        {
+            if (!MovementHelper.CanWalkThrough(bsi, PositionsToBreak[i].X, PositionsToBreak[i].Y, PositionsToBreak[i].Z))
+            {
+                result.Add(PositionsToBreak[i]);
+            }
+        }
+        ToWalkIntoCached = result;
+        return result;
     }
 
     protected override bool Prepared(MovementState state)

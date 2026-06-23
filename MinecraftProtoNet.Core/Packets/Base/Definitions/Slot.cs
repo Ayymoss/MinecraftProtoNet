@@ -577,15 +577,18 @@ public class Slot
     /// Reads a PropertyMap (GameProfile properties): VarInt(count), each: String(name) + String(value) + nullable String(signature).
     /// Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/network/codec/ByteBufCodecs.java GAME_PROFILE_PROPERTIES
     /// </summary>
-    private static void ReadPropertyMap(ref PacketBufferReader reader)
+    private static List<PlayerProfileProperty> ReadPropertyMap(ref PacketBufferReader reader)
     {
         var count = reader.ReadVarInt();
+        var props = new List<PlayerProfileProperty>(count);
         for (var i = 0; i < count; i++)
         {
-            reader.ReadString(); // property name
-            reader.ReadString(); // property value
-            if (reader.ReadBoolean()) reader.ReadString(); // optional signature
+            var name = reader.ReadString();
+            var value = reader.ReadString();
+            string? signature = reader.ReadBoolean() ? reader.ReadString() : null;
+            props.Add(new PlayerProfileProperty(name, value, signature));
         }
+        return props;
     }
 
     /// <summary>
@@ -1225,24 +1228,28 @@ public class Slot
     /// </summary>
     private static object? ReadProfile(ref PacketBufferReader reader)
     {
+        Guid? uuid = null;
+        string? name = null;
+        List<PlayerProfileProperty> properties;
+
         var isLeft = reader.ReadBoolean(); // Either dispatch: true=GameProfile, false=Partial
         if (isLeft)
         {
             // GameProfile: UUID + String(name, max 16) + PropertyMap
-            reader.ReadUuid(); // UUID (16 bytes: readLong + readLong)
-            reader.ReadString(); // name
-            ReadPropertyMap(ref reader);
+            uuid = reader.ReadUuid();
+            name = reader.ReadString();
+            properties = ReadPropertyMap(ref reader);
         }
         else
         {
             // Partial: Optional<String>(name) + Optional<UUID>(id) + PropertyMap
-            if (reader.ReadBoolean()) reader.ReadString(); // optional name
-            if (reader.ReadBoolean()) reader.ReadUuid(); // optional UUID
-            ReadPropertyMap(ref reader);
+            if (reader.ReadBoolean()) name = reader.ReadString();
+            if (reader.ReadBoolean()) uuid = reader.ReadUuid();
+            properties = ReadPropertyMap(ref reader);
         }
         // SkinPatch: 3×Optional<ResourceTexture>(String) + Optional<PlayerModelType>(Bool→Bool)
         ReadSkinPatch(ref reader);
-        return null;
+        return new PlayerProfile(uuid, name, properties);
     }
 
     /// <summary>

@@ -1,0 +1,70 @@
+@using MinecraftProtoNet.Core.NBT.Tags
+@using MinecraftProtoNet.Core.Utilities
+
+@*
+    Renders a Minecraft text component (NBT) with vanilla-ish colour and style preservation.
+
+    Pass either:
+      - a single NbtTag (custom_name-style) — rendered as a single line; or
+      - a list of NbtTag (lore) — rendered one per line.
+
+    Parent can set DefaultColor to override the "no colour set" fallback (e.g. slate-300 for names,
+    slate-400 for lore). Bold/italic map to CSS; obfuscated is visually approximated with a subtle
+    shimmer animation (vanilla uses random-char scramble — not worth replicating in the dashboard).
+*@
+
+@if (Tag is not null)
+{
+    var spans = MinecraftTextParser.Parse(Tag);
+    @RenderSpans(spans)
+}
+else if (Lore is not null)
+{
+    foreach (var line in Lore)
+    {
+        var spans = MinecraftTextParser.Parse(line);
+        <div class="whitespace-pre-wrap leading-snug">
+            @RenderSpans(spans)
+        </div>
+    }
+}
+
+@code {
+    /// <summary>Single text component (e.g. custom name). Mutually exclusive with <see cref="Lore"/>.</summary>
+    [Parameter] public NbtTag? Tag { get; set; }
+
+    /// <summary>List of text components, each rendered on its own line (lore).</summary>
+    [Parameter] public IEnumerable<NbtTag>? Lore { get; set; }
+
+    /// <summary>CSS colour to use when a span has no explicit colour. Defaults to current text colour via <c>currentColor</c>.</summary>
+    [Parameter] public string DefaultColor { get; set; } = "currentColor";
+
+    /// <summary>Tailwind font class. Set to a pixel-font class (e.g. "font-minecraft") if you've loaded one.</summary>
+    [Parameter] public string FontClass { get; set; } = "";
+
+    private RenderFragment RenderSpans(List<MinecraftTextSpan> spans) => builder =>
+    {
+        var seq = 0;
+        foreach (var span in spans)
+        {
+            if (string.IsNullOrEmpty(span.Text)) continue;
+
+            var color = MinecraftTextParser.ResolveColor(span.Color) ?? DefaultColor;
+            var style = $"color:{color};";
+            if (span.Bold) style += "font-weight:700;";
+            if (span.Italic) style += "font-style:italic;";
+            var decorations = new List<string>();
+            if (span.Underlined) decorations.Add("underline");
+            if (span.Strikethrough) decorations.Add("line-through");
+            if (decorations.Count > 0) style += $"text-decoration:{string.Join(' ', decorations)};";
+
+            var cls = span.Obfuscated ? $"animate-pulse {FontClass}" : FontClass;
+
+            builder.OpenElement(seq++, "span");
+            if (!string.IsNullOrEmpty(cls)) builder.AddAttribute(seq++, "class", cls);
+            builder.AddAttribute(seq++, "style", style);
+            builder.AddContent(seq++, span.Text);
+            builder.CloseElement();
+        }
+    };
+}

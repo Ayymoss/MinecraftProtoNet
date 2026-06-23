@@ -35,6 +35,7 @@ using MinecraftProtoNet.Baritone.Pathfinding.Path;
 using MinecraftProtoNet.Baritone.Utils;
 using MinecraftProtoNet.Baritone.Utils.Pathing;
 using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.Core;
 using BaritonePath = MinecraftProtoNet.Baritone.Pathfinding.Calc.Path;
 
 namespace MinecraftProtoNet.Baritone.Behaviors;
@@ -133,9 +134,9 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
             if (_unpausedLastTick)
             {
                 Baritone.GetInputOverrideHandler().ClearAllKeys();
-                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:131
-                // Stop breaking block
-                Baritone.GetInputOverrideHandler().ClearAllKeys();
+                // Reference: PathingBehavior.java:123 - getBlockBreakHelper().stopBreakingBlock().
+                // BlockBreakHelper is not ported yet (see IN1); once it exists, stop the in-progress break here
+                // so pausing mid-mine actually releases the dig instead of leaving it latched.
             }
             _unpausedLastTick = false;
             _pausedThisTick = true;
@@ -185,6 +186,12 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
                     }
                     QueuePathEvent(PathEvent.AtGoal);
                     _next = null;
+                    // Reference: PathingBehavior.java:160-162 - disconnectOnArrival: ctx.world().disconnect().
+                    if (Core.Baritone.Settings().DisconnectOnArrival.Value && Ctx.Minecraft() is IMinecraftClient client)
+                    {
+                        Baritone.GetGameEventHandler().LogDirect("Arrived at goal; disconnecting (disconnectOnArrival).");
+                        _ = client.DisconnectAsync(); // fire-and-forget: OnTick is synchronous
+                    }
                     return;
                 }
                 if (_next != null && !_next.GetPath().Positions().Contains(Ctx.PlayerFeet() ?? new BetterBlockPos(0, 0, 0)) && !_next.GetPath().Positions().Contains(_expectedSegmentStart ?? new BetterBlockPos(0, 0, 0)))
@@ -344,14 +351,9 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
     {
         if (_current == null)
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/PathingBehavior.java:322
-            // Check if elytra process is active - if so, don't cancel
+            // Reference: PathingBehavior.java:312-313 - safe if elytra is inactive OR elytra itself is safe to cancel
             var elytraProcess = Baritone.GetElytraProcess();
-            if (elytraProcess != null && elytraProcess.IsActive())
-            {
-                return false; // Don't cancel if elytra is active
-            }
-            return true;
+            return elytraProcess == null || !elytraProcess.IsActive() || elytraProcess.IsSafeToCancel();
         }
         return _safeToCancel;
     }
@@ -747,45 +749,20 @@ public sealed class PathingBehavior : Behavior, IPathingBehavior
 
     public double? TicksRemainingInSegment(bool includeCurrentMovement = true)
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY - Calculate remaining ticks in current path segment
+        // Reference: IPathingBehavior.java:52-59 - empty ONLY when there is no current segment;
+        // otherwise return ticksRemainingFrom(start), which sums to the end and is 0 (not null) at the end.
+        // (Returning null near the end broke the plan-ahead trigger: `null < lookahead` is false.)
         if (_current == null)
         {
             return null;
         }
-        
         var path = _current.GetPath();
         if (path == null)
         {
             return null;
         }
-        
-        // Use path's TicksRemainingFrom method if available
-        int currentPosition = _current.GetPosition();
-        if (path is BaritonePath pathImpl)
-        {
-            int pathStartIndex = includeCurrentMovement ? currentPosition : currentPosition + 1;
-            if (pathStartIndex < path.Movements().Count)
-            {
-                return pathImpl.TicksRemainingFrom(pathStartIndex);
-            }
-        }
-        
-        // Fallback: calculate manually
-        double remainingTicks = 0.0;
-        var movements = path.Movements();
-        int fallbackStartIndex = includeCurrentMovement ? currentPosition : currentPosition + 1;
-        
-        for (int i = fallbackStartIndex; i < movements.Count; i++)
-        {
-            var movement = movements[i];
-            double cost = movement.GetCost();
-            if (cost < Api.Pathing.Movement.ActionCosts.CostInf)
-            {
-                remainingTicks += cost;
-            }
-        }
-        
-        return remainingTicks > 0 ? remainingTicks : null;
+        int start = includeCurrentMovement ? _current.GetPosition() : _current.GetPosition() + 1;
+        return path.TicksRemainingFrom(start);
     }
 
     public bool HasPath() => _current != null;

@@ -82,6 +82,26 @@ public static class ToolData
     }
 
     /// <summary>
+    /// The harvest level of a tool tier, matching vanilla Tiers.getLevel()
+    /// (used by Baritone's ToolSet.getMaterialCost as the tie-break material cost).
+    /// Note: gold shares wood's level (0), and the order is NOT the speed order.
+    /// Reference: minecraft Tiers enum (WOOD=0, STONE=1, IRON=2, DIAMOND=3, GOLD=0, NETHERITE=4).
+    /// </summary>
+    public static int GetHarvestLevel(ToolTier tier)
+    {
+        return tier switch
+        {
+            ToolTier.Wood => 0,
+            ToolTier.Gold => 0,
+            ToolTier.Stone => 1,
+            ToolTier.Iron => 2,
+            ToolTier.Diamond => 3,
+            ToolTier.Netherite => 4,
+            _ => -1
+        };
+    }
+
+    /// <summary>
     /// Maps ToolType to the corresponding datagen mineable tag name.
     /// </summary>
     private static readonly Dictionary<ToolType, string> ToolToMineableTag = new()

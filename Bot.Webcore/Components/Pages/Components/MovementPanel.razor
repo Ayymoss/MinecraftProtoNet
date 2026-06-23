@@ -1,0 +1,280 @@
+@inject BotService Bot
+@using Bot.Webcore.Services
+@using Microsoft.AspNetCore.Components.Web
+@implements IDisposable
+
+<div class="bg-slate-900/40 backdrop-blur-md rounded-md border border-slate-800/80 shadow overflow-hidden flex flex-col">
+    <div class="px-4 py-2.5 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
+        <div class="flex items-center gap-2">
+            <i class="ph-duotone ph-game-controller text-base text-indigo-400"></i>
+            <h2 class="text-sm font-bold text-slate-100 tracking-tight">Manual Control</h2>
+            @if (_focused)
+            {
+                <span class="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded-md border border-emerald-500/30 uppercase tracking-wider animate-pulse">Focused</span>
+            }
+            else
+            {
+                <span class="px-1.5 py-0.5 text-[10px] font-bold bg-slate-800 text-slate-500 rounded-md border border-slate-700 uppercase tracking-wider">Click to focus</span>
+            }
+        </div>
+        <button @onclick="ClearAll"
+                class="text-[10px] font-bold text-slate-500 hover:text-rose-400 uppercase tracking-wider transition-colors">
+            Release all
+        </button>
+    </div>
+
+    <div @ref="_focusTarget"
+         tabindex="0"
+         @onfocus="OnFocusIn"
+         @onblur="OnFocusOut"
+         @onkeydown="HandleKeyDown"
+         @onkeyup="HandleKeyUp"
+         @onkeydown:preventDefault="true"
+         class="p-5 outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all">
+
+        @if (!Bot.IsConnected)
+        {
+            <div class="flex items-center justify-center py-8 text-slate-600">
+                <span class="text-xs font-medium">Awaiting connection</span>
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-2 gap-6">
+                <!-- WASD cluster -->
+                <div class="flex flex-col items-center gap-1.5">
+                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Movement</span>
+                    @{
+                        var f = IsPressed(BotService.MovementKey.Forward);
+                        var b = IsPressed(BotService.MovementKey.Backward);
+                        var l = IsPressed(BotService.MovementKey.Left);
+                        var r = IsPressed(BotService.MovementKey.Right);
+                    }
+                    @KeyButton("W", f, BotService.MovementKey.Forward)
+                    <div class="flex gap-1.5">
+                        @KeyButton("A", l, BotService.MovementKey.Left)
+                        @KeyButton("S", b, BotService.MovementKey.Backward)
+                        @KeyButton("D", r, BotService.MovementKey.Right)
+                    </div>
+
+                    <div class="flex gap-1.5 mt-3">
+                        @ModifierButton("Space", "Jump", IsPressed(BotService.MovementKey.Jump), BotService.MovementKey.Jump, "w-24")
+                    </div>
+                    <div class="flex gap-1.5 mt-1">
+                        @ModifierButton("Shift", "Sneak", IsPressed(BotService.MovementKey.Sneak), BotService.MovementKey.Sneak, "w-24")
+                        @ModifierButton("Ctrl", "Sprint", IsPressed(BotService.MovementKey.Sprint), BotService.MovementKey.Sprint, "w-24")
+                    </div>
+                </div>
+
+                <!-- Rotation cluster -->
+                <div class="flex flex-col gap-3">
+                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Look</span>
+
+                    <!-- Cardinal snap -->
+                    <div class="grid grid-cols-3 gap-1 w-fit mx-auto">
+                        <div></div>
+                        @LookButton("N", "Face north (-Z)", () => Bot.SetYawPitch(180f, 0f))
+                        <div></div>
+                        @LookButton("W", "Face west (-X)", () => Bot.SetYawPitch(90f, 0f))
+                        @LookButton("·", "Level", () => Bot.SetYawPitch(Yaw, 0f))
+                        @LookButton("E", "Face east (+X)", () => Bot.SetYawPitch(-90f, 0f))
+                        <div></div>
+                        @LookButton("S", "Face south (+Z)", () => Bot.SetYawPitch(0f, 0f))
+                        <div></div>
+                    </div>
+
+                    <!-- Yaw / pitch sliders -->
+                    <div class="text-[10px] space-y-2 mt-1">
+                        <div>
+                            <div class="flex justify-between text-slate-500 mb-1">
+                                <span>Yaw</span>
+                                <span class="font-mono text-slate-300 tabular-nums">@Yaw.ToString("F1")°</span>
+                            </div>
+                            <input type="range" min="-180" max="179.9" step="0.5"
+                                   value="@Yaw.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)"
+                                   @oninput="OnYawSlider"
+                                   class="w-full accent-indigo-500" />
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-slate-500 mb-1">
+                                <span>Pitch</span>
+                                <span class="font-mono text-slate-300 tabular-nums">@Pitch.ToString("F1")°</span>
+                            </div>
+                            <input type="range" min="-90" max="90" step="0.5"
+                                   value="@Pitch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)"
+                                   @oninput="OnPitchSlider"
+                                   class="w-full accent-indigo-500" />
+                        </div>
+                    </div>
+
+                    <!-- Nudge grid -->
+                    <div class="grid grid-cols-3 gap-1 w-fit mx-auto mt-1">
+                        <div></div>
+                        @NudgeButton("↑", "Pitch -5°", 0, -5)
+                        <div></div>
+                        @NudgeButton("←", "Yaw -15°", -15, 0)
+                        <div></div>
+                        @NudgeButton("→", "Yaw +15°", 15, 0)
+                        <div></div>
+                        @NudgeButton("↓", "Pitch +5°", 0, 5)
+                        <div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-slate-800/60 text-[10px] text-slate-500 leading-relaxed">
+                <i class="ph-duotone ph-info text-slate-400 mr-1"></i>
+                Baritone pathfinding will override these inputs when a path is active.
+                Use only while no pathing process is running.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private ElementReference _focusTarget;
+    private bool _focused;
+
+    private float Yaw => Bot.State.LocalPlayer?.Entity?.YawPitch.X ?? 0f;
+    private float Pitch => Bot.State.LocalPlayer?.Entity?.YawPitch.Y ?? 0f;
+
+    protected override void OnInitialized()
+    {
+        Bot.OnStateChanged += OnBotStateChanged;
+    }
+
+    private void OnBotStateChanged() => InvokeAsync(StateHasChanged);
+
+    private bool IsPressed(BotService.MovementKey key)
+    {
+        var input = Bot.State.LocalPlayer?.Entity?.Input;
+        if (input is null) return false;
+        return key switch
+        {
+            BotService.MovementKey.Forward => input.Value.Forward,
+            BotService.MovementKey.Backward => input.Value.Backward,
+            BotService.MovementKey.Left => input.Value.Left,
+            BotService.MovementKey.Right => input.Value.Right,
+            BotService.MovementKey.Jump => input.Value.Jump,
+            BotService.MovementKey.Sneak => input.Value.Shift,
+            BotService.MovementKey.Sprint => input.Value.Sprint,
+            _ => false
+        };
+    }
+
+    private void OnFocusIn() { _focused = true; }
+
+    private void OnFocusOut()
+    {
+        _focused = false;
+        // Safety: drop every held key when focus leaves so the bot doesn't run off a cliff
+        // because the user alt-tabbed.
+        Bot.ClearMovement();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e) => SetFromKey(e.Key, true);
+    private void HandleKeyUp(KeyboardEventArgs e) => SetFromKey(e.Key, false);
+
+    private void SetFromKey(string key, bool pressed)
+    {
+        var mapped = MapKey(key);
+        if (mapped is null) return;
+        Bot.SetMovementKey(mapped.Value, pressed);
+    }
+
+    private static BotService.MovementKey? MapKey(string key)
+    {
+        // Browser KeyboardEvent.Key values. Covers common WASD, arrows, space, shift, control.
+        return key switch
+        {
+            "w" or "W" or "ArrowUp"    => BotService.MovementKey.Forward,
+            "s" or "S" or "ArrowDown"  => BotService.MovementKey.Backward,
+            "a" or "A" or "ArrowLeft"  => BotService.MovementKey.Left,
+            "d" or "D" or "ArrowRight" => BotService.MovementKey.Right,
+            " " or "Space" or "Spacebar" => BotService.MovementKey.Jump,
+            "Shift" => BotService.MovementKey.Sneak,
+            "Control" => BotService.MovementKey.Sprint,
+            _ => null
+        };
+    }
+
+    private void ClearAll() => Bot.ClearMovement();
+
+    private void OnYawSlider(ChangeEventArgs e)
+    {
+        if (float.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            Bot.SetYawPitch(v, Pitch);
+        }
+    }
+
+    private void OnPitchSlider(ChangeEventArgs e)
+    {
+        if (float.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            Bot.SetYawPitch(Yaw, v);
+        }
+    }
+
+    private RenderFragment KeyButton(string label, bool active, BotService.MovementKey key) => builder =>
+    {
+        var cls = active
+            ? "bg-indigo-500/30 border-indigo-400 text-indigo-200 shadow-indigo-500/40"
+            : "bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600";
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "class", $"w-12 h-12 rounded border font-mono font-bold text-base transition-all select-none {cls}");
+        builder.AddAttribute(2, "onpointerdown", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, true)));
+        builder.AddAttribute(3, "onpointerup", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, false)));
+        builder.AddAttribute(4, "onpointerleave", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, false)));
+        builder.AddContent(5, label);
+        builder.CloseElement();
+    };
+
+    private RenderFragment ModifierButton(string label, string sub, bool active, BotService.MovementKey key, string width) => builder =>
+    {
+        var cls = active
+            ? "bg-indigo-500/30 border-indigo-400 text-indigo-200"
+            : "bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600";
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "class", $"h-10 rounded border font-mono text-xs font-bold transition-all select-none flex flex-col items-center justify-center {width} {cls}");
+        builder.AddAttribute(2, "onpointerdown", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, true)));
+        builder.AddAttribute(3, "onpointerup", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, false)));
+        builder.AddAttribute(4, "onpointerleave", EventCallback.Factory.Create<PointerEventArgs>(this, _ => Bot.SetMovementKey(key, false)));
+        builder.OpenElement(5, "span");
+        builder.AddContent(6, label);
+        builder.CloseElement();
+        builder.OpenElement(7, "span");
+        builder.AddAttribute(8, "class", "text-[8px] text-slate-500 uppercase tracking-wider");
+        builder.AddContent(9, sub);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment LookButton(string label, string title, Action onClick) => builder =>
+    {
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "class", "w-10 h-10 rounded bg-slate-800/60 hover:bg-indigo-500/20 border border-slate-700 hover:border-indigo-400/50 text-slate-300 hover:text-indigo-300 font-bold text-xs transition-colors");
+        builder.AddAttribute(2, "title", title);
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => onClick()));
+        builder.AddContent(4, label);
+        builder.CloseElement();
+    };
+
+    private RenderFragment NudgeButton(string label, string title, float dYaw, float dPitch) => builder =>
+    {
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "class", "w-8 h-8 rounded-md bg-slate-800/60 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-sm transition-colors");
+        builder.AddAttribute(2, "title", title);
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => Bot.AdjustYawPitch(dYaw, dPitch)));
+        builder.AddContent(4, label);
+        builder.CloseElement();
+    };
+
+    public void Dispose()
+    {
+        Bot.OnStateChanged -= OnBotStateChanged;
+        Bot.ClearMovement();
+    }
+}

@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MinecraftProtoNet.Core.Models.Json;
 using BlockState = MinecraftProtoNet.Core.Models.World.Chunk.BlockState;
+using BlockDefinition = MinecraftProtoNet.Core.Models.World.Chunk.BlockDefinition;
+using BlockHardness = MinecraftProtoNet.Core.Models.World.Chunk.BlockHardness;
 
 namespace MinecraftProtoNet.Core.Services;
 
@@ -11,19 +14,55 @@ public class RegistryDataLoader : IRegistryDataLoader
 {
     private const string BlocksFileName = "blocks.json";
     private const string RegistriesFileName = "registries.json";
+    private const string BlockHardnessFileName = "block_hardness.json";
 
     private readonly string _staticFilesPath = Path.Combine(AppContext.BaseDirectory, @"StaticFiles\reports");
+
+    // Parsed once and reused so LoadBlockStatesAsync and LoadBlockDefinitionsAsync don't re-read the 6 MB report.
+    private Dictionary<string, BlockRoot>? _blockData;
+
+    private async Task<Dictionary<string, BlockRoot>> GetBlockDataAsync()
+    {
+        if (_blockData != null) return _blockData;
+        var filePath = Path.Combine(_staticFilesPath, BlocksFileName);
+        var json = await File.ReadAllTextAsync(filePath);
+        _blockData = JsonSerializer.Deserialize<Dictionary<string, BlockRoot>>(json) ?? [];
+        return _blockData;
+    }
 
     /// <inheritdoc />
     public async Task<Dictionary<int, BlockState>> LoadBlockStatesAsync()
     {
-        var filePath = Path.Combine(_staticFilesPath, BlocksFileName);
-        var json = await File.ReadAllTextAsync(filePath);
-        var blockData = JsonSerializer.Deserialize<Dictionary<string, BlockRoot>>(json) ?? [];
+        var blockData = await GetBlockDataAsync();
 
         return blockData
             .SelectMany(kvp => kvp.Value.States.Select(state => new { BlockName = kvp.Key, StateId = state.Id, Properties = state.Properties }))
             .ToDictionary(x => x.StateId, x => new BlockState(x.StateId, x.BlockName, x.Properties));
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<string, BlockDefinition>> LoadBlockDefinitionsAsync()
+    {
+        var blockData = await GetBlockDataAsync();
+
+        return blockData
+            .Where(kvp => kvp.Value.Definition?.Type != null)
+            .ToDictionary(kvp => kvp.Key, kvp => new BlockDefinition(kvp.Value.Definition!.Type!, kvp.Value.Definition.Fluid));
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<string, BlockHardness>> LoadBlockHardnessAsync()
+    {
+        var filePath = Path.Combine(_staticFilesPath, BlockHardnessFileName);
+        var json = await File.ReadAllTextAsync(filePath);
+        var raw = JsonSerializer.Deserialize<Dictionary<string, BlockHardnessJson>>(json) ?? [];
+        return raw.ToDictionary(kvp => kvp.Key, kvp => new BlockHardness(kvp.Value.Hardness, kvp.Value.RequiresCorrectTool));
+    }
+
+    private sealed class BlockHardnessJson
+    {
+        [JsonPropertyName("hardness")] public float Hardness { get; init; }
+        [JsonPropertyName("requiresCorrectTool")] public bool RequiresCorrectTool { get; init; }
     }
 
     /// <inheritdoc />

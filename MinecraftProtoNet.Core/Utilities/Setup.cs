@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Core.Actions;
+using MinecraftProtoNet.Core.Auth.Authenticators;
+using MinecraftProtoNet.Core.Auth.Managers;
 using MinecraftProtoNet.Core.Commands;
 using MinecraftProtoNet.Core.Configuration;
 using MinecraftProtoNet.Core.Core;
@@ -28,6 +30,10 @@ public static class ServiceCollectionExtensions
     {
         // Shared state (must be registered before services that depend on it)
         services.AddSingleton<ClientState>();
+
+        // Authentication (shared MSAL PCA instance + account manager)
+        services.AddSingleton<MicrosoftAuthenticator>();
+        services.AddSingleton<IAccountManager, AccountManager>();
 
         // Core services
         services.AddSingleton<Connection>();

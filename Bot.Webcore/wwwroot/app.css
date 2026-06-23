@@ -1,3 +1,31 @@
+/* ==========================================================================
+   Design tokens
+   Centralised colour + radius + border values so future additions stay
+   consistent. Most components use tailwind utilities directly; these
+   `--mc-*` variables are for places where we need a raw CSS value
+   (inline styles, custom shadow-X, pixelated images, etc.).
+   ========================================================================== */
+:root {
+    --mc-bg:        rgb(15 23 42);        /* slate-900 */
+    --mc-bg-soft:   rgb(30 41 59 / 0.4);  /* slate-800/40 */
+    --mc-border:    rgb(30 41 59 / 0.7);  /* slate-800/70 */
+    --mc-text:      rgb(226 232 240);     /* slate-200 */
+    --mc-text-mute: rgb(148 163 184);     /* slate-400 */
+    --mc-accent:    rgb(52 211 153);      /* emerald-400 */
+    --mc-warn:      rgb(251 191 36);      /* amber-400 */
+    --mc-danger:    rgb(244 63 94);       /* rose-500 */
+
+    --mc-radius-sm: 2px;
+    --mc-radius:    4px;
+    --mc-radius-md: 6px;
+}
+
+/* Scoped ensures Minecraft-style item sprites stay sharp at small sizes. */
+.pixelated {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+}
+
 h1:focus {
     outline: none;
 }

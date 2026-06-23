@@ -20,7 +20,7 @@ public partial class InventoryView
     private string GetSlotClass(int slotIndex, int heldSlot, bool isHeld = false, bool isDragging = false)
     {
         var baseClass =
-            "w-full aspect-square rounded-xl flex flex-col items-center justify-center p-1 transition-all duration-200 overflow-hidden min-h-[54px] ";
+            "w-full aspect-square rounded flex flex-col items-center justify-center p-1 transition-all duration-200 overflow-hidden min-h-[54px] ";
 
         if (isDragging)
             return baseClass + "bg-blue-950/40 border-2 border-blue-500/50 opacity-60 scale-95 shadow-lg shadow-blue-500/10";

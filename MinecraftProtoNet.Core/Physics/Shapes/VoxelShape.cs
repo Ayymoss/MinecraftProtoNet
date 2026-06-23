@@ -259,6 +259,16 @@ public abstract class VoxelShape
         return true;
     }
 
+    /// <summary>
+    /// Whether this shape is a full 1x1x1 cube. Mirrors Block.isShapeFullBlock for the shapes
+    /// produced by BlockShapeRegistry (a full block is the unit box; partial blocks have extra coords).
+    /// Reference: minecraft Block.isShapeFullBlock.
+    /// </summary>
+    public bool IsFullCube()
+    {
+        return !IsEmpty() && IsCubeLike();
+    }
+
     private bool IsCubeLikeAlong(Axis axis)
     {
         IDoubleList coords = GetCoords(axis);

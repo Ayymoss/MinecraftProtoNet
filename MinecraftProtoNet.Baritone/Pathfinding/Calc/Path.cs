@@ -216,41 +216,13 @@ internal class Path : IPath
         return total;
     }
 
-    public IPath CutoffAtLoadedChunks(object bsi)
-    {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/calc/Path.java:184
-        // Cutoff path at loaded chunks
-        // TODO: Implement when chunk loading system is available
-        return this;
-    }
+    // Reference: PathBase.java:31-43
+    public IPath CutoffAtLoadedChunks(object bsi) => PathBaseLogic.CutoffAtLoadedChunks(this, bsi);
 
-    public IPath StaticCutoff(Goal destination)
-    {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/calc/Path.java:190
-        // Static cutoff at destination
-        // TODO: Implement when needed
-        return this;
-    }
+    // Reference: PathBase.java:45-57
+    public IPath StaticCutoff(Goal destination) => PathBaseLogic.StaticCutoff(this, destination);
 
-    public void SanityCheck()
-    {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/pathing/calc/IPath.java:150
-        if (_path.Count < 2)
-        {
-            throw new InvalidOperationException("Path must have at least 2 positions");
-        }
-        if (!GetSrc().Equals(_path[0]))
-        {
-            throw new InvalidOperationException("Start node does not equal first path element");
-        }
-        if (!GetDest().Equals(_path[^1]))
-        {
-            throw new InvalidOperationException("End node does not equal last path element");
-        }
-        if (_path.Count != _movements.Count + 1)
-        {
-            throw new InvalidOperationException($"Size of path array is unexpected: {_path.Count} positions vs {_movements.Count} movements");
-        }
-    }
+    // Reference: IPath.java:150-178 (shared with CutoffPath)
+    public void SanityCheck() => PathBaseLogic.SanityCheck(this);
 }
 

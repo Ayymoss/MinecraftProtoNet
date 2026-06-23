@@ -1,14 +1,14 @@
 namespace MinecraftProtoNet.Core.Core;
 
 /// <summary>
-/// Protocol-level constants for Minecraft 1.21.x (Protocol 775).
+/// Protocol-level constants for Minecraft 26.2 (Protocol 776).
 /// </summary>
 public static class ProtocolConstants
 {
     /// <summary>
-    /// Protocol version for Minecraft 1.21.x (stable release).
+    /// Protocol version for Minecraft 26.2 (stable release).
     /// </summary>
-    public const int ProtocolVersion = 775;
+    public const int ProtocolVersion = 776;
 
     /// <summary>
     /// Snapshot base protocol version for 26.1 Snapshot 1.

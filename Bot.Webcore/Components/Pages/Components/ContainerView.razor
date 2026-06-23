@@ -1,22 +1,27 @@
 @using Bot.Webcore.Services
 @using MinecraftProtoNet.Core.Enums
+@using MinecraftProtoNet.Core.NBT
+@using MinecraftProtoNet.Core.NBT.Tags
+@using MinecraftProtoNet.Core.NBT.Tags.Abstract
+@using MinecraftProtoNet.Core.NBT.Tags.Primitive
+@using MinecraftProtoNet.Core.Packets.Base.Definitions
 @inject BotService Bot
 @inject DragDropState DragState
 @implements IDisposable
 
 @if (Container is { IsOpen: true })
 {
-    <div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden">
+    <div class="bg-slate-900/40 backdrop-blur-md rounded-md border border-slate-800/80 shadow-md overflow-hidden">
         <!-- Header -->
         <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
             <div class="flex items-center gap-3">
-                <div class="flex px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20 shadow-lg shadow-amber-500/5">
+                <div class="flex px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20 shadow-lg shadow-amber-500/5">
                     <i class="ph-duotone @GetContainerIcon() text-xl text-amber-400"></i>
                 </div>
                 <h2 class="text-lg font-bold text-slate-100 tracking-tight">@Container.Title</h2>
             </div>
-            <button @onclick="CloseContainer" 
-                    class="flex px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all border border-transparent hover:border-rose-500/20">
+            <button @onclick="CloseContainer"
+                    class="flex px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all border border-transparent hover:border-rose-500/20">
                 <i class="ph-bold ph-x text-lg"></i>
             </button>
         </div>
@@ -28,45 +33,186 @@
             }
             else
             {
-                <!-- Container Slots Grid -->
-                <div>
-                    <div class="flex items-center gap-2 mb-4">
-                        <span class="h-px flex-1 bg-slate-800/50"></span>
-                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">External Storage (@Container.Type)</p>
-                        <span class="h-px flex-1 bg-slate-800/50"></span>
+                <div class="grid gap-6 @(ShowDetails ? "xl:grid-cols-[1fr_280px]" : "")">
+                    <!-- Container Slots Grid -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="h-px flex-1 bg-slate-800/50"></span>
+                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">External Storage (@Container.Type)</p>
+                            <span class="h-px flex-1 bg-slate-800/50"></span>
+                        </div>
+
+                        <div class="grid gap-2" style="grid-template-columns: repeat(@GetColumnCount(), minmax(0, 1fr));">
+                            @for (int i = 0; i < GetSlotCount(); i++)
+                            {
+                                var slotIndex = (short)i;
+                                var slot = Container.GetSlot(slotIndex);
+                                var isDragging = DragState.IsDragging && DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
+                                var isHovered = _hoveredSlotIndex == slotIndex;
+
+                                <div class="@GetSlotClass(isDragging, isHovered) group relative cursor-pointer"
+                                     @onclick="e => OnSlotClick(slotIndex, e)"
+                                     @onmouseenter="() => _hoveredSlotIndex = slotIndex"
+                                     @onmouseleave="() => ClearHoverIfEqual(slotIndex)"
+                                     draggable="true"
+                                     @ondragstart="() => OnDragStart(slotIndex, slot)"
+                                     @ondrop="() => OnDrop(slotIndex)"
+                                     @ondragover:preventDefault>
+
+                                    @if (!slot.IsEmpty)
+                                    {
+                                        <div class="w-full h-full flex items-center justify-center p-1">
+                                            @{
+                                                var profile = GetProfile(slot);
+                                                var customName = GetCustomNameTag(slot);
+                                            }
+
+                                            @if (profile is not null)
+                                            {
+                                                <PlayerHeadIcon Profile="profile" Size="40" />
+                                            }
+                                            else if (customName is not null)
+                                            {
+                                                <div class="text-[9px] leading-tight text-center font-bold break-words hyphens-auto tracking-tight">
+                                                    <MinecraftText Tag="customName" DefaultColor="#CBD5E1" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-[9px] leading-tight text-center font-bold text-slate-300 break-words hyphens-auto uppercase tracking-tighter">
+                                                    @FallbackItemName(slot)
+                                                </span>
+                                            }
+                                        </div>
+                                        @if (slot.ItemCount > 1)
+                                        {
+                                            <div class="absolute bottom-0.5 right-1 text-[11px] text-white font-black tabular-nums"
+                                                 style="text-shadow: 1.5px 1.5px 0 rgba(0,0,0,0.9);">
+                                                @slot.ItemCount
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
                     </div>
 
-                    <div class="grid gap-2" style="grid-template-columns: repeat(@GetColumnCount(), minmax(0, 1fr));">
-                        @for (int i = 0; i < GetSlotCount(); i++)
-                        {
-                            var slotIndex = (short)i;
-                            var slot = Container.GetSlot(slotIndex);
-                            var isDragging = DragState.IsDragging && DragState.IsFromContainer && DragState.SourceSlot == slotIndex;
-                            
-                            <div class="@GetSlotClass(isDragging) group relative cursor-pointer"
-                                 @onclick="e => OnSlotClick(slotIndex, e)"
-                                 draggable="true"
-                                 @ondragstart="() => OnDragStart(slotIndex, slot)"
-                                 @ondrop="() => OnDrop(slotIndex)"
-                                 @ondragover:preventDefault
-                                 title="@GetSlotTooltip(slot)">
-                                
-                                @if (slot is { ItemCount: > 0, ItemId: not null })
-                                {
-                                    <div class="w-full h-full flex items-center justify-center p-1">
-                                        <span class="text-[9px] leading-tight text-center font-bold text-slate-300 group-hover:text-white transition-colors break-words hyphens-auto uppercase tracking-tighter">
-                                            @GetItemDisplayName(slot)
-                                        </span>
+                    @if (ShowDetails)
+                    {
+                        <aside class="bg-slate-950/50 rounded-md border border-slate-800/60 p-4 min-h-[240px] h-fit sticky top-6">
+                            @if (_hoveredSlotIndex is short hi && !Container.GetSlot(hi).IsEmpty)
+                            {
+                                var slot = Container.GetSlot(hi);
+                                var profile = GetProfile(slot);
+                                var nameTag = GetCustomNameTag(slot);
+                                var loreList = GetLoreList(slot);
+                                var hypixelId = GetHypixelId(slot);
+
+                                <div class="flex items-start gap-3 mb-3">
+                                    @if (profile is not null)
+                                    {
+                                        <PlayerHeadIcon Profile="profile" Size="48" />
+                                    }
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-bold break-words leading-tight">
+                                            @if (nameTag is not null)
+                                            {
+                                                <MinecraftText Tag="nameTag" DefaultColor="#F1F5F9" />
+                                            }
+                                            else
+                                            {
+                                                <span class="text-slate-200">@FallbackItemName(slot)</span>
+                                            }
+                                        </div>
+                                        @if (slot.ItemCount > 1)
+                                        {
+                                            <div class="text-[10px] text-slate-500 mt-0.5 tabular-nums">× @slot.ItemCount</div>
+                                        }
                                     </div>
-                                    <div class="absolute bottom-1 right-1.5 px-1 bg-amber-500/20 rounded text-[10px] text-amber-400 font-black backdrop-blur-sm border border-amber-500/20">
-                                        @slot.ItemCount
+                                </div>
+
+                                @if (loreList is { Count: > 0 })
+                                {
+                                    <div class="pt-3 border-t border-slate-800/60 space-y-0.5 text-[11px] leading-snug">
+                                        <MinecraftText Lore="loreList" DefaultColor="#94A3B8" />
                                     </div>
                                 }
-                            </div>
-                        }
-                    </div>
+
+                                <div class="mt-3 pt-3 border-t border-slate-800/60 text-[10px] text-slate-500 font-mono space-y-1">
+                                    @if (!string.IsNullOrEmpty(hypixelId))
+                                    {
+                                        <div>ID: <span class="text-slate-300">@hypixelId</span></div>
+                                    }
+                                    <div>Slot: <span class="text-slate-300">@hi</span></div>
+                                    <div>Vanilla: <span class="text-slate-300">@Bot.ItemRegistry.GetItemName(slot.ItemId ?? 0)</span></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="h-full flex flex-col items-center justify-center text-center text-slate-600 py-10">
+                                    <i class="ph-duotone ph-cursor text-3xl mb-2 opacity-50"></i>
+                                    <span class="text-[10px] font-bold uppercase tracking-wider">Hover a slot</span>
+                                </div>
+                            }
+                        </aside>
+                    }
                 </div>
             }
         </div>
     </div>
+}
+
+@code {
+    private short? _hoveredSlotIndex;
+
+    /// <summary>Always render the detail sidebar while a container is open — it's the main source of lore information.</summary>
+    private bool ShowDetails => Container is not null && Container.Type != MenuType.Merchant;
+
+    private void ClearHoverIfEqual(short idx)
+    {
+        if (_hoveredSlotIndex == idx) _hoveredSlotIndex = null;
+    }
+
+    private static PlayerProfile? GetProfile(Slot slot)
+    {
+        return slot.ComponentsToAdd?
+            .FirstOrDefault(c => c.Type == ComponentType.Profile)?
+            .Data as PlayerProfile;
+    }
+
+    private static NbtTag? GetCustomNameTag(Slot slot)
+    {
+        var comp = slot.ComponentsToAdd?.FirstOrDefault(c => c.Type == ComponentType.CustomName);
+        if (comp?.Data is NbtTag nbt) return nbt;
+        // Fall back to the server-sent ItemName (e.g. Hypixel sometimes uses that slot).
+        var itemName = slot.ComponentsToAdd?.FirstOrDefault(c => c.Type == ComponentType.ItemName);
+        return itemName?.Data as NbtTag;
+    }
+
+    private static List<NbtTag>? GetLoreList(Slot slot)
+    {
+        var comp = slot.ComponentsToAdd?.FirstOrDefault(c => c.Type == ComponentType.Lore);
+        if (comp?.Data is NbtList list)
+        {
+            return list.Value.ToList();
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Hypixel stores its item identifier in CustomData as <c>id</c> (e.g. "DIGESTED_MUSHROOMS").
+    /// </summary>
+    private static string? GetHypixelId(Slot slot)
+    {
+        var custom = slot.ComponentsToAdd?.FirstOrDefault(c => c.Type == ComponentType.CustomData);
+        if (custom?.Data is not NbtTag nbt) return null;
+        return nbt.FindTag<NbtString>("id")?.Value;
+    }
+
+    private string FallbackItemName(Slot slot)
+    {
+        var name = Bot.ItemRegistry.GetItemName(slot.ItemId ?? 0);
+        if (string.IsNullOrEmpty(name)) return $"#{slot.ItemId}";
+        return name.Replace("minecraft:", "").Replace("_", " ");
+    }
 }

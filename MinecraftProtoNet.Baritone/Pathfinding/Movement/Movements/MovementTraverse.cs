@@ -76,8 +76,10 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
         
         if (frostWalker || MovementHelper.CanWalkOn(context, destX, y - 1, destZ, destOn))
         {
+            // this is a walk, not a bridge
             double wc = ActionCosts.WalkOneBlockCost;
             bool water = false;
+            bool sneaking = false;
             if (MovementHelper.IsWater(pb0) || MovementHelper.IsWater(pb1))
             {
                 wc = context.WaterWalkSpeed;
@@ -85,63 +87,67 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             }
             else
             {
-                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:78-80
-                // Check for soul sand (slows movement)
-                string destOnName = destOn.Name;
-                if (destOnName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase))
+                // Reference: MovementTraverse.java:93-105
+                if (destOn.IsSoulSand)
                 {
-                    wc *= 2.0; // Soul sand slows movement
+                    wc += (ActionCosts.WalkOneOverSoulSandCost - ActionCosts.WalkOneBlockCost) / 2;
+                }
+                else if (frostWalker)
+                {
+                    // with frostwalker we can walk on water without the penalty, if we are sure we won't be using jesus
+                }
+                else if (destOn.Name.Equals("minecraft:water", StringComparison.OrdinalIgnoreCase))
+                {
+                    wc += context.WalkOnWaterOnePenalty;
+                }
+                if (srcDown.IsSoulSand)
+                {
+                    wc += (ActionCosts.WalkOneOverSoulSandCost - ActionCosts.WalkOneBlockCost) / 2;
+                }
+                else if (context.AllowWalkOnMagmaBlocks && srcDown.IsMagmaBlock)
+                {
+                    sneaking = true;
+                    wc += (ActionCosts.SneakOneBlockCost - ActionCosts.WalkOneBlockCost) / 2;
                 }
             }
-            
+
             double hardness1 = MovementHelper.GetMiningDurationTicks(context, destX, y, destZ, pb1, false);
             if (hardness1 >= ActionCosts.CostInf)
             {
                 return ActionCosts.CostInf;
             }
-            double hardness2 = MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, pb0, true);
-            if (hardness2 >= ActionCosts.CostInf)
-            {
-                return ActionCosts.CostInf;
-            }
+            double hardness2 = MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, pb0, true); // only include falling on the upper block to break
             if (hardness1 == 0 && hardness2 == 0)
             {
-                if (!water && context.CanSprint)
+                if (!water && !sneaking && context.CanSprint)
                 {
+                    // nothing in the way, not water, not sneak placing -> we can sprint (soul sand is sprintable too)
                     wc *= ActionCosts.SprintMultiplier;
                 }
                 return wc;
             }
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:96-97
-            // Check for ladder/vine penalty
-            string pb1Name = pb1.Name;
-            bool isClimbable = pb1Name.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                              pb1Name.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbable)
+            // Reference: MovementTraverse.java:121-124 - climbing out of a ladder/vine is 5x slower to break
+            if (MovementHelper.IsClimbable(srcDown))
             {
-                wc *= 2.0; // Climbable blocks slow movement
+                hardness1 *= 5;
+                hardness2 *= 5;
             }
             return wc + hardness1 + hardness2;
         }
         else
         {
-            // This is a bridge, so we need to place a block
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:102
-            // Check for ladder/vine (can't place blocks on climbable blocks)
-            string destOnName = destOn.Name;
-            bool isClimbable = destOnName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                              destOnName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbable)
+            // this is a bridge, so we need to place a block
+            // Reference: MovementTraverse.java:127-128 - can't bridge out of a ladder/vine
+            if (MovementHelper.IsClimbable(srcDown))
             {
-                // Baritone.GetGameEventHandler().LogDirect("[DEBUG] Traverse: Failed to bridge because target is climbable");
-                return ActionCosts.CostInf; // Can't place blocks on climbable blocks
+                return ActionCosts.CostInf;
             }
             if (MovementHelper.IsReplaceable(destX, y - 1, destZ, destOn, context.Bsi))
             {
                 bool throughWater = MovementHelper.IsWater(pb0) || MovementHelper.IsWater(pb1);
                 if (MovementHelper.IsWater(destOn) && throughWater)
                 {
-                    // Baritone.GetGameEventHandler().LogDirect("[DEBUG] Traverse: Failed to bridge because placing in water while in water");
+                    // assumeWalkOnWater is true and this is a traverse in water, which isn't allowed
                     return ActionCosts.CostInf;
                 }
                 double placeCost = context.CostOfPlacingAt(destX, y - 1, destZ, destOn);
@@ -156,7 +162,7 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 }
                 double hardness2 = MovementHelper.GetMiningDurationTicks(context, destX, y + 1, destZ, pb0, true);
                 double wc = throughWater ? context.WaterWalkSpeed : ActionCosts.WalkOneBlockCost;
-                
+
                 // Check for side place options
                 for (int i = 0; i < 5; i++)
                 {
@@ -167,31 +173,33 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                     int againstZ = destZ + normal.Z;
                     if (againstX == x && againstZ == z)
                     {
-                        continue; // backplace
+                        continue; // this would be a backplace
                     }
                     if (MovementHelper.CanPlaceAgainst(context.Bsi, againstX, againstY, againstZ))
                     {
-                        return wc + placeCost + hardness1 + hardness2;
+                        return wc + placeCost + hardness1 + hardness2; // found a side place option
                     }
                 }
-                
-                // Backplace logic
-                string srcDownName = srcDown.Name;
-                bool onSoulSand = srcDownName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase);
-                bool onSlab = srcDown.IsSlab;
-                
-                if (onSoulSand || (onSlab && (!srcDown.Properties.TryGetValue("type", out var type) || type != "double")))
+
+                // now that we've checked every side, we actually need to backplace
+                // Reference: MovementTraverse.java:158-160 - can't sneak backplace against soul sand or a half slab
+                if (srcDown.IsSoulSand || (srcDown.IsSlab && (!srcDown.Properties.TryGetValue("type", out var type) || type != "double")))
                 {
                     return ActionCosts.CostInf;
                 }
-                
-                if (!standingOnABlock && !srcDown.IsAir)
+                // Reference: MovementTraverse.java:161-163 - standing on water / swimming is impossible to backplace from
+                if (!standingOnABlock)
                 {
-                    // Baritone.GetGameEventHandler().LogDirect($"[DEBUG] Traverse: Failed backplace - Not standing on a solid block ({x},{y-1},{z}) Name={srcDown.Name}");
                     return ActionCosts.CostInf;
                 }
-                
-                wc = wc * (ActionCosts.SneakOneBlockCost / ActionCosts.WalkOneBlockCost);
+                // Reference: MovementTraverse.java:164-167 - we can stand on lily pad / carpet but can't place against them
+                var blockSrc = context.Get(x, y, z);
+                if ((blockSrc.IsLilyPad || blockSrc.IsCarpet) && MovementHelper.IsLiquid(srcDown))
+                {
+                    return ActionCosts.CostInf;
+                }
+
+                wc = wc * (ActionCosts.SneakOneBlockCost / ActionCosts.WalkOneBlockCost); // since we are sneak backplacing, we are sneaking
                 return wc + placeCost + hardness1 + hardness2;
             }
             return ActionCosts.CostInf;
@@ -273,23 +281,61 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
         // Reference: MovementTraverse.java:217
         state.SetInput(Input.Sneak, false);
 
-        // Reference: MovementTraverse.java:219-220
+        // Reference: MovementTraverse.java:219-221
         var srcBelowState = BlockStateInterface.Get(Ctx, Src.Below());
-        bool ladder = srcBelowState.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                      srcBelowState.Name.Contains("vine", StringComparison.OrdinalIgnoreCase);
+        bool ladder = MovementHelper.IsClimbable(srcBelowState);
 
-        // Reference: MovementTraverse.java:222-242 - Door and fence gate handling
-        if (pb0.Name.Contains("door", StringComparison.OrdinalIgnoreCase) || pb1.Name.Contains("door", StringComparison.OrdinalIgnoreCase))
+        // Reference: MovementTraverse.java:223-224 - sneak if about to step onto magma (overrides the
+        // SNEAK=false above; sneak may have been set in PREPPING while mining an adjacent block).
+        state.SetInput(Input.Sneak, Core.Baritone.Settings().AllowWalkOnMagmaBlocks.Value
+            && MovementHelper.SteppingOnBlocks(Ctx).Any(b => BlockStateInterface.Get(Ctx, b).IsMagmaBlock));
+
+        // Reference: MovementTraverse.java:226-234 - open a closed door we're walking through (iron doors
+        // can't be opened by hand, so don't bother). Look at the door and right-click.
+        if (pb0.IsDoor || pb1.IsDoor)
         {
-            // TODO: Check if door is passable and handle opening if needed
+            bool notPassable = (pb0.IsDoor && !MovementHelper.IsDoorPassable(Ctx, Src, Dest))
+                               || (pb1.IsDoor && !MovementHelper.IsDoorPassable(Ctx, Dest, Src));
+            bool canOpen = !(pb0.Name == "minecraft:iron_door" || pb1.Name == "minecraft:iron_door");
+
+            if (notPassable && canOpen)
+            {
+                var head = Ctx.PlayerHead();
+                var rot = Ctx.PlayerRotations();
+                var world = Ctx.World() as Level;
+                if (head != null && rot != null && world != null)
+                {
+                    var target = RotationUtils.CalcRotationFromVec3d(head,
+                        VecUtils.CalculateBlockCenter(world, PositionsToBreak[0]), rot);
+                    return state.SetTarget(new MovementState.MovementTarget(target, true))
+                        .SetInput(Input.ClickRight, true);
+                }
+            }
         }
-        if (pb0.Name.Contains("fence_gate", StringComparison.OrdinalIgnoreCase) || pb1.Name.Contains("fence_gate", StringComparison.OrdinalIgnoreCase))
+
+        // Reference: MovementTraverse.java:236-246 - open a closed fence gate blocking the path.
+        if (pb0.IsFenceGate || pb1.IsFenceGate)
         {
-            // TODO: Check if fence gate is passable and handle opening if needed
+            BetterBlockPos? blocked =
+                !MovementHelper.IsGatePassable(Ctx, PositionsToBreak[0], Src.Above()) ? PositionsToBreak[0]
+                : !MovementHelper.IsGatePassable(Ctx, PositionsToBreak[1], Src) ? PositionsToBreak[1]
+                : null;
+            if (blocked != null)
+            {
+                var rotation = RotationUtils.Reachable(Ctx, blocked);
+                if (rotation != null)
+                {
+                    return state.SetTarget(new MovementState.MovementTarget(rotation, true))
+                        .SetInput(Input.ClickRight, true);
+                }
+            }
         }
 
         // Reference: MovementTraverse.java:244
-        bool isTheBridgeBlockThere = (PositionToPlace != null && MovementHelper.CanWalkOn(Ctx, PositionToPlace)) || ladder;
+        // Reference: MovementTraverse.java:248 - includes the frost-walker disjunct (freeze water into a bridge)
+        bool isTheBridgeBlockThere = (PositionToPlace != null && MovementHelper.CanWalkOn(Ctx, PositionToPlace))
+            || ladder
+            || (PositionToPlace != null && MovementHelper.CanUseFrostWalker(Ctx, PositionToPlace));
         
         var feet = Ctx.PlayerFeet();
         
@@ -329,10 +375,8 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             {
                 var lowBlock = BlockStateInterface.Get(Ctx, Src);
                 var highBlock = BlockStateInterface.Get(Ctx, Src.Above());
-                bool lowClimbable = lowBlock.Name.Contains("vine", StringComparison.OrdinalIgnoreCase) || 
-                                    lowBlock.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase);
-                bool highClimbable = highBlock.Name.Contains("vine", StringComparison.OrdinalIgnoreCase) || 
-                                     highBlock.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase);
+                bool lowClimbable = MovementHelper.IsClimbable(lowBlock);
+                bool highClimbable = MovementHelper.IsClimbable(highBlock);
                 if (player.Position.Y > Src.Y + 0.1 && !player.IsOnGround && (lowClimbable || highClimbable))
                 {
                     // Hitting W could cause us to climb the ladder instead of going forward; wait until on ground
@@ -357,7 +401,7 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             if (feet != null && feet.Y != Dest.Y && ladder)
             {
                 var destDown = BlockStateInterface.Get(Ctx, Dest.Below());
-                if (destDown.Name.Contains("ladder", StringComparison.OrdinalIgnoreCase) || destDown.Name.Contains("vine", StringComparison.OrdinalIgnoreCase))
+                if (MovementHelper.IsClimbable(destDown))
                 {
                     // For ladder/vine descent, use the block the ladder is attached to
                     // Simplified: just use dest.below() as target
@@ -377,7 +421,8 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             if (feet != null && playerSs != null)
             {
                 var standingOn = BlockStateInterface.Get(Ctx, feet.Below());
-                if (standingOn.Name.Contains("soul_sand", StringComparison.OrdinalIgnoreCase) || standingOn.IsSlab)
+                // Reference: MovementTraverse.java:289 - standingOn == SOUL_SAND || standingOn instanceof SlabBlock
+                if (standingOn.IsSoulSand || standingOn.IsSlab)
                 {
                     double distSoulSand = Math.Max(Math.Abs(Dest.X + 0.5 - playerSs.Position.X), Math.Abs(Dest.Z + 0.5 - playerSs.Position.Z));
                     if (distSoulSand < 0.85) // 0.5 + 0.3 + epsilon
@@ -397,7 +442,8 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 dist1 = Math.Max(Math.Abs(playerBridge.Position.X - (Dest.X + 0.5)), Math.Abs(playerBridge.Position.Z - (Dest.Z + 0.5)));
             }
 
-            var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, true);
+            // Reference: MovementTraverse.java:298 - wouldSneak = !assumeSafeWalk
+            var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, !Core.Baritone.Settings().AssumeSafeWalk.Value);
             
             // Reference: MovementTraverse.java:300-302 - Sneak when close or ready to place
             if ((placeResult == MovementHelper.PlaceResult.ReadyToPlace || dist1 < 0.6) && !Core.Baritone.Settings().AssumeSafeWalk.Value)
@@ -523,13 +569,9 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
         var feet = Ctx.PlayerFeet();
         if (feet != null && (feet.Equals(Src) || feet.Equals(Src.Below())))
         {
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementTraverse.java:218
-            // Check for ladder/vine BELOW and set sneak
+            // Reference: MovementTraverse.java:218 - sneak if standing on a climbable (ladder/vine) below
             var belowState = BlockStateInterface.Get(Ctx, Src.Below());
-            string belowName = belowState.Name;
-            bool isClimbableBelow = belowName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                                   belowName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbableBelow)
+            if (MovementHelper.IsClimbable(belowState))
             {
                 state.SetInput(Input.Sneak, true);
             }

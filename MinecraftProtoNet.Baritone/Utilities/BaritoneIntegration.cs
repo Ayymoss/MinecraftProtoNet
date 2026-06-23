@@ -100,15 +100,19 @@ public static class BaritoneIntegration
                                 ? TickEvent.TickEventType.In
                                 : TickEvent.TickEventType.Out;
                             
-                            // Fire PlayerUpdateEvent PRE before tick (allows LookBehavior to set rotations)
-                            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/launch/java/baritone/launch/mixins/MixinClientPlayerEntity.java:73
+                            // Reference: MixinClientPlayerEntity.java:73 - in Java the TickEvent.IN handlers
+                            // (PathingBehavior -> Movement -> lookBehavior.updateTarget) run BEFORE player.tick()
+                            // fires PlayerUpdateEvent PRE, where LookBehavior peeks + applies the just-computed
+                            // target and POST resets it. So OnTick must precede PlayerUpdate(PRE). (AIM4: this was
+                            // reversed, which left the PRE/POST machinery dead and forced an eager write in
+                            // updateTarget. Both run in PreTick, before the physics tick sends the position packet.)
+                            baritone.GetGameEventHandler().OnTick(tickProvider(EventState.Pre, tickType));
+
                             if (tickType == TickEvent.TickEventType.In)
                             {
                                 baritone.GetGameEventHandler().OnPlayerUpdate(
                                     new Api.Event.Events.PlayerUpdateEvent(EventState.Pre));
                             }
-                            
-                            baritone.GetGameEventHandler().OnTick(tickProvider(EventState.Pre, tickType));
                         }
                         catch (Exception ex)
                         {

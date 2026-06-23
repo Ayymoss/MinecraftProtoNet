@@ -2,11 +2,11 @@
 @using Bot.Webcore.Services
 @implements IDisposable
 
-<div class="bg-slate-900/40 backdrop-blur-2xl rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col h-full">
+<div class="bg-slate-900/40 backdrop-blur-md rounded-md border border-slate-800/80 shadow-md overflow-hidden flex flex-col h-full">
     <!-- Header -->
     <div class="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between bg-slate-900/20">
         <div class="flex items-center gap-3">
-            <div class="flex px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20">
+            <div class="flex px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20">
                 <i class="ph-duotone ph-paw-print text-xl text-amber-400"></i>
             </div>
             <h2 class="text-lg font-bold text-slate-100 tracking-tight">Nearby Entities</h2>
@@ -49,7 +49,7 @@
                     <i class="ph-duotone ph-magnifying-glass text-slate-500 group-focus-within:text-amber-400 transition-colors"></i>
                 </div>
                 <input type="text" @bind="_searchFilter" @bind:event="oninput"
-                       class="w-full bg-slate-950/50 border border-slate-800/80 rounded-2xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/40 transition-all shadow-inner"
+                       class="w-full bg-slate-950/50 border border-slate-800/80 rounded-md py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/40 transition-all shadow-inner"
                        placeholder="Search entities..." />
             </div>
 
@@ -66,9 +66,9 @@
                     @foreach (var entity in entities)
                     {
                         var typeName = GetEntityTypeName(entity.EntityType);
-                        <div class="flex items-center gap-4 p-3 rounded-2xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-900/60 hover:border-amber-500/30 transition-all group">
+                        <div class="flex items-center gap-4 p-3 rounded-md bg-slate-900/40 border border-slate-800/60 hover:bg-slate-900/60 hover:border-amber-500/30 transition-all group">
                             <!-- Icon -->
-                            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+                            <div class="w-11 h-11 rounded bg-gradient-to-br from-amber-500/10 to-amber-600/5 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
                                 <i class="ph-duotone ph-paw-print text-xl text-amber-400"></i>
                             </div>
 
@@ -109,17 +109,17 @@
                             <!-- Actions -->
                             <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button @onclick="() => PathfindToEntity(entity)"
-                                        class="flex px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/20 transition-all"
+                                        class="flex px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded border border-purple-500/20 transition-all"
                                         title="Path to">
                                     <i class="ph-duotone ph-footprints text-lg"></i>
                                 </button>
                                 <button @onclick="() => LookAtEntity(entity)"
-                                        class="flex px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg border border-cyan-500/20 transition-all"
+                                        class="flex px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded border border-cyan-500/20 transition-all"
                                         title="Look at">
                                     <i class="ph-duotone ph-eye text-lg"></i>
                                 </button>
                                 <button @onclick="() => InteractWithEntity(entity)"
-                                        class="flex px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/20 transition-all"
+                                        class="flex px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded border border-amber-500/20 transition-all"
                                         title="Interact">
                                     <i class="ph-duotone ph-hand-pointing text-lg"></i>
                                 </button>

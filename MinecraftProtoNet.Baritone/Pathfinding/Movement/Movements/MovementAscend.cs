@@ -82,31 +82,22 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
             if (!foundPlaceOption) return ActionCosts.CostInf;
         }
         
-        var srcUp2 = context.Get(x, y + 2, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java:95-113
-        // Check for falling blocks (sand/gravel) at y+3 that would fall on us
-        var srcUp3 = context.Get(x, y + 3, z);
-        string srcUp3Name = srcUp3.Name;
-        if ((srcUp3Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
-             srcUp3Name.Contains("sand", StringComparison.OrdinalIgnoreCase) ||
-             srcUp3Name.Contains("concrete_powder", StringComparison.OrdinalIgnoreCase)) &&
-            (MovementHelper.CanWalkThrough(context, x, y + 1, z) ||
-             !(srcUp2.Name.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
-               srcUp2.Name.Contains("sand", StringComparison.OrdinalIgnoreCase) ||
-               srcUp2.Name.Contains("concrete_powder", StringComparison.OrdinalIgnoreCase))))
+        var srcUp2 = context.Get(x, y + 2, z); // used lower down anyway
+        // Reference: MovementAscend.java:96-113 - falling block at y+3 would fall on us and suffocate.
+        // (includeFalling not needed below: if srcUp3 is falling we exit here with COST_INF when we'd have to break it.)
+        if (context.Get(x, y + 3, z).IsFallingBlock &&
+            (MovementHelper.CanWalkThrough(context, x, y + 1, z) || !srcUp2.IsFallingBlock))
         {
             return ActionCosts.CostInf;
         }
-        
+
         var srcDown = context.Get(x, y - 1, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementAscend.java:114-117
-        // Can't jump/ascend from a ladder or vine position
-        string srcDownName = srcDown.Name;
-        if (srcDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-            srcDownName.Contains("vine", StringComparison.OrdinalIgnoreCase))
+        // Reference: MovementAscend.java:115-117 - can't ascend from a climbable (ladder/vine)
+        if (MovementHelper.IsClimbable(srcDown))
         {
             return ActionCosts.CostInf;
         }
+        // we can jump from soul sand, but not from a bottom slab
         bool jumpingFromBottomSlab = MovementHelper.IsBottomSlab(srcDown);
         bool jumpingToBottomSlab = MovementHelper.IsBottomSlab(toPlace);
         if (jumpingFromBottomSlab && !jumpingToBottomSlab) return ActionCosts.CostInf;
@@ -119,8 +110,20 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         }
         else
         {
-            if (srcDown.Name.Contains("soul_sand", StringComparison.OrdinalIgnoreCase)) walk = Math.Max(ActionCosts.JumpOneBlockCost * 2.0, ActionCosts.WalkOneBlockCost * 2.0);
-            else walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
+            // jumpingFromBottomSlab must be false. Reference: MovementAscend.java:132-142
+            // Cost depends on what we ascend ONTO (toPlace), not what we leave (srcDown).
+            if (toPlace.IsSoulSand)
+            {
+                walk = ActionCosts.WalkOneOverSoulSandCost;
+            }
+            else if (toPlace.IsMagmaBlock)
+            {
+                walk = ActionCosts.SneakOneBlockCost;
+            }
+            else
+            {
+                walk = Math.Max(ActionCosts.JumpOneBlockCost, ActionCosts.WalkOneBlockCost);
+            }
             walk += context.JumpPenalty;
         }
 
@@ -202,6 +205,9 @@ public class MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockP
         if (feet == null || !feet.Equals(Dest) || ab > 0.25) MovementHelper.MoveTowards(Ctx, state, Dest);
         
         var jumpingOntoFinal = BlockStateInterface.Get(Ctx, PositionToPlace!);
+        // Reference: MovementAscend.java:194 - sneak when ascending onto a magma block
+        state.SetInput(Input.Sneak, Core.Baritone.Settings().AllowWalkOnMagmaBlocks.Value && jumpingOntoFinal.IsMagmaBlock);
+
         var srcDownState = BlockStateInterface.Get(Ctx, Src.Below());
         if (MovementHelper.IsBottomSlab(jumpingOntoFinal) && !MovementHelper.IsBottomSlab(srcDownState)) return state;
 

@@ -179,6 +179,12 @@ public sealed class Settings
     public readonly Setting<bool> AllowParkourAscend = new(true);
 
     /// <summary>
+    /// Sneak when magma blocks are under feet
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/Settings.java:1586
+    /// </summary>
+    public readonly Setting<bool> AllowWalkOnMagmaBlocks = new(false);
+
+    /// <summary>
     /// Allow descending diagonally
     /// Safer than allowParkour yet still slightly unsafe, can make contact with unchecked adjacent blocks, so it's unsafe in the nether.
     /// For a generic "take some risks" mode I'd turn on this one, parkour, and parkour place.
@@ -349,6 +355,13 @@ public sealed class Settings
     /// How many degrees to randomize the pitch and yaw every tick. Set to 0 to disable
     /// </summary>
     public readonly Setting<double> RandomLooking = new(0.01);
+
+    /// <summary>
+    /// Substitutes for Minecraft's options.sensitivity() (unavailable to a headless bot). Drives the
+    /// mouse-movement quantization in AimProcessor so outgoing rotations land on the same discrete grid a
+    /// real mouse produces (anti-cheat realism). Vanilla default 0.5 → ~0.15° steps. Reference: LookBehavior.java:305.
+    /// </summary>
+    public readonly Setting<double> MouseSensitivity = new(0.5);
 
     // ========== PATHFINDING ==========
 

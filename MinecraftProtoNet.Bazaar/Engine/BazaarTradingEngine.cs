@@ -38,6 +38,13 @@ public sealed class BazaarTradingEngine : IDisposable
     public OrderManager Orders => _orderManager;
     public bool IsRunning => _state != TradingEngineState.Idle && _state != TradingEngineState.Halted;
 
+    /// <summary>
+    /// Fires when the safety guard halts trading. Subscribers (e.g. the web UI panic path)
+    /// can use this to auto-disconnect on breach rather than leaving the bot idling in-game.
+    /// The argument is the human-readable halt reason.
+    /// </summary>
+    public event Action<string>? OnHalted;
+
     public BazaarTradingEngine(
         IMinecraftClient client,
         MarketDataService marketData,
@@ -188,6 +195,14 @@ public sealed class BazaarTradingEngine : IDisposable
         _state = TradingEngineState.Halted;
         _haltReason = reason;
         _logger.LogError("Trading engine HALTED: {Reason}", reason);
+        try
+        {
+            OnHalted?.Invoke(reason);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OnHalted subscriber threw");
+        }
     }
 
     /// <summary>Resumes after a halt (resets halt state).</summary>

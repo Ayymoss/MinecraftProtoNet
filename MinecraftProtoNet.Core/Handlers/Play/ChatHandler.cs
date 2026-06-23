@@ -88,6 +88,11 @@ public class ChatHandler(ILogger<ChatHandler> logger, IChatEventBus chatEventBus
                 var visibleText = disconnectPacket.DisconnectReason.GetVisibleText();
                 logger.LogWarning("Disconnected from server: ({TranslateKey}) {Message}",
                     translateLookup, visibleText);
+
+                // Surface reason to the rest of the app (UI toast, panic trigger).
+                client.State.LastDisconnectReason = visibleText;
+                client.State.LastDisconnectTranslateKey = translateLookup;
+                client.State.LastDisconnectAt = DateTimeOffset.UtcNow;
                 break;
             }
 

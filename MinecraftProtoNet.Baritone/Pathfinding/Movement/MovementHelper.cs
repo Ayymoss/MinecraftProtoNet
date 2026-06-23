@@ -224,19 +224,22 @@ public static class MovementHelper
         return 0; // We won't actually mine it, so don't check fallings above
     }
 
+    // Reference: MovementHelper.java isWater - getFluidState().getType() == WATER/FLOWING_WATER (includes waterlogged)
     public static bool IsWater(BlockState state)
     {
-        return state != null && state.Name.Contains("water", StringComparison.OrdinalIgnoreCase);
+        return state != null && state.IsWater;
     }
 
+    // Reference: MovementHelper.java isLava - getFluidState().getType() == LAVA/FLOWING_LAVA
     public static bool IsLava(BlockState state)
     {
-        return state != null && state.Name.Contains("lava", StringComparison.OrdinalIgnoreCase);
+        return state != null && state.IsLava;
     }
 
+    // Reference: MovementHelper.java isLiquid(BlockState) - !getFluidState().isEmpty() (any fluid, incl. waterlogged)
     public static bool IsLiquid(BlockState state)
     {
-        return state != null && state.IsLiquid;
+        return state != null && (state.IsWater || state.IsLava);
     }
 
     public static bool IsLiquid(IPlayerContext ctx, BetterBlockPos pos)
@@ -245,16 +248,37 @@ public static class MovementHelper
         return IsLiquid(state);
     }
 
+    // Reference: MovementHelper.java isClimbable(Block) - LADDER, VINE, WEEPING_VINES(_PLANT), TWISTING_VINES(_PLANT)
+    public static bool IsClimbable(BlockState state)
+    {
+        return state != null && state.IsClimbable;
+    }
+
+    // Reference: MovementHelper.java isBottomSlab - instanceof SlabBlock && TYPE == BOTTOM
     public static bool IsBottomSlab(BlockState state)
     {
         if (state == null) return false;
-        return state.Name.Contains("slab", StringComparison.OrdinalIgnoreCase) && 
-               state.Properties.TryGetValue("type", out var type) && type == "bottom";
+        return state.IsSlab && state.Properties.TryGetValue("type", out var type) && type == "bottom";
     }
 
+    // Reference: MovementHelper.java:772-788 - exclude a few classes whose collision shape is (or can be)
+    // a full cube but which must not count as a normal cube, then test the real collision shape.
     public static bool IsBlockNormalCube(BlockState state)
     {
-        return state != null && !state.IsAir && state.HasCollision;
+        if (state == null) return false;
+        var name = state.Name;
+        if (name.Equals("minecraft:bamboo", StringComparison.OrdinalIgnoreCase)         // BambooStalkBlock
+            || name.Equals("minecraft:moving_piston", StringComparison.OrdinalIgnoreCase) // MovingPistonBlock
+            || name.Equals("minecraft:scaffolding", StringComparison.OrdinalIgnoreCase)  // ScaffoldingBlock
+            || name.EndsWith("shulker_box", StringComparison.OrdinalIgnoreCase)          // ShulkerBoxBlock (full collision box!)
+            || name.Equals("minecraft:pointed_dripstone", StringComparison.OrdinalIgnoreCase) // PointedDripstoneBlock
+            || name.EndsWith("amethyst_cluster", StringComparison.OrdinalIgnoreCase)     // AmethystClusterBlock
+            || name.EndsWith("amethyst_bud", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        // Block.isShapeFullBlock(getCollisionShape()) via the shared shape registry.
+        return BlockShapeRegistry.Shared.GetShape(state).IsFullCube();
     }
 
     /// <summary>
@@ -319,9 +343,24 @@ public static class MovementHelper
 
     public static bool CanPlaceAgainst(BlockStateInterface bsi, int x, int y, int z)
     {
-        var state = bsi.Get0(x, y, z);
-        if (state == null || state.IsAir) return false;
-        return state.HasCollision || state.Name.Contains("glass", StringComparison.OrdinalIgnoreCase);
+        return CanPlaceAgainst(bsi, x, y, z, bsi.Get0(x, y, z));
+    }
+
+    // Reference: MovementHelper.java:575-582 - world border + a face we can actually place against.
+    // Only normal cubes and (stained) glass — deliberately NOT fences/slabs/panes/carpet etc.
+    public static bool CanPlaceAgainst(BlockStateInterface bsi, int x, int y, int z, BlockState state)
+    {
+        if (!bsi.WorldBorder.CanPlaceAt(x, z))
+        {
+            return false;
+        }
+        if (state == null)
+        {
+            return false;
+        }
+        return IsBlockNormalCube(state)
+            || state.Name.Equals("minecraft:glass", StringComparison.OrdinalIgnoreCase)
+            || state.Name.EndsWith("_stained_glass", StringComparison.OrdinalIgnoreCase);
     }
 
     public static double GetHorizontalDistance(BetterBlockPos a, BetterBlockPos b)
@@ -467,20 +506,102 @@ public static class MovementHelper
         return CanUseFrostWalker(context, state);
     }
 
-    public static bool AvoidBreaking(BlockState state)
+    // Reference: MovementHelper.java:857-867 - the floor blocks under the player's bounding-box footprint
+    // (used to decide whether to sneak when any supporting block is magma).
+    public static List<BetterBlockPos> SteppingOnBlocks(IPlayerContext ctx)
     {
-        var settings = BaritoneAPI.GetSettings();
-        return settings.BlocksToAvoidBreaking.Value.Contains(state.Name);
+        var blocks = new List<BetterBlockPos>();
+        var player = ctx.Player() as Entity;
+        if (player == null) return blocks;
+        var bb = player.GetBoundingBox();
+        var bp = player.BlockPosition();
+        for (int x = -1; x <= 1; x++)
+        {
+            for (int z = -1; z <= 1; z++)
+            {
+                // unit cube at the player's feet-Y level, offset (x,z); if the AABB overlaps it, the block below is stood on
+                if (bb.Intersects(bp.X + x, bp.Y, bp.Z + z, bp.X + x + 1, bp.Y + 1, bp.Z + z + 1))
+                {
+                    blocks.Add(new BetterBlockPos(bp.X + x, bp.Y - 1, bp.Z + z));
+                }
+            }
+        }
+        return blocks;
+    }
+
+    // Reference: MovementHelper.java:514-519 - canUseFrostWalker(ctx, pos) reads the live FrostWalker enchant.
+    public static bool CanUseFrostWalker(IPlayerContext ctx, BetterBlockPos pos)
+    {
+        var player = ctx.Player() as Entity;
+        if (player == null) return false;
+        if (global::MinecraftProtoNet.Core.Data.EnchantmentHelper.GetArmorEnchantmentLevel("minecraft:frost_walker", player) <= 0) return false;
+        var state = BlockStateInterface.Get(ctx, pos);
+        return state != null && IsWater(state) &&
+               state.Properties.TryGetValue("level", out var level) && level == "0";
+    }
+
+    // Reference: MovementHelper.java:67-81
+    public static bool AvoidBreaking(BlockStateInterface bsi, int x, int y, int z, BlockState state)
+    {
+        if (!bsi.WorldBorder.CanPlaceAt(x, z))
+        {
+            return true;
+        }
+        // NOTE: blocksToDisallowBreaking (NOT blocksToAvoidBreaking — that is ToolSet's cost-mult setting).
+        return BaritoneAPI.GetSettings().BlocksToDisallowBreaking.Value.Contains(state.Name)
+            || state.Name.Equals("minecraft:ice", StringComparison.OrdinalIgnoreCase) // ice becomes water, and water can mess up the path
+            || state.Name.Contains("infested", StringComparison.OrdinalIgnoreCase) // InfestedBlock — obvious reasons
+            || AvoidAdjacentBreaking(bsi, x, y + 1, z, true)
+            || AvoidAdjacentBreaking(bsi, x + 1, y, z, false)
+            || AvoidAdjacentBreaking(bsi, x - 1, y, z, false)
+            || AvoidAdjacentBreaking(bsi, x, y, z + 1, false)
+            || AvoidAdjacentBreaking(bsi, x, y, z - 1, false);
     }
 
     public static bool AvoidBreaking(CalculationContext context, int x, int y, int z, BlockState state)
     {
-        return AvoidBreaking(state);
+        return AvoidBreaking(context.Bsi, x, y, z, state);
     }
 
-    public static bool AvoidBreaking(BlockStateInterface bsi, int x, int y, int z, BlockState state)
+    // Reference: MovementHelper.java:83-110
+    public static bool AvoidAdjacentBreaking(BlockStateInterface bsi, int x, int y, int z, bool directlyAbove)
     {
-        return AvoidBreaking(state);
+        // returns true if you should avoid breaking a block adjacent to this one (e.g. lava that will start flowing).
+        // called for north/south/east/west/up only — NOT down. We assume breaking the block ABOVE liquid is always okay.
+        var state = bsi.Get0(x, y, z);
+        if (!directlyAbove // fine to mine a block that has a falling block directly above (that cost is included elsewhere)
+            && state.IsFallingBlock
+            && BaritoneAPI.GetSettings().AvoidUpdatingFallingBlocks.Value
+            && FallingBlockIsFree(bsi, x, y - 1, z)) // and it would fall (unsupported)
+        {
+            return true; // don't break next to unsupported gravel — causes weird stuff
+        }
+        // only pure liquids for now; waterlogged blocks can have closed bottom sides
+        if (state.IsLiquid)
+        {
+            if (directlyAbove || BaritoneAPI.GetSettings().StrictLiquidCheck.Value)
+            {
+                return true;
+            }
+            int level = state.Properties.TryGetValue("level", out var lv) && int.TryParse(lv, out var parsed) ? parsed : 0;
+            if (level == 0)
+            {
+                return true; // source blocks like to flow horizontally
+            }
+            // everything else prefers flowing down
+            return !bsi.Get0(x, y - 1, z).IsLiquid; // assume everything is in a static state
+        }
+        return IsLiquid(state); // !getFluidState().isEmpty() — waterlogged etc.
+    }
+
+    // Reference: minecraft FallingBlock.isFree — air / fire / liquid / replaceable (approximated via Baritone IsReplaceable)
+    private static bool FallingBlockIsFree(BlockStateInterface bsi, int x, int y, int z)
+    {
+        var state = bsi.Get0(x, y, z);
+        return state.IsAir
+            || IsLiquid(state)
+            || ClientState.BlockTags.HasTag(state.Name, "fire")
+            || IsReplaceable(x, y, z, state, bsi);
     }
 
     public static bool IsTransparent(BlockState state)
@@ -534,6 +655,67 @@ public static class MovementHelper
         return AvoidWalkingInto(state);
     }
 
+    // Reference: MovementHelper.java:334-345
+    public static bool IsDoorPassable(IPlayerContext ctx, BetterBlockPos doorPos, BetterBlockPos playerPos)
+    {
+        if (playerPos.Equals(doorPos))
+        {
+            return false;
+        }
+        var state = BlockStateInterface.Get(ctx, doorPos);
+        if (state == null || !state.IsDoor)
+        {
+            return true;
+        }
+        return IsHorizontalBlockPassable(doorPos, state, playerPos);
+    }
+
+    // Reference: MovementHelper.java:347-358 - a gate only blocks when closed (facing-independent).
+    public static bool IsGatePassable(IPlayerContext ctx, BetterBlockPos gatePos, BetterBlockPos playerPos)
+    {
+        if (playerPos.Equals(gatePos))
+        {
+            return false;
+        }
+        var state = BlockStateInterface.Get(ctx, gatePos);
+        if (state == null || !state.IsFenceGate)
+        {
+            return true;
+        }
+        return state.Properties.TryGetValue("open", out var open) && open == "true";
+    }
+
+    // Reference: MovementHelper.java:360-378 - passable iff (facing axis == approach axis) == open.
+    private static bool IsHorizontalBlockPassable(BetterBlockPos blockPos, BlockState state, BetterBlockPos playerPos)
+    {
+        if (playerPos.Equals(blockPos))
+        {
+            return false;
+        }
+        if (!state.Properties.TryGetValue("facing", out var facing))
+        {
+            return true;
+        }
+        char facingAxis = facing is "north" or "south" ? 'z' : 'x';
+        bool open = state.Properties.TryGetValue("open", out var o) && o == "true";
+
+        char playerFacing;
+        if (playerPos.North().Equals(blockPos) || playerPos.South().Equals(blockPos))
+        {
+            playerFacing = 'z';
+        }
+        else if (playerPos.East().Equals(blockPos) || playerPos.West().Equals(blockPos))
+        {
+            playerFacing = 'x';
+        }
+        else
+        {
+            return true;
+        }
+
+        return (facingAxis == playerFacing) == open;
+    }
+
     public static bool IsFlowing(BlockState state)
     {
         return state.IsLiquid && state.Properties.TryGetValue("level", out var level) && level != "0";
@@ -549,40 +731,157 @@ public static class MovementHelper
         return IsFlowing(state);
     }
 
+    // Block-class identity sets backed by the data report's definition.type (real Java block classes, no substrings).
+    private static readonly HashSet<string> SkullTypes = new() // AbstractSkullBlock (NOT piston_head)
+    {
+        "minecraft:skull", "minecraft:wall_skull", "minecraft:wither_skull", "minecraft:wither_wall_skull",
+        "minecraft:player_head", "minecraft:player_wall_head", "minecraft:piglinwallskull",
+    };
+    private static readonly HashSet<string> CauldronTypes = new() // CauldronBlock
+    {
+        "minecraft:cauldron", "minecraft:layered_cauldron", "minecraft:lava_cauldron",
+    };
+    private static bool IsSkull(BlockState s) => s.BlockType != null && SkullTypes.Contains(s.BlockType);
+    private static bool IsCauldron(BlockState s) => s.BlockType != null && CauldronTypes.Contains(s.BlockType);
+
+    // Reference: MovementHelper.java:417-456
     public static Ternary CanWalkOnBlockState(BlockState state)
     {
         if (state == null) return No;
-        if (state.IsAir) return No;
-        if (state.IsLiquid) return Maybe;
-        return state.HasCollision ? Yes : No;
+        var settings = BaritoneAPI.GetSettings();
+        var bt = state.BlockType;
+        if (IsBlockNormalCube(state)
+            && (!state.IsMagmaBlock || settings.AllowWalkOnMagmaBlocks.Value)
+            && bt != "minecraft:bubble_column"
+            && bt != "minecraft:honey")
+        {
+            return Yes;
+        }
+        if (bt == "minecraft:azalea") return Yes;
+        if (state.IsLadder || (IsClimbable(state) && settings.AllowVines.Value)) return Yes;
+        if (bt == "minecraft:farmland" || bt == "minecraft:dirt_path" || state.IsSoulSand) return Yes;
+        if (bt == "minecraft:ender_chest" || bt == "minecraft:chest" || bt == "minecraft:trapped_chest") return Yes;
+        if (bt == "minecraft:transparent" || bt == "minecraft:stained_glass") return Yes; // glass + stained glass
+        if (state.IsStairs) return Yes;
+        if (IsWater(state)) return Maybe;
+        if (IsLava(state) && settings.AssumeWalkOnLava.Value) return Maybe;
+        if (state.IsSlab)
+        {
+            if (!settings.AllowWalkOnBottomSlab.Value)
+            {
+                return state.Properties.GetValueOrDefault("type", "bottom") != "bottom" ? Yes : No;
+            }
+            return Yes;
+        }
+        return No;
     }
 
+    // Reference: MovementHelper.java:139-192
     public static Ternary CanWalkThroughBlockState(BlockState state)
     {
         if (state == null) return Yes;
         if (state.IsAir) return Yes;
-        if (state.IsLiquid) return No;
-        return state.HasCollision ? No : Yes;
+        var settings = BaritoneAPI.GetSettings();
+        var bt = state.BlockType;
+        if (bt == "minecraft:fire" || bt == "minecraft:soul_fire" || bt == "minecraft:web"
+            || bt == "minecraft:end_portal" || bt == "minecraft:cocoa" || IsSkull(state)
+            || bt == "minecraft:bubble_column" || bt == "minecraft:shulker_box" || state.IsSlab
+            || bt == "minecraft:trapdoor" || bt == "minecraft:honey" || bt == "minecraft:end_rod"
+            || bt == "minecraft:sweet_berry_bush" || bt == "minecraft:pointed_dripstone"
+            || bt == "minecraft:amethyst_cluster" || bt == "minecraft:azalea")
+        {
+            return No;
+        }
+        if (bt == "minecraft:big_dripleaf") return No;
+        if (bt == "minecraft:powder_snow") return No;
+        if (settings.BlocksToAvoid.Value.Contains(state.Name)) return No;
+        if (bt == "minecraft:door" || state.IsFenceGate)
+        {
+            // TODO: assumes all modded doors are openable
+            if (state.Name.Equals("minecraft:iron_door", StringComparison.OrdinalIgnoreCase)) return No;
+            return Yes;
+        }
+        if (state.IsCarpet) return Maybe;
+        if (state.IsSnow) return Maybe; // unknown depth when cached as a top block
+        if (IsLiquid(state))
+        {
+            // amount != 8 (flowing) → NO; source/full (amount 8) → MAYBE
+            bool source = !state.Properties.TryGetValue("level", out var lv) || !int.TryParse(lv, out var lvl) || lvl == 0;
+            return source ? Maybe : No;
+        }
+        if (IsCauldron(state)) return No;
+        // Default: isPathfindable(LAND) ~= the block doesn't block motion.
+        return !state.BlocksMotion ? Yes : No;
     }
 
+    // Reference: MovementHelper.java:239-280
     public static Ternary FullyPassableBlockState(BlockState state)
     {
-        return CanWalkThroughBlockState(state);
+        if (state == null) return Yes;
+        if (state.IsAir) return Yes;
+        var bt = state.BlockType;
+        // blocks that are passable but we can't actually jump through
+        if (bt == "minecraft:fire" || bt == "minecraft:soul_fire" || bt == "minecraft:tripwire"
+            || bt == "minecraft:web" || bt == "minecraft:vine" || bt == "minecraft:ladder"
+            || bt == "minecraft:cocoa" || bt == "minecraft:azalea" || bt == "minecraft:door"
+            || state.IsFenceGate || state.IsSnow || IsLiquid(state) || bt == "minecraft:trapdoor"
+            || bt == "minecraft:end_portal" || IsSkull(state) || bt == "minecraft:shulker_box")
+        {
+            return No;
+        }
+        return !state.BlocksMotion ? Yes : No;
     }
 
+    // Reference: MovementHelper.java:458-482
     public static bool CanWalkOnPosition(BlockStateInterface bsi, int x, int y, int z, BlockState state)
     {
-        return state.HasCollision;
+        var settings = BaritoneAPI.GetSettings();
+        if (IsWater(state))
+        {
+            var upState = bsi.Get0(x, y + 1, z);
+            if (upState.IsLilyPad || upState.IsCarpet) return true;
+            if (IsFlowing(x, y, z, state, bsi) || (IsWater(upState) && IsFlowing(x, y + 1, z, upState, bsi)))
+            {
+                // only walk on flowing water if it's under still water with jesus off
+                return IsWater(upState) && !settings.AssumeWalkOnWater.Value;
+            }
+            // jesus on → walk on water only if no water above; jesus off → only if water above
+            return IsWater(upState) ^ settings.AssumeWalkOnWater.Value;
+        }
+        if (IsLava(state) && !IsFlowing(x, y, z, state, bsi) && settings.AssumeWalkOnLava.Value)
+        {
+            return true;
+        }
+        return false;
     }
 
+    // Reference: MovementHelper.java:194-237
     public static bool CanWalkThroughPosition(BlockStateInterface bsi, int x, int y, int z, BlockState state)
     {
-        return !state.HasCollision;
+        if (state.IsCarpet)
+        {
+            return CanWalkOn(bsi, x, y - 1, z);
+        }
+        if (state.IsSnow)
+        {
+            if (!bsi.WorldContainsLoadedChunk(x, z)) return true;
+            if (state.SnowLayers >= 3) return false; // 3+ is impassable in a 2-high gap
+            return CanWalkOn(bsi, x, y - 1, z);
+        }
+        if (IsLiquid(state))
+        {
+            if (IsFlowing(x, y, z, state, bsi)) return false;
+            if (BaritoneAPI.GetSettings().AssumeWalkOnWater.Value) return false;
+            var up = bsi.Get0(x, y + 1, z);
+            if (IsLiquid(up) || up.IsLilyPad) return false;
+            return state.IsWater;
+        }
+        return !state.BlocksMotion; // isPathfindable(LAND)
     }
 
     public static bool FullyPassablePosition(BlockStateInterface bsi, int x, int y, int z, BlockState state)
     {
-        return !state.HasCollision;
+        return !state.BlocksMotion;
     }
 
     public enum PlaceResult

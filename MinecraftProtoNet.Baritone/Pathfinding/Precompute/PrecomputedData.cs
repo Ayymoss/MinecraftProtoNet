@@ -36,13 +36,16 @@ public class PrecomputedData
     // For now, using a dictionary-based approach which is more flexible.
     private readonly Dictionary<int, int> _data = new();
 
+    // Bit layout — 1:1 with PrecomputedData.java:30-43 (S3). "Special" == Java's "maybe".
+    //   bit:    6           5             4              3              2             1           0
+    //       canWalkOn   cwo-maybe   canWalkThrough   cwt-maybe    fullyPassable   fp-maybe   completed
     private const int CompletedMask = 1 << 0;
-    private const int CanWalkOnMask = 1 << 1;
-    private const int CanWalkOnSpecialMask = 1 << 2;
-    private const int CanWalkThroughMask = 1 << 3;
-    private const int CanWalkThroughSpecialMask = 1 << 4;
-    private const int FullyPassableMask = 1 << 5;
-    private const int FullyPassableSpecialMask = 1 << 6;
+    private const int FullyPassableSpecialMask = 1 << 1;
+    private const int FullyPassableMask = 1 << 2;
+    private const int CanWalkThroughSpecialMask = 1 << 3;
+    private const int CanWalkThroughMask = 1 << 4;
+    private const int CanWalkOnSpecialMask = 1 << 5;
+    private const int CanWalkOnMask = 1 << 6;
 
     private int FillData(int id, BlockState state)
     {

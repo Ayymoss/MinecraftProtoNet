@@ -26,6 +26,7 @@ using MinecraftProtoNet.Baritone.Utils.Pathing;
 using MinecraftProtoNet.Core.Models.World.Chunk;
 using MinecraftProtoNet.Core.State;
 using BaritoneSettings = MinecraftProtoNet.Baritone.Core.Baritone;
+using EnchantmentHelper = MinecraftProtoNet.Core.Data.EnchantmentHelper;
 
 namespace MinecraftProtoNet.Baritone.Pathfinding.Movement;
 
@@ -51,6 +52,7 @@ public class CalculationContext
     public readonly bool AllowParkourPlace;
     public readonly bool AllowJumpAtBuildLimit;
     public readonly bool AllowParkourAscend;
+    public readonly bool AllowWalkOnMagmaBlocks;
     public readonly bool AssumeWalkOnWater;
     public bool AllowFallIntoLava;
     public readonly int FrostWalker;
@@ -124,23 +126,14 @@ public class CalculationContext
         AllowParkourPlace = BaritoneSettings.Settings().AllowParkourPlace.Value;
         AllowJumpAtBuildLimit = BaritoneSettings.Settings().AllowJumpAtBuildLimit.Value;
         AllowParkourAscend = BaritoneSettings.Settings().AllowParkourAscend.Value;
+        AllowWalkOnMagmaBlocks = BaritoneSettings.Settings().AllowWalkOnMagmaBlocks.Value;
         AssumeWalkOnWater = BaritoneSettings.Settings().AssumeWalkOnWater.Value;
         AllowFallIntoLava = false;
 
-        int frostWalkerLevel = 0;
-        if (player is Entity playerEntity)
-        {
-            int[] equipmentSlots = { 36, 37, 38, 39, 40 };
-            foreach (int slotIndex in equipmentSlots)
-            {
-                var slot = playerEntity.Inventory.GetSlot((short)slotIndex);
-                if (slot.ItemId != null && slot.ItemCount > 0)
-                {
-                    // Enchantment checking logic placeholder
-                }
-            }
-        }
-        FrostWalker = frostWalkerLevel;
+        // Reference: CalculationContext.java:112 - FrostWalker enchant level (boots)
+        FrostWalker = player is Entity fwPlayer
+            ? EnchantmentHelper.GetArmorEnchantmentLevel("minecraft:frost_walker", fwPlayer)
+            : 0;
         AllowDiagonalDescend = BaritoneSettings.Settings().AllowDiagonalDescend.Value;
         AllowDiagonalAscend = BaritoneSettings.Settings().AllowDiagonalAscend.Value;
         AllowDownward = BaritoneSettings.Settings().AllowDownward.Value;
@@ -148,19 +141,14 @@ public class CalculationContext
         MaxFallHeightNoWater = BaritoneSettings.Settings().MaxFallHeightNoWater.Value;
         MaxFallHeightBucket = BaritoneSettings.Settings().MaxFallHeightBucket.Value;
 
-        float waterSpeedMultiplier = 1.0f;
-        if (player is Entity playerEntity2)
-        {
-            int[] equipmentSlots = { 36, 37, 38, 39, 40 };
-            foreach (int slotIndex in equipmentSlots)
-            {
-                var slot = playerEntity2.Inventory.GetSlot((short)slotIndex);
-                if (slot.ItemId != null && slot.ItemCount > 0)
-                {
-                    // Depth Strider checking logic placeholder
-                }
-            }
-        }
+        // Reference: CalculationContext.java:119-124 - DepthStrider water-speed multiplier (capped at 3).
+        // depth=0 (no enchant) -> mult 0 -> waterWalkSpeed = WalkOneInWaterCost (slowest). The old stub
+        // defaulted mult to 1.0, wrongly assuming full depth strider.
+        int depth = player is Entity dsPlayer
+            ? EnchantmentHelper.GetArmorEnchantmentLevel("minecraft:depth_strider", dsPlayer)
+            : 0;
+        if (depth > 3) depth = 3;
+        float waterSpeedMultiplier = depth / 3.0f;
         WaterWalkSpeed = ActionCosts.WalkOneInWaterCost * (1 - waterSpeedMultiplier) + ActionCosts.WalkOneBlockCost * waterSpeedMultiplier;
         BreakBlockAdditionalCost = BaritoneSettings.Settings().BlockBreakAdditionalPenalty.Value;
         BacktrackCostFavoringCoefficient = BaritoneSettings.Settings().BacktrackCostFavoringCoefficient.Value;

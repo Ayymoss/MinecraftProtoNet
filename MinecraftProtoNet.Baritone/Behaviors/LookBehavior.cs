@@ -51,14 +51,11 @@ public class LookBehavior : Behavior, ILookBehavior
 
     public void UpdateTarget(Rotation rotation, bool blockInteract)
     {
+        // Reference: LookBehavior.java:66-69 - only store the target. The rotation is peeked + applied in
+        // OnPlayerUpdate PRE, which (after the AIM4 tick-order fix in BaritoneIntegration) now fires after
+        // this call within the same PreTick — so the former eager write here is no longer needed, and the
+        // PRE/POST reset + smoothing machinery is now live.
         _target = new Target(rotation, Target.Resolve(Ctx, blockInteract));
-        
-        var player = Ctx.Player() as Entity;
-        if (player != null && _target.Mode != Target.TargetMode.None)
-        {
-            var actual = _processor.PeekRotation(_target.Rotation);
-            player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
-        }
     }
 
     public IAimProcessor GetAimProcessor() => _processor;
@@ -114,14 +111,15 @@ public class LookBehavior : Behavior, ILookBehavior
                     {
                         playerPost.YawPitch = new Vector2<float>(_prevRotation.GetYaw(), _prevRotation.GetPitch());
                     }
-                    else
+                    // Reference: LookBehavior.java:117-122 - non-fall-flying: smooth YAW only and KEEP the
+                    // aimed pitch (Java does not set pitch here, so it stays at the PRE-peeked value). Averaging
+                    // pitch too would smear placement aim off the block face.
+                    // NOTE: the fall-flying branch (elytraSmoothLook + pitch averaging) is omitted because the
+                    // fall-flying state isn't exposed on the player entity yet (see AIM7-ELYTRA).
+                    else if (Core.Baritone.Settings().SmoothLook.Value)
                     {
-                        if (Core.Baritone.Settings().SmoothLook.Value)
-                        {
-                            float avgYaw = _smoothYawBuffer.Count > 0 ? (float)_smoothYawBuffer.Average() : _prevRotation.GetYaw();
-                            float avgPitch = _smoothPitchBuffer.Count > 0 ? (float)_smoothPitchBuffer.Average() : _prevRotation.GetPitch();
-                            playerPost.YawPitch = new Vector2<float>(avgYaw, avgPitch);
-                        }
+                        float avgYaw = _smoothYawBuffer.Count > 0 ? (float)_smoothYawBuffer.Average() : _prevRotation.GetYaw();
+                        playerPost.YawPitch = new Vector2<float>(avgYaw, playerPost.YawPitch.Y);
                     }
                     _prevRotation = null;
                 }

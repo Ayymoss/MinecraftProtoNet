@@ -34,7 +34,9 @@ public sealed class Favoring
     public Favoring(IPlayerContext ctx, IPath? previous, CalculationContext context)
     {
         _favorings = new Dictionary<long, double>();
-        _favorings[0] = 1.0D; // Default return value equivalent
+        // Reference: Favoring.java - Java uses a map with defaultReturnValue(1.0); a missing key already
+        // returns 1.0 via Calculate's GetValueOrDefault, so DON'T seed a [0]=1.0 entry (it would make
+        // IsEmpty() permanently false and run the favoring multiply on every A* node).
         double coeff = context.BacktrackCostFavoringCoefficient;
         if (coeff != 1D && previous != null)
         {
@@ -52,7 +54,9 @@ public sealed class Favoring
     public Favoring(IPath? previous, CalculationContext context)
     {
         _favorings = new Dictionary<long, double>();
-        _favorings[0] = 1.0D; // Default return value equivalent
+        // Reference: Favoring.java - Java uses a map with defaultReturnValue(1.0); a missing key already
+        // returns 1.0 via Calculate's GetValueOrDefault, so DON'T seed a [0]=1.0 entry (it would make
+        // IsEmpty() permanently false and run the favoring multiply on every A* node).
         double coeff = context.BacktrackCostFavoringCoefficient;
         if (coeff != 1D && previous != null)
         {

@@ -1,4 +1,4 @@
-﻿using Microsoft.Identity.Client;
+using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Extensions.Msal;
 using Serilog;
 
@@ -40,9 +40,43 @@ public class MicrosoftAuthenticator
         }
     }
 
-    public async Task<AuthenticationResult?> AuthenticateAsync()
+    /// <summary>
+    /// Lists all Microsoft accounts currently cached in the token store.
+    /// </summary>
+    public async Task<IReadOnlyList<IAccount>> GetCachedAccountsAsync()
     {
-        var account = (await _pca.GetAccountsAsync()).FirstOrDefault();
+        var accounts = await _pca.GetAccountsAsync();
+        return accounts.ToList();
+    }
+
+    /// <summary>
+    /// Silently acquires a token for the specified account.
+    /// If <paramref name="homeAccountId"/> is null, falls back to the first cached account.
+    /// Returns null if no cached account matches or if interactive login is required.
+    /// </summary>
+    public async Task<AuthenticationResult?> AuthenticateAsync(string? homeAccountId = null)
+    {
+        var accounts = await _pca.GetAccountsAsync();
+        IAccount? account = null;
+
+        if (!string.IsNullOrEmpty(homeAccountId))
+        {
+            account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier == homeAccountId);
+            if (account == null)
+            {
+                Log.Error("No cached MSAL account matches HomeAccountId {HomeAccountId}", homeAccountId);
+                return null;
+            }
+        }
+        else
+        {
+            account = accounts.FirstOrDefault();
+            if (account == null)
+            {
+                Log.Error("No cached MSAL accounts exist. Add an account via the web UI before connecting.");
+                return null;
+            }
+        }
 
         try
         {
@@ -50,38 +84,8 @@ public class MicrosoftAuthenticator
         }
         catch (MsalUiRequiredException)
         {
-            try
-            {
-                return await _pca.AcquireTokenWithDeviceCode(Scopes, deviceCodeResult =>
-                {
-                    Console.WriteLine("---------------------------------------------------------------------------");
-                    Console.WriteLine("Microsoft Authentication Needed:");
-                    Console.WriteLine($" Please go to: {deviceCodeResult.VerificationUrl}");
-                    Console.WriteLine($" Enter code:   {deviceCodeResult.UserCode}");
-                    Console.WriteLine("---------------------------------------------------------------------------");
-                    return Task.FromResult(0);
-                }).ExecuteAsync();
-            }
-            catch (MsalServiceException msalEx) when (msalEx.Message.Contains("DeviceCodeAuthorizationDeclined"))
-            {
-                Log.Error("Device Code Flow Error: Authorization was declined by the user");
-                return null;
-            }
-            catch (MsalServiceException msalEx) when (msalEx.Message.Contains("DeviceCodeTimeout"))
-            {
-                Log.Error("Device Code Flow Error: Timed out waiting for user authentication");
-                return null;
-            }
-            catch (MsalException msalEx)
-            {
-                Log.Error("Microsoft Authentication Error (Device Code Flow): {MsalExMessage}", msalEx.Message);
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Unexpected Error during Device Code Flow: {ExMessage}", ex.Message);
-                return null;
-            }
+            Log.Error("Silent auth for {Username} requires interactive re-login. Re-add the account via the web UI.", account.Username);
+            return null;
         }
         catch (MsalException msalEx)
         {
@@ -93,5 +97,58 @@ public class MicrosoftAuthenticator
             Log.Error("Unexpected Error during Silent Authentication: {ExMessage}", ex.Message);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Runs a device-code flow to add a new account. The callback receives the verification URL + user code
+    /// so the UI can display them. Returns null on decline, timeout, or any error.
+    /// </summary>
+    public async Task<AuthenticationResult?> AddAccountViaDeviceCodeAsync(
+        Func<DeviceCodeResult, Task> deviceCodeCallback,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _pca.AcquireTokenWithDeviceCode(Scopes, deviceCodeCallback)
+                .ExecuteAsync(cancellationToken);
+        }
+        catch (MsalServiceException msalEx) when (msalEx.Message.Contains("DeviceCodeAuthorizationDeclined"))
+        {
+            Log.Error("Device Code Flow Error: Authorization was declined by the user");
+            return null;
+        }
+        catch (MsalServiceException msalEx) when (msalEx.Message.Contains("DeviceCodeTimeout"))
+        {
+            Log.Error("Device Code Flow Error: Timed out waiting for user authentication");
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Information("Device Code Flow cancelled by user");
+            return null;
+        }
+        catch (MsalException msalEx)
+        {
+            Log.Error("Microsoft Authentication Error (Device Code Flow): {MsalExMessage}", msalEx.Message);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Unexpected Error during Device Code Flow: {ExMessage}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Removes a cached MSAL account, clearing its refresh tokens.
+    /// </summary>
+    public async Task<bool> RemoveAccountAsync(string homeAccountId)
+    {
+        var accounts = await _pca.GetAccountsAsync();
+        var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier == homeAccountId);
+        if (account == null) return false;
+
+        await _pca.RemoveAsync(account);
+        return true;
     }
 }

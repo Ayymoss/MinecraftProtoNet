@@ -29,16 +29,32 @@ namespace MinecraftProtoNet.Baritone.Behaviors.Look;
 public class AimProcessor : ITickableAimProcessor
 {
     private readonly IPlayerContext _ctx;
-    private readonly Random _rand;
+    private readonly ForkableRandom _rand;
     private double _randomYawOffset;
     private double _randomPitchOffset;
     private Rotation _currentRotation;
+    private readonly bool _isFork;
+    private Rotation _chainedPrev;
 
     public AimProcessor(IPlayerContext ctx)
     {
         _ctx = ctx;
-        _rand = new Random();
+        _rand = new ForkableRandom();
         _currentRotation = ctx.PlayerRotations() ?? new Rotation(0, 0);
+        _chainedPrev = _currentRotation;
+    }
+
+    // Fork ctor (Reference: LookBehavior.java:203-208,261-276): shares the source's forked RNG + current
+    // random offsets, and chains getPrevRotation from the source instead of reading the live rotation.
+    private AimProcessor(IPlayerContext ctx, ForkableRandom rand, double yawOffset, double pitchOffset, Rotation chainedPrev)
+    {
+        _ctx = ctx;
+        _rand = rand;
+        _randomYawOffset = yawOffset;
+        _randomPitchOffset = pitchOffset;
+        _isFork = true;
+        _chainedPrev = chainedPrev;
+        _currentRotation = chainedPrev;
     }
 
     public Rotation PeekRotation(Rotation desired)
@@ -48,8 +64,11 @@ public class AimProcessor : ITickableAimProcessor
         float desiredYaw = desired.GetYaw();
         float desiredPitch = desired.GetPitch();
 
-        // If pitch hasn't changed, nudge it to a normal level
-        if (Math.Abs(desiredPitch - prev.GetPitch()) < 0.001f)
+        // Reference: LookBehavior.java:219 - exact equality. The target only "doesn't care" about pitch
+        // when it passes playerRotations().getPitch() verbatim; RotationUtils.Reachable adds a +0.0001
+        // sentinel to a real desired pitch so it will NOT equal prev here. A tolerance (e.g. < 0.001)
+        // would swallow that sentinel and wrongly nudge the placement pitch off the block face.
+        if (desiredPitch == prev.GetPitch())
         {
             desiredPitch = NudgeToLevel(desiredPitch);
         }
@@ -57,9 +76,9 @@ public class AimProcessor : ITickableAimProcessor
         desiredYaw += (float)_randomYawOffset;
         desiredPitch += (float)_randomPitchOffset;
 
-        // NormalizeAndClamp to prevent yaw accumulation.
-        // In Java, CalculateMouseMove applies mouse sensitivity math that naturally bounds yaw.
-        // Since our stub returns target directly, we must explicitly normalize.
+        // CalculateMouseMove now quantizes the delta to mouse-pixel steps (AIM1), matching Java. The
+        // trailing NormalizeAndClamp is a C# safety net (Java leaves it unnormalized here): keeps yaw in
+        // [-180,180] and pitch in [-90,90] regardless of accumulated live yaw.
         return new Rotation(
             CalculateMouseMove(prev.GetYaw(), desiredYaw),
             CalculateMouseMove(prev.GetPitch(), desiredPitch)
@@ -68,20 +87,25 @@ public class AimProcessor : ITickableAimProcessor
 
     public ITickableAimProcessor Fork()
     {
-        var fork = new AimProcessor(_ctx);
-        fork._randomYawOffset = _randomYawOffset;
-        fork._randomPitchOffset = _randomPitchOffset;
-        return fork;
+        // Reference: LookBehavior.java:261-276 - a fork shares a forked RNG + the current offsets and
+        // chains its own prev rotation (for multi-step predictive lookahead).
+        return new AimProcessor(_ctx, _rand.Fork(), _randomYawOffset, _randomPitchOffset, GetPrevRotation());
     }
 
     public void Tick()
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:77-80
+        // Reference: LookBehavior.java:233-244 - randomLooking + randomLooking113 aim jitter
         var settings = Api.BaritoneAPI.GetSettings();
-        // randomLooking and randomLooking113 settings
-        // TODO: Implement random looking when settings are available
-        _randomYawOffset = 0;
-        _randomPitchOffset = 0;
+        _randomYawOffset = (_rand.NextDouble() - 0.5) * settings.RandomLooking.Value;
+        _randomPitchOffset = (_rand.NextDouble() - 0.5) * settings.RandomLooking.Value;
+
+        double random = _rand.NextDouble() - 0.5;
+        if (Math.Abs(random) < 0.1)
+        {
+            random *= 4;
+        }
+        _randomYawOffset += random * settings.RandomLooking113.Value;
+
         _currentRotation = _ctx.PlayerRotations() ?? new Rotation(0, 0);
     }
 
@@ -95,6 +119,10 @@ public class AimProcessor : ITickableAimProcessor
     {
         var result = PeekRotation(rotation);
         Tick();
+        if (_isFork)
+        {
+            _chainedPrev = result; // Reference: LookBehavior.java:267-269 - fork chains prev across calls
+        }
         return result;
     }
 
@@ -108,7 +136,13 @@ public class AimProcessor : ITickableAimProcessor
 
     private Rotation GetPrevRotation()
     {
-        return _currentRotation ?? new Rotation(0, 0);
+        // Reference: LookBehavior.java:187/272 - base processor uses the player's LIVE rotation (a stale
+        // cache would diverge from what's sent and break the AIM2 sentinel); a fork chains its own prev.
+        if (_isFork)
+        {
+            return _chainedPrev;
+        }
+        return _ctx.PlayerRotations() ?? new Rotation(0, 0);
     }
 
     private static float NudgeToLevel(float pitch)
@@ -125,12 +159,27 @@ public class AimProcessor : ITickableAimProcessor
         return pitch;
     }
 
+    // Reference: LookBehavior.java:292-296 - quantize the angle change to whole mouse-pixel steps so the sent
+    // rotation lands on the same discrete grid a real mouse produces.
     private float CalculateMouseMove(float current, float target)
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:292-296
-        // Simplified implementation - the full Java version uses Minecraft sensitivity which requires access to IMinecraftClient
-        // For now, return target directly (will be properly implemented when IMinecraftClient options are available)
-        return target;
+        float delta = target - current;
+        double deltaPx = AngleToMouse(delta);
+        return current + MouseToAngle(deltaPx);
+    }
+
+    // Reference: LookBehavior.java:298-301
+    private double AngleToMouse(float angleDelta)
+    {
+        float minAngleChange = MouseToAngle(1);
+        return Math.Round(angleDelta / minAngleChange);
+    }
+
+    // Reference: LookBehavior.java:303-307 - sensitivity substituted by the MouseSensitivity setting (no client options).
+    private float MouseToAngle(double mouseDelta)
+    {
+        double f = Api.BaritoneAPI.GetSettings().MouseSensitivity.Value * 0.6 + 0.2;
+        return (float)(mouseDelta * f * f * f * 8.0) * 0.15f;
     }
 
     private static float NormalizeAngle(float angle)

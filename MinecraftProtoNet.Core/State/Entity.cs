@@ -221,6 +221,19 @@ public class Entity
     /// </summary>
     public bool LastSentHorizontalCollision { get; set; }
 
+    // ===== Status Effects =====
+    // Active mob effects: registry effect id -> amplifier (0 = level I). Maintained from
+    // UpdateMobEffect / RemoveMobEffect packets.
+    private readonly Dictionary<int, int> _activeEffects = new();
+
+    public void AddEffect(int effectId, int amplifier) => _activeEffects[effectId] = amplifier;
+    public void RemoveEffect(int effectId) => _activeEffects.Remove(effectId);
+    public void ClearEffects() => _activeEffects.Clear();
+    public bool HasEffect(int effectId) => _activeEffects.ContainsKey(effectId);
+
+    /// <summary>Amplifier (0 = level I) of the given effect, or null if not active.</summary>
+    public int? GetEffectAmplifier(int effectId) => _activeEffects.TryGetValue(effectId, out var a) ? a : null;
+
     // ===== Input State =====
     public InputState InputState { get; } = new();
 

@@ -41,21 +41,6 @@ public class ToolSet
 
     private readonly Entity _player;
 
-    /// <summary>
-    /// Used for evaluating the material cost of a tool.
-    /// Prefer tools with lower material cost (lower index in this list).
-    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:68-75
-    /// </summary>
-    private static readonly ToolData.ToolTier[] MaterialTagsPriorityList =
-    {
-        ToolData.ToolTier.Wood,
-        ToolData.ToolTier.Stone,
-        ToolData.ToolTier.Iron,
-        ToolData.ToolTier.Gold,
-        ToolData.ToolTier.Diamond,
-        ToolData.ToolTier.Netherite
-    };
-
     public ToolSet(Entity? player)
     {
         _player = player ?? new Entity();
@@ -103,7 +88,7 @@ public class ToolSet
 
         int best = 0;
         double highestSpeed = double.NegativeInfinity;
-        int lowestCost = int.MaxValue;
+        int lowestCost = int.MinValue; // Reference: ToolSet.java:124 (Integer.MIN_VALUE)
         bool bestSilkTouch = false;
 
         string blockName = block is string name ? name : block.ToString() ?? "";
@@ -120,17 +105,27 @@ public class ToolSet
                 continue;
             }
 
-            // Check if item is a weapon and we shouldn't use sword to mine
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:156-158
-            // For now, we'll skip this check as we don't have direct access to item components
-            // TODO: Implement weapon check when component system is available
+            // Reference: ToolSet.java:129-131 - skip swords unless useSwordToMine
+            string? slotItemName = null;
+            if (itemStack.ItemId.HasValue)
+            {
+                ClientState.ItemRegistry?.TryGetValue(itemStack.ItemId.Value, out slotItemName);
+            }
+            if (!settings.UseSwordToMine.Value && !string.IsNullOrEmpty(slotItemName)
+                && ToolData.GetToolType(slotItemName) == ToolData.ToolType.Sword)
+            {
+                continue;
+            }
 
-            // Check item saver setting
+            // Reference: ToolSet.java:133 - itemSaver: skip near-broken tools.
+            // (GetMaxDamage()==0 when the MaxDamage component isn't transmitted; the >1 guard makes that a safe no-op.)
             if (settings.ItemSaver.Value)
             {
-                // Get damage value from components if available
-                // For now, skip this check as we need component access
-                // TODO: Implement damage check when component system is available
+                int maxDamage = itemStack.GetMaxDamage();
+                if (maxDamage > 1 && (itemStack.GetDamageValue() + settings.ItemSaverThreshold.Value) >= maxDamage)
+                {
+                    continue;
+                }
             }
 
             double speed = CalculateSpeedVsBlock(itemStack, blockState);
@@ -205,9 +200,12 @@ public class ToolSet
         float speed = GetItemDestroySpeed(item, state);
         if (speed > 1)
         {
-            // Add efficiency enchantment bonus
-            // TODO: Implement enchantment checking when component system is available
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:221-230
+            // Reference: ToolSet.java:193-198 - Efficiency bonus (eff^2 + 1) when the tool is effective
+            int effLevel = EnchantmentHelper.GetItemEnchantmentLevel("minecraft:efficiency", item);
+            if (effLevel > 0 && !IsEmpty(item))
+            {
+                speed += effLevel * effLevel + 1;
+            }
         }
 
         speed /= hardness;
@@ -227,50 +225,13 @@ public class ToolSet
     }
 
     /// <summary>
-    /// Gets block hardness. Simplified implementation.
+    /// Gets block hardness (destroy speed). Reference: ToolSet.java:183 — Java uses state.getDestroySpeed.
+    /// Now backed by the real per-block hardness table (ClientState.BlockHardness) via BlockState.DestroySpeed,
+    /// replacing the old name-substring approximation.
     /// </summary>
     private static float GetBlockHardness(BlockState state)
     {
-        string name = state.Name;
-        
-        // Unbreakable blocks
-        if (name.Contains("bedrock", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("command_block", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("barrier", StringComparison.OrdinalIgnoreCase))
-        {
-            return -1;
-        }
-
-        // Very hard blocks
-        if (name.Contains("obsidian", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("anvil", StringComparison.OrdinalIgnoreCase))
-        {
-            return 50.0f;
-        }
-
-        // Hard blocks
-        if (name.Contains("stone", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("ore", StringComparison.OrdinalIgnoreCase))
-        {
-            return 3.0f;
-        }
-
-        // Medium blocks
-        if (name.Contains("dirt", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("wood", StringComparison.OrdinalIgnoreCase))
-        {
-            return 0.5f;
-        }
-
-        // Air blocks (exact match to avoid matching "stairs" etc.)
-        if (name.Equals("minecraft:air", StringComparison.OrdinalIgnoreCase) ||
-            name.EndsWith("_air", StringComparison.OrdinalIgnoreCase))
-        {
-            return 0.0f;
-        }
-
-        // Default hardness
-        return 1.0f;
+        return state.DestroySpeed;
     }
 
     /// <summary>
@@ -360,6 +321,7 @@ public class ToolSet
     /// </summary>
     private int GetMaterialCost(Slot itemStack)
     {
+        // Reference: ToolSet.java:87-94 - TieredItem → tier.getLevel(), otherwise -1.
         if (IsEmpty(itemStack))
         {
             return -1;
@@ -370,19 +332,9 @@ public class ToolSet
         {
             ClientState.ItemRegistry?.TryGetValue(itemStack.ItemId.Value, out itemName);
         }
-        
-        if (string.IsNullOrEmpty(itemName))
-        {
-            return int.MaxValue;
-        }
-        
-        var tier = ToolData.GetToolTier(itemName);
-        // Return index in priority list (lower = cheaper = preferred)
-        for (int i = 0; i < MaterialTagsPriorityList.Length; i++)
-        {
-            if (MaterialTagsPriorityList[i] == tier) return i;
-        }
-        return int.MaxValue;
+
+        var tier = string.IsNullOrEmpty(itemName) ? ToolData.ToolTier.None : ToolData.GetToolTier(itemName);
+        return tier == ToolData.ToolTier.None ? -1 : ToolData.GetHarvestLevel(tier);
     }
 
     /// <summary>
@@ -396,23 +348,35 @@ public class ToolSet
             return false;
         }
 
-        // TODO: Check enchantments from components when available
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:116-124
-        return false;
+        // Reference: ToolSet.java:96-98 - getItemEnchantmentLevel(SILK_TOUCH, stack) > 0
+        return EnchantmentHelper.GetItemEnchantmentLevel("minecraft:silk_touch", stack) > 0;
     }
 
     /// <summary>
     /// Calculates any modifier to breaking time based on status effects.
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:246-268
     /// </summary>
+    // Reference: ToolSet.java:213-235 - Haste (DIG_SPEED) speeds up, Mining Fatigue (DIG_SLOWDOWN) slows.
     private double PotionAmplifier()
     {
         double speed = 1.0;
-        
-        // TODO: Check for Haste and Mining Fatigue effects when available
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/ToolSet.java:248-266
-        // For now, return 1.0 (no effects)
-        
+        if (ClientState.MobEffectRegistry.TryGetValue("minecraft:haste", out var hasteId)
+            && _player.GetEffectAmplifier(hasteId) is int hasteAmp)
+        {
+            speed *= 1 + (hasteAmp + 1) * 0.2;
+        }
+        if (ClientState.MobEffectRegistry.TryGetValue("minecraft:mining_fatigue", out var fatigueId)
+            && _player.GetEffectAmplifier(fatigueId) is int fatigueAmp)
+        {
+            // Note: 0.0027 not 0.027 — see the (in)famous Java comment.
+            speed *= fatigueAmp switch
+            {
+                0 => 0.3,
+                1 => 0.09,
+                2 => 0.0027,
+                _ => 0.00081
+            };
+        }
         return speed;
     }
 }

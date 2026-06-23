@@ -1,0 +1,371 @@
+@page "/accounts"
+@inject IAccountManager AccountManager
+@inject BotService Bot
+@inject IJSRuntime JS
+@using Bot.Webcore.Services
+@using Microsoft.Identity.Client
+@using MinecraftProtoNet.Core.Auth.Managers
+@rendermode InteractiveServer
+@implements IDisposable
+
+<PageTitle>MinecraftProtoNet - Accounts</PageTitle>
+
+<div class="text-slate-200">
+    <header class="bg-slate-900/60 backdrop-blur-md border border-slate-800/70 rounded-md mb-8 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-2.5 bg-indigo-500/10 rounded border border-indigo-500/25">
+                    <i class="ph-duotone ph-user-list text-2xl text-indigo-400"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
+                        Microsoft Accounts
+                    </h1>
+                    <p class="text-xs text-slate-500 mt-0.5">Which account the bot connects as. Active account is used on next Connect.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="/" class="flex items-center gap-2 px-3 py-2 bg-transparent hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 rounded transition-colors border border-slate-800 text-sm">
+                    <i class="ph-bold ph-arrow-left"></i>
+                    Dashboard
+                </a>
+                <button @onclick="StartAddAccount" disabled="@_deviceInProgress"
+                        class="flex items-center gap-2 px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 rounded transition-colors border border-emerald-500/30 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="ph-bold ph-plus-circle"></i>
+                    Add Account
+                </button>
+            </div>
+        </div>
+    </header>
+
+    @if (_errorMessage != null)
+    {
+        <div class="mb-6 px-5 py-3 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center gap-3">
+            <i class="ph-bold ph-warning-circle text-lg"></i>
+            <span>@_errorMessage</span>
+            <button @onclick="() => _errorMessage = null" class="ml-auto text-rose-400/60 hover:text-rose-300">
+                <i class="ph-bold ph-x"></i>
+            </button>
+        </div>
+    }
+
+    <div class="bg-slate-900/40 backdrop-blur-md rounded-md border border-slate-800/80 shadow overflow-hidden">
+        @if (_loading)
+        {
+            <div class="px-6 py-12 flex items-center justify-center text-slate-500">
+                <i class="ph-duotone ph-spinner-gap animate-spin text-2xl mr-3"></i>
+                <span class="text-sm">Loading accounts...</span>
+            </div>
+        }
+        else if (_accounts.Count == 0)
+        {
+            <div class="px-6 py-16 flex flex-col items-center justify-center text-center">
+                <i class="ph-duotone ph-user-circle-plus text-6xl text-slate-600 mb-4"></i>
+                <h3 class="text-lg font-bold text-slate-300 mb-2">No accounts yet</h3>
+                <p class="text-sm text-slate-500 max-w-md">
+                    Add a Microsoft account to let the bot authenticate. The bot cannot connect to any server until an account is added and marked active.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="divide-y divide-slate-800/60">
+                @foreach (var acc in _accounts)
+                {
+                    <div class="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-800/20 transition-colors">
+                        <div class="flex items-center gap-4 min-w-0">
+                            <div class="shrink-0 w-10 h-10 rounded flex items-center justify-center @(acc.IsActive ? "bg-emerald-500/20 border border-emerald-500/40" : "bg-slate-800/60 border border-slate-700/60")">
+                                <i class="ph-duotone ph-user @(acc.IsActive ? "text-emerald-400" : "text-slate-500")"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-semibold text-slate-100 truncate">@acc.Username</span>
+                                    @if (acc.IsActive)
+                                    {
+                                        <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded-md border border-emerald-500/30 uppercase tracking-wider">Active</span>
+                                    }
+                                </div>
+                                <div class="text-[10px] text-slate-600 font-mono truncate mt-0.5">@acc.HomeAccountId</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            @if (!acc.IsActive)
+                            {
+                                <button @onclick="() => SetActive(acc)"
+                                        class="px-3 py-1.5 bg-slate-800/60 hover:bg-emerald-500/10 text-slate-300 hover:text-emerald-300 rounded transition-colors border border-slate-700/60 hover:border-emerald-500/30 text-xs font-semibold">
+                                    Set Active
+                                </button>
+                            }
+                            <button @onclick="() => ConfirmRemove(acc)"
+                                    class="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                                    title="Remove account">
+                                <i class="ph-bold ph-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (_deviceInProgress)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
+        <div class="bg-slate-900 border border-slate-700 rounded-md shadow-md max-w-lg w-full p-8">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-3 bg-indigo-500/20 rounded border border-indigo-500/30">
+                    <i class="ph-duotone ph-shield-check text-2xl text-indigo-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">Add Microsoft Account</h2>
+                    <p class="text-xs text-slate-500">Device code authentication</p>
+                </div>
+            </div>
+
+            @if (_deviceCode == null)
+            {
+                <div class="flex items-center justify-center py-10 text-slate-500">
+                    <i class="ph-duotone ph-spinner-gap animate-spin text-2xl mr-3"></i>
+                    <span class="text-sm">Requesting device code...</span>
+                </div>
+            }
+            else if (_deviceCompleted)
+            {
+                <div class="py-6 text-center">
+                    <i class="ph-duotone ph-check-circle text-5xl text-emerald-400 mb-3"></i>
+                    <p class="text-sm font-semibold text-emerald-300">Account added successfully</p>
+                </div>
+            }
+            else
+            {
+                <ol class="space-y-4 text-sm text-slate-300 mb-6">
+                    <li class="flex items-start gap-3">
+                        <span class="shrink-0 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">1</span>
+                        <div class="flex-1">
+                            <div class="mb-2">Open this URL in a browser:</div>
+                            <div class="flex items-center gap-2 bg-slate-950 rounded border border-slate-800 px-3 py-2">
+                                <a href="@_deviceUrl" target="_blank" rel="noopener" class="text-indigo-400 hover:text-indigo-300 text-xs font-mono truncate flex-1">@_deviceUrl</a>
+                                <button @onclick="() => Copy(_deviceUrl!)" class="p-1 text-slate-500 hover:text-white" title="Copy">
+                                    <i class="ph-bold ph-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="shrink-0 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">2</span>
+                        <div class="flex-1">
+                            <div class="mb-2">Enter this code:</div>
+                            <div class="flex items-center gap-2 bg-slate-950 rounded border border-indigo-500/30 px-4 py-3">
+                                <span class="font-mono text-2xl font-bold text-indigo-300 tracking-widest flex-1">@_deviceCode</span>
+                                <button @onclick="() => Copy(_deviceCode!)" class="p-1.5 text-slate-400 hover:text-white" title="Copy">
+                                    <i class="ph-bold ph-copy text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="shrink-0 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">3</span>
+                        <div class="flex-1 pt-0.5 flex items-center gap-2 text-slate-400">
+                            <i class="ph-duotone ph-spinner-gap animate-spin"></i>
+                            <span>Waiting for you to complete login in the browser...</span>
+                        </div>
+                    </li>
+                </ol>
+            }
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                <button @onclick="CancelAddAccount" disabled="@_deviceCompleted"
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors text-sm font-semibold disabled:opacity-50">
+                    @(_deviceCompleted ? "Close" : "Cancel")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_confirmRemoveAccount != null)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
+        <div class="bg-slate-900 border border-rose-500/30 rounded-md shadow-md max-w-md w-full p-8">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="p-3 bg-rose-500/20 rounded border border-rose-500/30">
+                    <i class="ph-duotone ph-warning text-2xl text-rose-400"></i>
+                </div>
+                <h2 class="text-xl font-bold text-white">Remove Account?</h2>
+            </div>
+            <p class="text-sm text-slate-400 mb-6">
+                Remove <span class="font-semibold text-slate-200">@_confirmRemoveAccount.Username</span> from the token cache? You will need to re-authenticate with device code to use it again.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button @onclick="() => _confirmRemoveAccount = null"
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors text-sm font-semibold">
+                    Cancel
+                </button>
+                <button @onclick="RemoveConfirmed"
+                        class="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded transition-colors text-sm font-semibold border border-rose-500/40">
+                    Remove
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AccountInfo> _accounts = new();
+    private bool _loading = true;
+    private string? _errorMessage;
+
+    // Device code modal state
+    private bool _deviceInProgress;
+    private bool _deviceCompleted;
+    private string? _deviceUrl;
+    private string? _deviceCode;
+    private CancellationTokenSource? _addAccountCts;
+
+    private AccountInfo? _confirmRemoveAccount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        _loading = true;
+        try
+        {
+            _accounts = (await AccountManager.ListAccountsAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load accounts: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetActive(AccountInfo account)
+    {
+        try
+        {
+            await AccountManager.SetActiveAccountAsync(account.HomeAccountId);
+            await Refresh();
+            Bot.NotifyStateChanged();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to set active: {ex.Message}";
+        }
+    }
+
+    private void ConfirmRemove(AccountInfo account)
+    {
+        _confirmRemoveAccount = account;
+    }
+
+    private async Task RemoveConfirmed()
+    {
+        if (_confirmRemoveAccount == null) return;
+        var target = _confirmRemoveAccount;
+        _confirmRemoveAccount = null;
+
+        try
+        {
+            await AccountManager.RemoveAccountAsync(target.HomeAccountId);
+            await Refresh();
+            Bot.NotifyStateChanged();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to remove account: {ex.Message}";
+        }
+    }
+
+    private async Task StartAddAccount()
+    {
+        if (_deviceInProgress) return;
+
+        _deviceInProgress = true;
+        _deviceCompleted = false;
+        _deviceUrl = null;
+        _deviceCode = null;
+        _errorMessage = null;
+        _addAccountCts = new CancellationTokenSource();
+        StateHasChanged();
+
+        var ct = _addAccountCts.Token;
+
+        // Fire the device-code flow on a background task so the UI can update while MSAL polls.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await AccountManager.AddAccountAsync(dcr =>
+                {
+                    _deviceUrl = dcr.VerificationUrl;
+                    _deviceCode = dcr.UserCode;
+                    return InvokeAsync(StateHasChanged);
+                }, ct);
+
+                if (result != null)
+                {
+                    _deviceCompleted = true;
+                    await InvokeAsync(async () =>
+                    {
+                        await Refresh();
+                        Bot.NotifyStateChanged();
+                    });
+                }
+                else if (!ct.IsCancellationRequested)
+                {
+                    _errorMessage = "Device-code flow did not complete. See logs for details.";
+                    _deviceInProgress = false;
+                }
+                else
+                {
+                    _deviceInProgress = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = $"Add account failed: {ex.Message}";
+                _deviceInProgress = false;
+            }
+            finally
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    private void CancelAddAccount()
+    {
+        _addAccountCts?.Cancel();
+        _deviceInProgress = false;
+        _deviceCompleted = false;
+        _deviceUrl = null;
+        _deviceCode = null;
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+        }
+        catch
+        {
+            // clipboard may be unavailable (non-https, old browser); ignore
+        }
+    }
+
+    public void Dispose()
+    {
+        _addAccountCts?.Cancel();
+        _addAccountCts?.Dispose();
+    }
+}

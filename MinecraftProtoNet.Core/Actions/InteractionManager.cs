@@ -32,6 +32,11 @@ public class InteractionManager : IInteractionManager
     /// </summary>
     private short _lastSentCarriedSlot = -1;
 
+    // Reference: Minecraft.java:1644,1727,1920 - after a use, vanilla waits rightClickDelay (4) ticks before
+    // the next continuous use. Without this, ClickRight held down toggles doors/gates open→closed every tick.
+    private const long RightClickDelayTicks = 4;
+    private long _rightClickReadyTick;
+
     public InteractionManager(IMinecraftClient client, ILogger<InteractionManager> logger)
     {
         _client = client;
@@ -381,6 +386,14 @@ public class InteractionManager : IInteractionManager
     {
         if (!_client.State.LocalPlayer.HasEntity) return false;
         var entity = _client.State.LocalPlayer.Entity;
+
+        // Reference: Minecraft.java:1920 - only use when rightClickDelay has elapsed.
+        long currentTick = _client.State.Level.ClientTickCounter;
+        if (currentTick < _rightClickReadyTick)
+        {
+            return false;
+        }
+        _rightClickReadyTick = currentTick + RightClickDelayTicks;
 
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:309,371,420,426
         // Java calls ensureHasSentCarriedItem() before ALL interactions (useItemOn, useItem, interact, interactAt, attack)

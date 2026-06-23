@@ -18,7 +18,9 @@
  */
 
 using MinecraftProtoNet.Baritone.Api.Utils;
+using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.State;
 
 namespace MinecraftProtoNet.Baritone.Utils;
@@ -40,15 +42,20 @@ public static class VecUtils
             return GetBlockPosCenter(pos);
         }
 
-        // For now, use simple center calculation
-        // Full implementation would use VoxelShape calculations from block collision shape
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/VecUtils.java:45-64
-        double xDiff = 0.5;
-        double yDiff = 0.5;
-        double zDiff = 0.5;
+        // Reference: VecUtils.java:45-69 - center of the real collision-shape bounds (so slabs/stairs/
+        // snow/carpet etc. aim at their actual surface, not a hardcoded 0.5).
+        var shape = BlockShapeRegistry.Shared.GetShape(blockState);
+        if (shape.IsEmpty())
+        {
+            return GetBlockPosCenter(pos);
+        }
+        double xDiff = (shape.Min(Axis.X) + shape.Max(Axis.X)) / 2;
+        double yDiff = (shape.Min(Axis.Y) + shape.Max(Axis.Y)) / 2;
+        double zDiff = (shape.Min(Axis.Z) + shape.Max(Axis.Z)) / 2;
 
-        // Special case for fire blocks - look at bottom
-        if (blockState.Name.Contains("fire", StringComparison.OrdinalIgnoreCase))
+        // Look at the bottom of fire when putting it out (BaseFireBlock).
+        if (blockState.Name.Equals("minecraft:fire", StringComparison.OrdinalIgnoreCase)
+            || blockState.Name.Equals("minecraft:soul_fire", StringComparison.OrdinalIgnoreCase))
         {
             yDiff = 0;
         }

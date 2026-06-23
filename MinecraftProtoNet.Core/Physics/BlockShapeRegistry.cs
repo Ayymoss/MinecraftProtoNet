@@ -21,6 +21,12 @@ public interface IBlockShapeRegistry
 
 public class BlockShapeRegistry : IBlockShapeRegistry
 {
+    /// <summary>
+    /// Shared stateless instance for callers that don't have one injected (e.g. Baritone helpers).
+    /// Shapes are derived purely from block identity/properties + static block tags, so a singleton is safe.
+    /// </summary>
+    public static readonly BlockShapeRegistry Shared = new();
+
     // Caches could be added here for complex calculated shapes
 
     public VoxelShape GetShape(BlockState blockState)

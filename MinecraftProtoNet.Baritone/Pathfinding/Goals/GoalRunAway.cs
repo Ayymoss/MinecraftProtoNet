@@ -101,9 +101,12 @@ public class GoalRunAway : Goal
             minX = Math.Min(minX, p.X - distance);
             minY = Math.Min(minY, p.Y - distance);
             minZ = Math.Min(minZ, p.Z - distance);
-            maxX = Math.Max(maxX, p.X + distance);
-            maxY = Math.Max(maxY, p.Y + distance);
-            maxZ = Math.Max(maxZ, p.Z + distance);
+            // Reference: GoalRunAway.java:99-101 - faithful to the upstream copy-paste quirk: the max
+            // accumulators are seeded from minX/minY/minZ (not maxX/maxY/maxZ). No effect for a single
+            // 'from' point (min was just set this iteration); kept 1:1 so future Baritone updates port cleanly.
+            maxX = Math.Max(minX, p.X + distance);
+            maxY = Math.Max(minY, p.Y + distance);
+            maxZ = Math.Max(minZ, p.Z + distance);
         }
         var maybeAlwaysInside = new HashSet<double>(); // see pull request #1978
         double minOutside = double.PositiveInfinity;

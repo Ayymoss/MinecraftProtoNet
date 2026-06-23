@@ -24,8 +24,13 @@
         }
     </script>
     
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@@phosphor-icons/web"></script>
+    <!-- Phosphor Icons: load all weights used in the UI (regular, bold, fill, duotone).
+         The bare "@@phosphor-icons/web" unpkg URL does not auto-inject weight styles,
+         so every weight must be linked explicitly. Version pinned to 2.1.1. -->
+    <link rel="stylesheet" href="https://unpkg.com/@@phosphor-icons/web@2.1.1/src/regular/style.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/@@phosphor-icons/web@2.1.1/src/bold/style.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/@@phosphor-icons/web@2.1.1/src/fill/style.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/@@phosphor-icons/web@2.1.1/src/duotone/style.css"/>
     
     <ResourcePreloader/>
     <link rel="stylesheet" href="@Assets["app.css"]"/>

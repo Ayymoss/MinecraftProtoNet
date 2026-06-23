@@ -93,14 +93,10 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
         }
 
         var fromDown = context.Get(x, y - 1, z);
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:96
-        // Check for ladder/vine
-        string fromDownName = fromDown.Name;
-        bool isClimbable = fromDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                          fromDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-        if (isClimbable)
+        // Reference: MovementDescend.java:96-99 - can't descend from a climbable (ladder/vine)
+        if (MovementHelper.IsClimbable(fromDown))
         {
-            // Can descend on climbable blocks
+            return;
         }
 
         var below = context.Get(destX, y - 2, destZ);
@@ -110,28 +106,24 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
             return;
         }
 
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:105
-        // Check for ladder/vine, frost walker
-        string destDownName = destDown.Name;
-        // Reuse isClimbable from above (declared at line 99)
-        bool isClimbable2 = destDownName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                          destDownName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-        if (isClimbable2)
+        // Reference: MovementDescend.java:117-119 - can't descend onto a ladder/vine
+        if (destDown.Name.Equals("minecraft:ladder", StringComparison.OrdinalIgnoreCase) ||
+            destDown.Name.Equals("minecraft:vine", StringComparison.OrdinalIgnoreCase))
         {
-            // Can descend on climbable blocks
+            return;
         }
+        // Reference: MovementDescend.java:120-122 - the water will freeze when we try to walk into it
         if (MovementHelper.CanUseFrostWalker(context, destDown))
         {
             return;
         }
 
+        // we walk half the block plus 0.3 to get to the edge, then we walk the other 0.2 while falling.
         double walk = ActionCosts.WalkOffBlockCost;
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:112
-        // Check for soul sand (slows movement)
-        // Reuse destDownName from above
-        if (destDownName.Contains("soul_sand", StringComparison.OrdinalIgnoreCase))
+        // Reference: MovementDescend.java:126-129 - soul sand under src applies its speed penalty to the 0.8 walk-off
+        if (fromDown.IsSoulSand)
         {
-            walk *= 2.0;
+            walk *= ActionCosts.WalkOneOverSoulSandCost / ActionCosts.WalkOneBlockCost;
         }
         totalCost += walk + Math.Max(ActionCosts.FallNBlocksCost[1], ActionCosts.CenterAfterFallCost);
         res.X = destX;
@@ -143,15 +135,11 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
     public static bool DynamicFallCost(CalculationContext context, int x, int y, int z, int destX, int destZ, double frontBreak,
         BlockState below, MutableMoveResult res)
     {
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:123-126
-        // Check for falling blocks
-        string belowName = below.Name;
-        bool isFallingBlock = belowName.Contains("gravel", StringComparison.OrdinalIgnoreCase) ||
-                             belowName.Contains("sand", StringComparison.OrdinalIgnoreCase);
-        if (frontBreak != 0 && isFallingBlock)
+        // Reference: MovementDescend.java:138-143 - if we're breaking blocks in front (frontBreak != 0),
+        // don't let a falling block fall through this column (it could replace the water we'd fall into)
+        if (frontBreak != 0 && context.Get(destX, y + 2, destZ).IsFallingBlock)
         {
-            // Add cost for breaking falling blocks
-            frontBreak += MovementHelper.GetMiningDurationTicks(context, destX, y - 1, destZ, below, true);
+            return false;
         }
 
         if (!MovementHelper.CanWalkThrough(context, destX, y - 2, destZ, below))
@@ -173,7 +161,7 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
             var ontoBlock = context.Get(destX, newY, destZ);
             int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight);
             double tentativeCost = ActionCosts.WalkOffBlockCost +
-                                   ActionCosts.FallNBlocksCost[Math.Min(unprotectedFallHeight, ActionCosts.FallNBlocksCost.Length - 1)] +
+                                   ActionCosts.FallNBlocksCost[unprotectedFallHeight] +
                                    frontBreak + costSoFar;
 
             if (reachedMinimum && MovementHelper.IsWater(ontoBlock))
@@ -214,12 +202,17 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
                 return false;
             }
 
-            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:189
-            // Check for vine/ladder
-            string ontoName = ontoBlock.Name;
-            bool isClimbable = ontoName.Contains("ladder", StringComparison.OrdinalIgnoreCase) ||
-                              ontoName.Contains("vine", StringComparison.OrdinalIgnoreCase);
-            if (isClimbable || MovementHelper.CanWalkThrough(context, destX, newY, destZ, ontoBlock))
+            // Reference: MovementDescend.java:189-196 - grabbing a vine/ladder resets falling speed
+            // (only below fall height 11 — past that we don't actually grab on)
+            if (unprotectedFallHeight <= 11 && MovementHelper.IsClimbable(ontoBlock))
+            {
+                costSoFar += ActionCosts.FallNBlocksCost[unprotectedFallHeight - 1]; // we fall until the top of this block
+                costSoFar += ActionCosts.LadderDownOneCost;
+                effectiveStartHeight = newY;
+                continue;
+            }
+            // Reference: MovementDescend.java:197-199
+            if (MovementHelper.CanWalkThrough(context, destX, newY, destZ, ontoBlock))
             {
                 continue;
             }
@@ -285,8 +278,14 @@ public class MovementDescend(IBaritone baritone, BetterBlockPos start, BetterBlo
             return state;
         }
 
-        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathfinding/movement/movements/MovementDescend.java:254
-        // Complex movement logic
+        // Reference: MovementDescend.java:260 - sneak when standing on a magma block
+        if (playerFeet != null)
+        {
+            state.SetInput(Input.Sneak, Core.Baritone.Settings().AllowWalkOnMagmaBlocks.Value
+                && BlockStateInterface.Get(Ctx, playerFeet.Below()).IsMagmaBlock);
+        }
+
+        // Reference: MovementDescend.java:262-268
         var player = Ctx.Player() as Entity;
         if (player != null && playerFeet != null && !playerFeet.Equals(Dest))
         {

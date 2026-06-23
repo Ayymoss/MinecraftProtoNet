@@ -5,6 +5,7 @@ using MinecraftProtoNet.Core.Configuration;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.State;
 using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Services;
 
@@ -46,22 +47,7 @@ public sealed class HumanizerService : IHumanizer
         }
     }
 
-    public bool IsRemoteServer
-    {
-        get
-        {
-            var host = _state.ConnectedServerHost;
-            if (string.IsNullOrEmpty(host)) return false;
-
-            foreach (var local in _config.LocalNetworks)
-            {
-                if (host.StartsWith(local, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
-
-            return true;
-        }
-    }
+    public bool IsRemoteServer => ServerClassification.IsRemote(_state.ConnectedServerHost, _config.LocalNetworks);
 
     public int GetTickJitterMs()
     {

@@ -39,10 +39,12 @@ public class BlockState
     public float JumpFactor { get; set; } = 1.0f;
 
     /// <summary>
-    /// Time to break this block (destroy speed).
-    /// -1 = unbreakable (bedrock), 0 = instant break
+    /// Time to break this block (destroy speed / hardness). -1 = unbreakable (bedrock), 0 = instant break.
+    /// Sourced from the generated <see cref="ClientState.BlockHardness"/> table (MC 26.2 Blocks.java);
+    /// falls back to 1.0 if the table isn't loaded or the block is unknown.
     /// </summary>
-    public float DestroySpeed { get; set; } = 1.0f;
+    public float DestroySpeed =>
+        ClientState.BlockHardness.TryGetValue(Name, out var h) ? h.Hardness : 1.0f;
 
     /// <summary>
     /// Light level emitted by this block (0-15).
@@ -75,11 +77,81 @@ public class BlockState
 
     public int SnowLayers => Properties.TryGetValue("layers", out var layers) && int.TryParse(layers, out var count) ? count : 0;
 
+    // ===== Block-class identity (from the vanilla data report "definition", not heuristics) =====
+
+    // Block-type ids matching the relevant Java Block subclasses.
+    private static readonly HashSet<string> ClimbableBlocks =
+    [
+        "minecraft:ladder", "minecraft:vine",
+        "minecraft:weeping_vines", "minecraft:weeping_vines_plant",
+        "minecraft:twisting_vines", "minecraft:twisting_vines_plant",
+    ];
+
+    // Block-type ids whose Java block class extends FallingBlock.
+    private static readonly HashSet<string> FallingBlockTypes =
+    [
+        "minecraft:sand", "minecraft:colored_falling", "minecraft:concrete_powder",
+        "minecraft:anvil", "minecraft:dragon_egg",
+    ];
+
     /// <summary>
-    /// Whether this block is a liquid (water/lava).
+    /// Block-class identity (e.g. minecraft:slab, minecraft:ladder, minecraft:liquid) from the data
+    /// report's "definition.type"; the non-heuristic equivalent of the Java Block subclass. Null if unknown.
     /// </summary>
-    public bool IsLiquid => Name.Contains("water", StringComparison.OrdinalIgnoreCase) ||
-                            Name.Contains("lava", StringComparison.OrdinalIgnoreCase);
+    public string? BlockType =>
+        ClientState.BlockDefinitions.TryGetValue(Name, out var def) ? def.Type : null;
+
+    /// <summary>
+    /// The fluid id for liquid blocks (minecraft:water / minecraft:lava); null for non-liquids.
+    /// </summary>
+    public string? Fluid =>
+        ClientState.BlockDefinitions.TryGetValue(Name, out var def) ? def.Fluid : null;
+
+    /// <summary>
+    /// Whether this block is a pure liquid block (a water or lava block). Mirrors Mojang's notion of a
+    /// liquid block (NOT "contains a fluid" — waterlogged solid blocks are not liquids here).
+    /// </summary>
+    public bool IsLiquid => BlockType == "minecraft:liquid";
+
+    /// <summary>
+    /// Whether this block's fluid state is water — i.e. a water block OR a waterlogged block.
+    /// Reference: MovementHelper.isWater (getFluidState().getType() == WATER/FLOWING_WATER).
+    /// </summary>
+    public bool IsWater =>
+        (BlockType == "minecraft:liquid" && Fluid == "minecraft:water") ||
+        (Properties.TryGetValue("waterlogged", out var w) && w == "true");
+
+    /// <summary>
+    /// Whether this block's fluid state is lava. Reference: MovementHelper.isLava.
+    /// </summary>
+    public bool IsLava => BlockType == "minecraft:liquid" && Fluid == "minecraft:lava";
+
+    /// <summary>Whether this block is climbable (ladder/vine family). Reference: MovementHelper.isClimbable.</summary>
+    public bool IsClimbable => ClimbableBlocks.Contains(Name);
+
+    /// <summary>Whether this block's class extends FallingBlock (sand, gravel, concrete powder, anvil, dragon egg).</summary>
+    public bool IsFallingBlock => BlockType != null && FallingBlockTypes.Contains(BlockType);
+
+    /// <summary>Whether this block is a carpet (CarpetBlock family: wool and moss carpets).</summary>
+    public bool IsCarpet => BlockType is "minecraft:carpet" or "minecraft:wool_carpet";
+
+    /// <summary>Whether this block is a lily pad.</summary>
+    public bool IsLilyPad => BlockType == "minecraft:lily_pad";
+
+    /// <summary>Whether this block is a fence gate.</summary>
+    public bool IsFenceGate => BlockType == "minecraft:fence_gate";
+
+    /// <summary>Whether this block is a door (any material, incl. iron). Reference: DoorBlock.</summary>
+    public bool IsDoor => BlockType == "minecraft:door";
+
+    /// <summary>Whether this block is a ladder.</summary>
+    public bool IsLadder => BlockType == "minecraft:ladder";
+
+    /// <summary>Whether this block is soul sand.</summary>
+    public bool IsSoulSand => BlockType == "minecraft:soul_sand";
+
+    /// <summary>Whether this block is a magma block.</summary>
+    public bool IsMagmaBlock => BlockType == "minecraft:magma";
 
     /// <summary>
     /// Whether this block physically blocks movement (has a collision box).
@@ -112,10 +184,11 @@ public class BlockState
 
     /// <summary>
     /// Whether this block requires the correct tool to drop items when broken.
-    /// Reference: minecraft-26.1-REFERENCE-ONLY - BlockBehaviour.Properties.requiresCorrectToolForDrops()
-    /// Most blocks don't require a specific tool, but some (like ores) do.
+    /// Reference: BlockBehaviour.Properties.requiresCorrectToolForDrops(). Sourced from the generated
+    /// <see cref="ClientState.BlockHardness"/> table.
     /// </summary>
-    public bool RequiresCorrectToolForDrops { get; set; } = false;
+    public bool RequiresCorrectToolForDrops =>
+        ClientState.BlockHardness.TryGetValue(Name, out var h) && h.RequiresCorrectTool;
 
     // ===== Constructor =====
 
