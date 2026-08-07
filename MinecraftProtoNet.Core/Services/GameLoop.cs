@@ -77,6 +77,10 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
             long previousTickStart = 0;
             double drainMs = 0, preTickMs = 0, physicsMs = 0, postTickMs = 0, tickEndMs = 0;
 
+            // Absolute schedule for the next tick, advanced by a fixed interval each pass so the tick rate
+            // cannot drift away from the server's.
+            var nextTickDeadline = Stopwatch.GetTimestamp();
+
             try
             {
                 while (!token.IsCancellationRequested)
@@ -202,18 +206,38 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
 
                     var targetDelayMs = Math.Max(1, Math.Min(1000, client.State.Level.TickInterval));
 
-                    // Sub-millisecond elapsed time: truncating to whole milliseconds throws away up to 1ms per
-                    // tick, which at 20 TPS is a 2% rate error on its own.
-                    var processingTimeMs = stopwatch.Elapsed.TotalMilliseconds;
+                    // Pin each tick to an ABSOLUTE deadline rather than sleeping (target - work).
+                    //
+                    // Sleeping for the remainder only accounts for the work we measured; the time spent
+                    // outside that window, plus the sleep's own error, lands outside the calculation, so the
+                    // period drifts instead of being held. Measured, that produced a steady 49ms against the
+                    // server's 50ms — about 2% fast, which sounds harmless but is not: we gain a whole tick
+                    // roughly every 50 ticks, and when two of our movement packets land inside one server
+                    // tick the anticheat evaluates them as a single movement. It then sees exactly one extra
+                    // tick of travel in one tick (an observed offset of 0.35, well past the 0.1
+                    // immediate-setback threshold), sets us back, and the accumulated advantage decays far too
+                    // slowly to recover inside a run. One doubled packet became 800+ setbacks.
+                    //
+                    // Advancing a deadline by a fixed interval makes the long-run rate exact and self-
+                    // correcting: a tick that runs long is absorbed by a shorter sleep rather than pushing
+                    // every later tick out.
+                    var intervalTicks = (long)(targetDelayMs / 1000.0 * Stopwatch.Frequency);
+                    nextTickDeadline += intervalTicks;
 
-                    if (processingTimeMs < targetDelayMs)
+                    var nowTimestamp = Stopwatch.GetTimestamp();
+                    var remainingMs = (nextTickDeadline - nowTimestamp) * 1000.0 / Stopwatch.Frequency
+                                      + humanizer.GetTickJitterMs();
+
+                    if (remainingMs > 0.0)
                     {
-                        var remainingDelayMs = targetDelayMs - processingTimeMs + humanizer.GetTickJitterMs();
-                        remainingDelayMs = Math.Max(1, remainingDelayMs);
-                        await Task.Delay(TimeSpan.FromMilliseconds(remainingDelayMs), token);
+                        await Task.Delay(TimeSpan.FromMilliseconds(remainingMs), token);
                     }
                     else
                     {
+                        // Fell behind (a long tick, or a GC pause). Resynchronise to now instead of trying to
+                        // catch up, which would fire a burst of ticks and cause the very packet-doubling this
+                        // deadline exists to prevent.
+                        nextTickDeadline = nowTimestamp;
                         await Task.Yield();
                     }
                 }
