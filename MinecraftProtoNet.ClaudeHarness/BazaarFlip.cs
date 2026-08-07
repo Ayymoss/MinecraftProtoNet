@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using MinecraftProtoNet.Bazaar.Trading;
 using System.Text.Json.Serialization;
 
 namespace MinecraftProtoNet.ClaudeHarness;
@@ -534,7 +535,9 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
 
         // Sit one tick above the best buy order so we are first in the queue, and confirm the flip still pays
         // after tax at the prices the game is quoting right now rather than the ones the API cached.
-        var buyPrice = Math.Round(bid + 0.1, 1);
+        // A re-post uses the price the policy picked; a first post sits one tick above the best bid.
+        var buyPrice = _nextPrice is { } stepped ? stepped : Math.Round(bid + 0.1, 1);
+        _nextPrice = null;
         var sellPrice = Math.Round(ask - 0.1, 1);
         var margin = sellPrice * (1 - TaxRate) - buyPrice;
         log($"live book: bid {bid} / ask {ask} -> buy at {buyPrice}, plan to sell at {sellPrice}, " +
@@ -545,6 +548,8 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
             log("the spread does not cover the tax at live prices — not trading");
             return null;
         }
+
+        _entryMarginPerUnit = margin;
 
         if (!await session.ClickAsync("Create Buy Order")) return null;
         if (!await session.ClickAsync("Custom Amount")) return null;
@@ -588,7 +593,8 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
             return null;
         }
 
-        var sellPrice = Math.Round(ask - 0.1, 1);
+        var sellPrice = _nextPrice is { } steppedSell ? steppedSell : Math.Round(ask - 0.1, 1);
+        _nextPrice = null;
 
         // Never sell below what the goods cost. Chasing a falling ask is how a market-making loop turns a
         // spread into a loss: the ask dropped 33 coins in one poll during the first live run, and without a
@@ -657,59 +663,104 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
     private async Task<(double UnitPrice, double Cost, bool Filled)?> AcquireAsync(FlipOpportunity flip, FlipOptions options)
     {
         var orderName = $"BUY {flip.Name}";
-        for (var attempt = 1; attempt <= options.MaxReprices + 1; attempt++)
+        var legStarted = DateTime.UtcNow;
+        double? entryPrice = null;
+        var steps = 0;
+
+        while (true)
         {
             var placed = await PlaceBuyOrderAsync(flip, options.Quantity);
             if (placed is null) return null;
+            entryPrice ??= placed.Value.UnitPrice;
 
-            var outcome = await WatchOrderAsync(orderName, "items to claim", placed.Value.UnitPrice, isBuy: true, options);
+            var outcome = await WatchOrderAsync(orderName, "items to claim", placed.Value.UnitPrice, isBuy: true,
+                options, entryPrice.Value, steps, legStarted);
+
             switch (outcome)
             {
                 case OrderOutcome.Claimed:
                     return (placed.Value.UnitPrice, placed.Value.Cost, true);
 
-                case OrderOutcome.Outbid when attempt <= options.MaxReprices:
-                    log($"outbid at {placed.Value.UnitPrice} — cancelling to re-post (reprice {attempt}/{options.MaxReprices})");
+                case OrderOutcome.Outbid:
+                    // The policy already decided this step is worth taking and at what price; here we only
+                    // carry it out. It caps its own step count, so this loop needs no separate limit.
+                    steps++;
+                    log($"stepping the buy to {_nextPrice} (step {steps})");
                     if (!await CancelOrderAsync(orderName)) return null;
                     continue;
 
                 default:
-                    // Timed out. Anything already filled has been claimed; the remainder is cancelled so the
-                    // coins come back instead of sitting in escrow. If some units did land, the flip still
-                    // continues with what it holds.
-                    log("buy leg timed out — cancelling the remainder");
+                    // Nothing more to work: anything filled has been claimed, and the remainder is cancelled
+                    // so the coins come back rather than sitting in escrow.
+                    log("buy leg finished without filling — cancelling the remainder");
                     await CancelOrderAsync(orderName);
                     return (placed.Value.UnitPrice, placed.Value.Cost, _unitsBought > 0);
             }
         }
-        return null;
     }
 
     /// <summary>Sells the goods, with the same undercut handling on the offer side.</summary>
     private async Task<(double UnitPrice, double Proceeds, bool Filled)?> LiquidateAsync(FlipOpportunity flip, FlipOptions options)
     {
         var orderName = $"SELL {flip.Name}";
-        for (var attempt = 1; attempt <= options.MaxReprices + 1; attempt++)
+        var legStarted = DateTime.UtcNow;
+        double? entryPrice = null;
+        var steps = 0;
+
+        while (true)
         {
             var offered = await PlaceSellOfferAsync(flip);
             if (offered is null) return null;
+            entryPrice ??= offered.Value.UnitPrice;
 
-            var outcome = await WatchOrderAsync(orderName, "coins to claim", offered.Value.UnitPrice, isBuy: false, options);
+            var outcome = await WatchOrderAsync(orderName, "coins to claim", offered.Value.UnitPrice, isBuy: false,
+                options, entryPrice.Value, steps, legStarted);
+
             switch (outcome)
             {
                 case OrderOutcome.Claimed:
                     return (offered.Value.UnitPrice, offered.Value.Proceeds, true);
 
-                case OrderOutcome.Outbid when attempt <= options.MaxReprices:
-                    log($"undercut at {offered.Value.UnitPrice} — cancelling to re-post (reprice {attempt}/{options.MaxReprices})");
+                case OrderOutcome.Outbid:
+                    steps++;
+                    log($"stepping the offer to {_nextPrice} (step {steps})");
                     if (!await CancelOrderAsync(orderName)) return null;
                     continue;
+
+                case OrderOutcome.CrossSpread:
+                    // Held long enough that clearing beats holding out. Cancel the offer to get the goods back
+                    // in inventory, then take the standing bid.
+                    log("clearing the position at the market bid");
+                    if (!await CancelOrderAsync(orderName)) return null;
+                    if (!await SellInstantlyAsync(flip)) return (offered.Value.UnitPrice, offered.Value.Proceeds, false);
+                    return (offered.Value.UnitPrice, offered.Value.Proceeds, true);
 
                 default:
                     return (offered.Value.UnitPrice, offered.Value.Proceeds, false);
             }
         }
-        return null;
+    }
+
+    /// <summary>
+    /// Takes the standing bid for everything held of this product. Only used to clear a position that has sat
+    /// unsold for hours — it pays the spread, which is exactly why it is the last resort rather than the first.
+    /// </summary>
+    private async Task<bool> SellInstantlyAsync(FlipOpportunity flip)
+    {
+        if (!await OpenProductAsync(flip.Name)) return false;
+
+        var chatMark = session.ChatCount;
+        if (!await session.ClickAsync("Sell Instantly")) return false;
+        await Task.Delay(3000);
+
+        foreach (var line in session.ChatSince(chatMark).Where(l => l.Contains("Sold", StringComparison.OrdinalIgnoreCase)))
+        {
+            log($"  {line}");
+            RecordSale(line);
+        }
+
+        await session.CloseAsync();
+        return true;
     }
 
     /// <summary>"Filled: 4/4 (100%)" — true only when both sides of the fraction match.</summary>
@@ -724,19 +775,27 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
     {
         Claimed,
         Outbid,
+        CrossSpread,
         TimedOut,
         Failed
     }
+
+    /// <summary>Price the policy chose for the next post, so the re-post does not recompute it from scratch.</summary>
+    private double? _nextPrice;
+
+    /// <summary>Margin the flip was entered for — the yardstick every later decision is measured against.</summary>
+    private double _entryMarginPerUnit;
 
     /// <summary>
     /// Polls the order manager until the order pays out, or until the live book says we have been undercut for
     /// long enough that re-posting beats waiting.
     /// </summary>
-    private async Task<OrderOutcome> WatchOrderAsync(string orderName, string claimPhrase, double ourPrice, bool isBuy, FlipOptions options)
+    private async Task<OrderOutcome> WatchOrderAsync(string orderName, string claimPhrase, double ourPrice, bool isBuy,
+        FlipOptions options, double entryPrice, int stepsTaken, DateTime legStarted)
     {
-        log($"--- watching \"{orderName}\" @ {ourPrice} ({claimPhrase}), up to {options.MonitorMinutes} min ---");
+        log($"--- watching \"{orderName}\" @ {ourPrice} ({claimPhrase}) ---");
         var deadline = DateTime.UtcNow.AddMinutes(options.MonitorMinutes);
-        DateTime? outbidSince = null;
+        var pollsBeaten = 0;
         var poll = 0;
 
         while (DateTime.UtcNow < deadline)
@@ -811,24 +870,58 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
                 continue;
             }
 
-            // The live book decides whether waiting is still the right move. A partially filled order is left
-            // alone: cancelling it would hand back a position that is already working.
+            // A partially filled order is left alone regardless: cancelling it hands back a position that is
+            // already working.
             var partiallyFilled = status.Contains("Filled:") && !status.Contains(" 0/");
-            var (bid, ask) = await LiveBookAsync(_productKey);
-            var beaten = isBuy ? bid > ourPrice + 0.001 : ask is > 0 && ask < ourPrice - 0.001;
-
-            if (beaten && !partiallyFilled)
+            var book = await LiveBookAsync(_productKey);
+            if (book is null || partiallyFilled)
             {
-                outbidSince ??= DateTime.UtcNow;
-                var waited = (DateTime.UtcNow - outbidSince.Value).TotalSeconds;
-                log($"poll {poll}: {status}; book is now bid {bid} / ask {ask} — {(isBuy ? "outbid" : "undercut")} for {waited:F0}s");
-                if (waited >= options.RepricePatienceSeconds) return OrderOutcome.Outbid;
+                log($"poll {poll}: {status}{(partiallyFilled ? " (partially filled — leaving it alone)" : "")}");
+                await Task.Delay(TimeSpan.FromSeconds(options.PollSeconds));
+                continue;
             }
-            else
+
+            var ourSide = isBuy ? book.BidPrice : book.AskPrice;
+            var otherSide = isBuy ? book.AskPrice : book.BidPrice;
+            var levels = (isBuy ? book.BidBook : book.AskBook) ?? [];
+
+            // Depth at whatever price is beating us — the policy uses it to tell a real market from a lure.
+            var competing = levels
+                .Where(l => isBuy ? l.UnitPrice > ourPrice + 0.001 : l.UnitPrice < ourPrice - 0.001)
+                .OrderBy(l => isBuy ? -l.UnitPrice : l.UnitPrice)
+                .FirstOrDefault();
+
+            var beaten = isBuy ? ourSide > ourPrice + 0.001 : ourSide is > 0 && ourSide < ourPrice - 0.001;
+            pollsBeaten = beaten ? pollsBeaten + 1 : 0;
+
+            var decision = RepricePolicy.Decide(new RepriceContext(
+                IsBuyLeg: isBuy,
+                OurPrice: ourPrice,
+                CostPerUnit: _unitsBought > 0 ? _coinsSpent / _unitsBought : 0,
+                BestOnOurSide: ourSide,
+                BestOnOtherSide: otherSide,
+                CompetingDepth: competing?.Amount ?? 0,
+                EntryMarginPerUnit: _entryMarginPerUnit,
+                EntryPrice: entryPrice,
+                PollsBeaten: pollsBeaten,
+                StepsTaken: stepsTaken,
+                Age: DateTime.UtcNow - legStarted,
+                DataAge: TimeSpan.FromSeconds(book.DataAgeSeconds)));
+
+            log($"poll {poll}: {status}; book bid {book.BidPrice} / ask {book.AskPrice} " +
+                $"({book.DataAgeSeconds:F0}s old) -> {decision.Action}: {decision.Reason}");
+
+            switch (decision.Action)
             {
-                if (outbidSince is not null) log($"poll {poll}: back at the top of the book");
-                outbidSince = null;
-                log($"poll {poll}: {status}; still best (bid {bid} / ask {ask})");
+                case RepriceAction.Step:
+                    _nextPrice = decision.NewPrice;
+                    return OrderOutcome.Outbid;
+
+                case RepriceAction.CrossSpread:
+                    return OrderOutcome.CrossSpread;
+
+                case RepriceAction.Abandon:
+                    return OrderOutcome.TimedOut;
             }
 
             await Task.Delay(TimeSpan.FromSeconds(options.PollSeconds));
@@ -893,17 +986,16 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
     }
 
     /// <summary>Live top of book straight from BazaarCompanion — cheaper than re-opening the product page.</summary>
-    private async Task<(double Bid, double Ask)> LiveBookAsync(string productKey)
+    private async Task<LiveProduct?> LiveBookAsync(string productKey)
     {
         try
         {
-            var product = await api.GetFromJsonAsync<LiveProduct>($"/api/bot/products/{productKey}");
-            return product is null ? (0, 0) : (product.BidPrice, product.AskPrice);
+            return await api.GetFromJsonAsync<LiveProduct>($"/api/bot/products/{productKey}");
         }
         catch (Exception ex)
         {
-            log($"live book lookup failed ({ex.Message}) — assuming we are still best");
-            return (0, 0);
+            log($"live book lookup failed ({ex.Message}) — holding this poll rather than guessing");
+            return null;
         }
     }
 
@@ -929,6 +1021,23 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
     private static double Num(string text) =>
         double.TryParse(text.Replace(",", ""), System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
+
+    private static readonly System.Text.RegularExpressions.Regex SoldInstantly =
+        new(@"Sold\s+([\d,]+)x\s+.*?for\s+([\d,]+(?:\.\d+)?)\s+coins",
+            System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>Folds an instant-sell confirmation into the ledger, same as a claim.</summary>
+    private void RecordSale(string line)
+    {
+        var match = SoldInstantly.Match(line);
+        if (!match.Success) return;
+
+        var qty = (int)Num(match.Groups[1].Value);
+        var received = Num(match.Groups[2].Value);
+        _unitsSold += qty;
+        _coinsReceived += received;
+        log($"  ledger: -{qty} units for {received} coins (sold {_unitsSold}, received {_coinsReceived:F1})");
+    }
 
     /// <summary>Folds a claim message into the ledger. Returns true if the line was a claim we understood.</summary>
     private bool RecordClaim(string line)
@@ -960,7 +1069,15 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
 
     private sealed record LiveProduct(
         [property: JsonPropertyName("bidPrice")] double BidPrice,
-        [property: JsonPropertyName("askPrice")] double AskPrice);
+        [property: JsonPropertyName("askPrice")] double AskPrice,
+        [property: JsonPropertyName("dataAgeSeconds")] double DataAgeSeconds,
+        [property: JsonPropertyName("bidBook")] List<BookLevel>? BidBook,
+        [property: JsonPropertyName("askBook")] List<BookLevel>? AskBook);
+
+    private sealed record BookLevel(
+        [property: JsonPropertyName("unitPrice")] double UnitPrice,
+        [property: JsonPropertyName("amount")] int Amount,
+        [property: JsonPropertyName("orders")] int Orders);
 
     /// <summary>
     /// Re-opens the order manager every poll until the named order has something to collect, then claims it.

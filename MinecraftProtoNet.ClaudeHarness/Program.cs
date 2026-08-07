@@ -334,8 +334,12 @@ if (Array.IndexOf(args, "--flip") >= 0)
         Quantity: int.TryParse(GetArg("--qty"), out var qty) ? qty : 4,
         MaxUnitPrice: double.TryParse(GetArg("--max-price"), out var maxPrice) ? maxPrice : 3000,
         ForceProduct: GetArg("--product"),
-        MonitorMinutes: int.TryParse(GetArg("--monitor-min"), out var monitorMin) ? monitorMin : 30,
-        PollSeconds: int.TryParse(GetArg("--poll-sec"), out var pollSec) ? pollSec : 30,
+        // A flip can legitimately take hours; the repricing policy decides when to give up on a leg, not a
+        // wall-clock cap, so this only bounds a single posting rather than the whole trade.
+        MonitorMinutes: int.TryParse(GetArg("--monitor-min"), out var monitorMin) ? monitorMin : 480,
+        // The companion API refreshes about once a minute, so polling faster only burns GUI opens and
+        // re-reads the same numbers. 60s is the floor whatever the flag says.
+        PollSeconds: Math.Max(60, int.TryParse(GetArg("--poll-sec"), out var pollSec) ? pollSec : 60),
         MinHubPlayers: int.TryParse(GetArg("--min-hub-players"), out var minHubPlayers) ? minHubPlayers : 20);
 
     Console.WriteLine($"[flip] {apiBase} | hub {flipOptions.HubNumber} | qty {flipOptions.Quantity} | " +
