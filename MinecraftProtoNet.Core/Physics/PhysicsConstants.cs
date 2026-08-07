@@ -121,10 +121,12 @@ public static class PhysicsConstants
     public const double MinMovementDistance = 0.003;
 
     /// <summary>
-    /// Maximum step height for automatic stepping up blocks.
-    /// Source: Attributes.STEP_HEIGHT default for players
+    /// Maximum step height for automatic stepping up blocks (and the edge-backoff downstep probe).
+    /// Source: Attributes.STEP_HEIGHT default = 0.6 (Attributes.java:83); the player does not override it,
+    /// so Entity.maxUpStep()/Player.maybeBackOffFromEdge use 0.6. A previous value of 1.0 let the bot
+    /// auto-climb full blocks without jumping (Step/Phase anti-cheat flag + server desync).
     /// </summary>
-    public const double DefaultStepHeight = 1.0;
+    public const double DefaultStepHeight = 0.6;
 
     /// <summary>
     /// Player bounding box width.

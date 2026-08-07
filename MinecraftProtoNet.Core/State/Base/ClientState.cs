@@ -75,6 +75,22 @@ public class ClientState
     public string? ConnectedServerHost { get; set; }
 
     /// <summary>
+    /// Whether we have told the server the world is loaded (serverbound player_loaded) for the CURRENT level.
+    ///
+    /// Must be cleared on every level load — join and respawn/dimension change — because a server switch on a
+    /// proxy network loads a new world on a new backend that has not heard from us yet. Until it does, that
+    /// server pins the player at spawn and ignores their movement.
+    ///
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:500
+    /// (handleLogin) and :1180 (handleRespawn), both calling setClientLoaded(false).
+    ///
+    /// Lives on client state rather than in a handler field precisely so it survives nothing: a handler
+    /// instance is a DI singleton for the whole process, so a flag there is set once ever, and every level
+    /// loaded after the first is never acknowledged.
+    /// </summary>
+    public bool ClientLoadedNotified { get; set; }
+
+    /// <summary>
     /// The last disconnect message received from the server (translated visible text).
     /// Set by DisconnectPacket / LoginDisconnectPacket handlers so the UI can display why
     /// the server closed the connection (e.g. "you are banned", rate limit, kick reason).
@@ -109,6 +125,10 @@ public class ClientState
     public static FrozenDictionary<int, Biome> BiomeRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, string> ItemRegistry { get; private set; } = null!;
     public static FrozenDictionary<int, string> EntityTypeRegistry { get; private set; } = null!;
+
+    /// <summary>Attribute protocol id -> name. Built-in registry, loaded from the static report.</summary>
+    public static FrozenDictionary<int, string> AttributeRegistry { get; private set; } =
+        FrozenDictionary<int, string>.Empty;
     public static BlockTagRegistry BlockTags { get; private set; } = new();
 
     /// <summary>
@@ -182,5 +202,10 @@ public class ClientState
     public static void InitializeEntityTypeRegistry(Dictionary<int, string> registry)
     {
         EntityTypeRegistry = registry.ToFrozenDictionary();
+    }
+
+    public static void InitializeAttributeRegistry(Dictionary<int, string> registry)
+    {
+        AttributeRegistry = registry.ToFrozenDictionary();
     }
 }

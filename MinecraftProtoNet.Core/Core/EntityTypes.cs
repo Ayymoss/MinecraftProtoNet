@@ -11,4 +11,10 @@ public static class EntityTypes
     /// Verify with entity registry if protocol version changes.
     /// </summary>
     public const int Player = 155;
+
+    /// <summary>
+    /// Villager entity type ID. From StaticFiles/reports/registries.json -> minecraft:entity_type ->
+    /// minecraft:villager -> protocol_id. Verify with the entity registry if the protocol version changes.
+    /// </summary>
+    public const int Villager = 140;
 }

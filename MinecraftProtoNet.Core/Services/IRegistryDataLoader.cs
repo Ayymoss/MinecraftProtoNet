@@ -36,4 +36,7 @@ public interface IRegistryDataLoader
     /// </summary>
     /// <returns>A dictionary mapping protocol IDs to entity type names.</returns>
     Task<Dictionary<int, string>> LoadEntityTypesAsync();
+
+    /// <summary>Attribute registry (protocol id -> name) from the static report; never sent by servers.</summary>
+    Task<Dictionary<int, string>> LoadAttributesAsync();
 }

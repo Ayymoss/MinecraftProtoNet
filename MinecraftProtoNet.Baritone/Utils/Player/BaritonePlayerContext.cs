@@ -23,6 +23,7 @@ using MinecraftProtoNet.Baritone.Api.Utils;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Models.Core;
+using MinecraftProtoNet.Core.Models.World.Meta;
 
 namespace MinecraftProtoNet.Baritone.Utils.Player;
 
@@ -48,15 +49,23 @@ public class BaritonePlayerContext : IPlayerContext
     public IPlayerController PlayerController() => _playerController;
     public object? World() => _mc.State.Level;
     public IWorldData? WorldData() => _baritone.GetWorldProvider().GetCurrentWorld();
+    /// <summary>
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/player/BaritonePlayerContext.java:83-86
+    /// Baritone does NOT use the vanilla cached hitResult here - it raytraces live from PlayerRotations(),
+    /// which under freeLook is the rotation actually sent to the server. The cached vanilla result is computed
+    /// from the client-side entity rotation, which LookBehavior restores at POST, so using it made every
+    /// same-tick place check (IsLookingAt) miss the aim and the bot never placed.
+    /// </summary>
     public object? ObjectMouseOver()
     {
         var player = _mc.State.LocalPlayer?.Entity;
         if (player == null) return null;
 
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java
-        // In vanilla, objectMouseOver returns the cached hitResult from pick(), computed once per tick.
-        // This ensures Baritone's placement validation and InteractAsync use the same result.
-        return player.CachedBlockHitResult;
+        var rotation = PlayerRotations();
+        if (rotation == null) return null;
+
+        return RayTraceUtils.RayTraceTowards(player, _mc.State.Level, rotation,
+            _playerController.GetBlockReachDistance(), false);
     }
 
     public BetterBlockPos? PlayerFeet()
@@ -101,21 +110,30 @@ public class BaritonePlayerContext : IPlayerContext
     }
 
     public BetterBlockPos? ViewerPos() => PlayerFeet();
+    /// <summary>
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/player/BaritonePlayerContext.java:78-81
+    /// Under freeLook, bot logic reasons about the rotation that was actually SENT rather than the client-side
+    /// entity rotation (which LookBehavior restores at POST). Everything downstream - place/break raycasts,
+    /// IsLookingAt, the AimProcessor's prev rotation, moveTowardsWithSlightRotation - depends on this, which is
+    /// why the client rotation can be restored without breaking same-tick place checks.
+    /// </summary>
     public Rotation? PlayerRotations()
     {
+        var effective = _baritone?.GetLookBehavior()?.GetEffectiveRotation();
+        if (effective != null) return effective;
+
         var player = _mc.State.LocalPlayer?.Entity;
         if (player == null) return null;
         return new Rotation(player.YawPitch.X, player.YawPitch.Y);
     }
 
+    /// <summary>
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/api/java/baritone/api/utils/IPlayerContext.java:118-125
+    /// Derived from ObjectMouseOver() so it follows the same (effective-rotation) raycast.
+    /// </summary>
     public BetterBlockPos? GetSelectedBlock()
     {
-        var player = _mc.State.LocalPlayer?.Entity;
-        if (player == null) return null;
-
-        // Use cached hit result from pick() for consistency with ObjectMouseOver
-        var hit = player.CachedBlockHitResult;
-        if (hit == null) return null;
+        if (ObjectMouseOver() is not RaycastHit hit || hit.Block == null) return null;
 
         return new BetterBlockPos(hit.BlockPosition.X, hit.BlockPosition.Y, hit.BlockPosition.Z);
     }

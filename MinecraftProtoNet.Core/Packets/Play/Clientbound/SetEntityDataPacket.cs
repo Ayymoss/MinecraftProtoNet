@@ -60,8 +60,15 @@ public class SetEntityDataPacket : IClientboundPacket
         }
     }
 
-    // Metadata types as registered in EntityDataSerializers (MC 26.1)
-    // Order matches registerSerializer() calls in EntityDataSerializers.java
+    /// <summary>
+    /// Metadata types, numbered by their registration order in EntityDataSerializers.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/network/syncher/EntityDataSerializers.java:191-233
+    ///
+    /// These ids are positional, so an omission does not just lose one type — it renumbers every type after it,
+    /// and since entity data is a flat field stream a wrong type desynchronises the rest of the packet. 26.2
+    /// added the four *_SOUND_VARIANT serializers below; without them everything from CowVariant onwards was
+    /// off by up to four, which made Vector3/Quaternion/ResolvableProfile unreadable.
+    /// </summary>
     public enum MetadataType
     {
         Byte = 0,
@@ -86,23 +93,27 @@ public class SetEntityDataPacket : IClientboundPacket
         OptionalUnsignedInt = 19, // OptionalVarInt
         Pose = 20,            // VarInt enum
         CatVariant = 21,      // VarInt holder ID
-        CowVariant = 22,
-        WolfVariant = 23,
-        WolfSoundVariant = 24,
-        FrogVariant = 25,
-        PigVariant = 26,
-        ChickenVariant = 27,
-        ZombieNautilusVariant = 28,
-        OptionalGlobalPos = 29,
-        PaintingVariant = 30,
-        SnifferState = 31,
-        ArmadilloState = 32,
-        CopperGolemState = 33,
-        WeatheringCopperState = 34,
-        Vector3 = 35,         // 3 floats
-        Quaternion = 36,      // 4 floats
-        ResolvableProfile = 37, // Optional game profile
-        HumanoidArm = 38,     // VarInt enum (0=left, 1=right)
+        CatSoundVariant = 22,
+        CowVariant = 23,
+        CowSoundVariant = 24,
+        WolfVariant = 25,
+        WolfSoundVariant = 26,
+        FrogVariant = 27,
+        PigVariant = 28,
+        PigSoundVariant = 29,
+        ChickenVariant = 30,
+        ChickenSoundVariant = 31,
+        ZombieNautilusVariant = 32,
+        OptionalGlobalPos = 33,
+        PaintingVariant = 34,
+        SnifferState = 35,
+        ArmadilloState = 36,
+        CopperGolemState = 37,
+        WeatheringCopperState = 38,
+        Vector3 = 39,         // 3 floats
+        Quaternion = 40,      // 4 floats
+        ResolvableProfile = 41,
+        HumanoidArm = 42,     // VarInt enum (0=left, 1=right)
     }
 
     private object? GetValue(ref PacketBufferReader buffer, MetadataType type)
@@ -178,12 +189,16 @@ public class SetEntityDataPacket : IClientboundPacket
                 break;
             // Variant types are VarInt holder IDs
             case MetadataType.CatVariant:
+            case MetadataType.CatSoundVariant:
             case MetadataType.CowVariant:
+            case MetadataType.CowSoundVariant:
             case MetadataType.WolfVariant:
             case MetadataType.WolfSoundVariant:
             case MetadataType.FrogVariant:
             case MetadataType.PigVariant:
+            case MetadataType.PigSoundVariant:
             case MetadataType.ChickenVariant:
+            case MetadataType.ChickenSoundVariant:
             case MetadataType.ZombieNautilusVariant:
             case MetadataType.PaintingVariant:
             case MetadataType.SnifferState:
@@ -200,22 +215,38 @@ public class SetEntityDataPacket : IClientboundPacket
                 }
                 break;
             case MetadataType.ResolvableProfile:
-                // Complex: name (optional string), uuid (optional), properties
-                var hasName = buffer.ReadBoolean();
-                if (hasName) buffer.ReadString();
-                var hasUuid = buffer.ReadBoolean();
-                if (hasUuid) buffer.ReadUuid();
-                var propCount = buffer.ReadVarInt();
-                for (var i = 0; i < propCount; i++)
-                {
-                    buffer.ReadString(); // name
-                    buffer.ReadString(); // value
-                    if (buffer.ReadBoolean()) buffer.ReadString(); // signature
-                }
+                // Backs minecraft:mannequin NPCs (and player heads), so the value is kept rather than skipped.
+                // The layout changed in 26.2 — either(GameProfile, Partial) followed by a PlayerSkin.Patch —
+                // and the previous read was the older name/uuid/properties one. Since entity data is a flat
+                // field stream, that mismatch corrupted every field after it in the same packet.
+                value = ResolvableProfileData.Read(ref buffer);
                 break;
-            case MetadataType.Particle:
             case MetadataType.Particles:
-                // Complex particle data - skip remaining for safety
+            {
+                // PARTICLES = ParticleTypes.STREAM_CODEC.apply(list()) — a VarInt count then that many
+                // particles. Reference: EntityDataSerializers.java:150
+                //
+                // This is LivingEntity.DATA_EFFECT_PARTICLES (index 10), so it is present on essentially every
+                // living entity, and for an entity with no potion effects the list is empty — one VarInt.
+                // Consuming the rest of the buffer on sight (what this used to do) therefore discarded every
+                // field after index 10 on every mob, player and armour stand that sent one. Servers that emit
+                // it in the spawn bundle lost the entire tail of that packet.
+                //
+                // A non-empty list still needs per-particle payloads, which vary by type and are not modelled
+                // yet, so that case keeps the old bail-out rather than desynchronising the stream.
+                var particleCount = buffer.ReadVarInt();
+                if (particleCount == 0)
+                {
+                    value = Array.Empty<object>();
+                    break;
+                }
+
+                AnsiConsole.MarkupLine($"[yellow]Warning:[/] [white]{particleCount} particle(s) in entity data; payloads not implemented, consuming rest of buffer[/]");
+                _ = buffer.ReadRestBuffer();
+                break;
+            }
+            case MetadataType.Particle:
+                // Single particle: type id plus a type-specific payload that is not modelled yet.
                 AnsiConsole.MarkupLine($"[yellow]Warning:[/] [white]Particle metadata not fully implemented, consuming rest of buffer[/]");
                 _ = buffer.ReadRestBuffer();
                 break;

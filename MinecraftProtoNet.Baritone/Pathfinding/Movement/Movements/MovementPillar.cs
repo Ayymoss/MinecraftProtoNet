@@ -17,6 +17,7 @@
  * Ported from: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementPillar.java
  */
 
+using System.Linq;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Pathing.Movement;
 using MinecraftProtoNet.Baritone.Api.Utils;
@@ -262,6 +263,8 @@ public class MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBloc
                     state.SetInput(BaritoneInput.ClickRight, true);
                 }
             }
+
+            MovementDiag.Log($"PILLAR feet=({feet.X},{feet.Y},{feet.Z}) py={player.Position.Y:F2} dist={dist:F3} flatMot={flatMotion:F3} sneaking={player.IsSneaking} lookBelow={Ctx.IsLookingAt(Src.Below())} lookSrc={Ctx.IsLookingAt(Src)} yOK={player.Position.Y > Dest.Y + 0.1} blockThere={blockIsThere} inputs=[{string.Join(",", state.GetInputStates().Where(kv => kv.Value).Select(kv => kv.Key))}]");
         }
 
         // Reference: MovementPillar.java:232-235 - at our goal and the block below us is placed

@@ -57,6 +57,18 @@ public class Entity
         }
     } = 20f;
 
+    /// <summary>
+    /// Effective value of the minecraft:movement_speed attribute, as sent by the server (base value with its
+    /// modifiers already combined). Vanilla's default for a player is 0.1.
+    ///
+    /// This is what feeds the walking-speed calculation. It is NOT a constant: servers change it for armour,
+    /// stat systems, potion-style effects, mounts and hub restrictions, and a client that assumes 0.1 will
+    /// move at a speed the server does not agree with — which shows up as the server repeatedly setting the
+    /// player back.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/ai/attributes/AttributeInstance.java:150-168
+    /// </summary>
+    public double MovementSpeed { get; set; } = 0.1;
+
     public int Hunger
     {
         get;
@@ -143,7 +155,6 @@ public class Entity
     /// <summary>
     /// Whether the entity has a pending teleport to acknowledge in the next physics tick.
     /// </summary>
-    public bool HasPendingTeleport { get; set; }
 
     /// <summary>
     /// Event fired when the server sends a teleport packet.

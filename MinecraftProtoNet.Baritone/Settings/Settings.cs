@@ -741,6 +741,16 @@ public sealed class Settings
     public readonly Setting<bool> ElytraFreeLook = new(true);
 
     /// <summary>
+    /// When moving with "slight rotation" (strafe/back-walk toward a destination without facing it), never rotate
+    /// the head FURTHER from the direction of travel than it already is. Java snaps to the nearest multiple of 45
+    /// degrees, which turns the head away whenever it is more than 22.5 degrees off, forcing the bot to crab
+    /// sideways instead of walking at its target. This is a deliberate DEVIATION from
+    /// baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/MovementHelper.java:691-706.
+    /// Set false for strict 1:1 parity with Java.
+    /// </summary>
+    public readonly Setting<bool> PreferFacingTravelDirection = new(true);
+
+    /// <summary>
     /// Forces the client-sided yaw rotation to an average of the last smoothLookTicks of server-sided rotations.
     /// </summary>
     public readonly Setting<bool> SmoothLook = new(false);

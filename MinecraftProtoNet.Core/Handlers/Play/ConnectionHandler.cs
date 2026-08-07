@@ -20,6 +20,7 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(ChunkBatchFinishedPacket))]
 [HandlesPacket(typeof(ResourcePackPushPacket))]
 [HandlesPacket(typeof(ResourcePackPopPacket))]
+[HandlesPacket(typeof(StartConfigurationPacket))]
 [HandlesPacket(typeof(Packets.Play.Clientbound.CustomPayloadPacket))]
 public class ConnectionHandler(ILogger<ConnectionHandler> logger, IHumanizer humanizer) : IPacketHandler
 {
@@ -47,6 +48,20 @@ public class ConnectionHandler(ILogger<ConnectionHandler> logger, IHumanizer hum
 
             case PongResponsePacket pongResponsePacket:
                 logger.LogDebug("Pong response: {Payload}", pongResponsePacket.Payload);
+                break;
+
+            case StartConfigurationPacket:
+                // Server is moving us back to the Configuration phase (reconfiguration) — e.g. a Velocity/Bungee
+                // backend switch or a server-menu plugin. Reference: ClientPacketListener.handleConfigurationStart
+                // (minecraft-26.2): ack, then switch protocol state to Configuration. The existing
+                // ConfigurationHandler then drives the new config pass (SelectKnownPacks / RegistryData /
+                // FinishConfiguration) and switches us back to Play. The GameLoop stops emitting Play packets
+                // while ProtocolState != Play (see GameLoop tick gate), so we don't get kicked mid-reconfigure.
+                // NOTE: vanilla also calls sendChatAcknowledgement() first; omitted (signed-chat offset isn't
+                // tracked here and it isn't required to complete reconfiguration).
+                logger.LogInformation("Server requested reconfiguration; acknowledging and returning to Configuration phase");
+                await client.SendPacketAsync(new ConfigurationAcknowledgedPacket());
+                client.ProtocolState = ProtocolState.Configuration;
                 break;
 
             case ChunkBatchFinishedPacket chunkBatchFinishedPacket:

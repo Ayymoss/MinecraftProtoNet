@@ -19,6 +19,17 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
 {
     // Terminal velocity in blocks/tick (Minecraft's max fall speed)
     private const double TerminalVelocity = -3.92;
+    private static readonly bool SpeedDiagEnabled =
+        Environment.GetEnvironmentVariable("MCPROTO_SPEED_DIAG") == "1";
+
+    /// <summary>
+    /// Opt-in movement-send diagnostic (MCPROTO_SETBACK_DIAG=1), paired with the setback diag in PlayHandler.
+    /// Logs every outgoing position packet with the step since the last one, so a setback can be attributed to
+    /// an oversized step (skipped ticks) rather than guessed at from the correction alone.
+    /// </summary>
+    private static readonly bool SetbackDiagEnabled =
+        Environment.GetEnvironmentVariable("MCPROTO_SETBACK_DIAG") == "1";
+
     private const double PositionUpdateThreshold = 2.0E-4;
     private const int PositionReminderInterval = 20;
 
@@ -31,28 +42,17 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         await entity.StateLock.WaitAsync();
         try
         {
-            // ===== TELEPORT GUARD =====
-            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:744-753
-            // When a server teleport is received, the handler already sent AcceptTeleportation + PosRot confirmation.
-            // On the FIRST physics tick after that, we must NOT apply any movement/gravity.
-            // The entity must remain at the exact teleported position so the server accepts our confirmation.
-            // We clear the flag and skip all physics for this tick. On the NEXT tick, normal physics resume.
-            if (entity.HasPendingTeleport)
-            {
-                entity.HasPendingTeleport = false;
-
-                logger.LogDebug("[Physics] Skipping tick - pending teleport. Position={Position}, Velocity={Velocity}",
-                    entity.Position, entity.Velocity);
-
-                // Still invoke the pre-physics callback so Baritone can observe the new position,
-                // but we do NOT apply any movement or send position packets this tick.
-                prePhysicsCallback?.Invoke(entity);
-
-                // Send position from the teleported state (no movement applied).
-                // This ensures the server sees us at the exact teleported position on the next game tick.
-                await SendPositionAsync(entity, packetSender);
-                return;
-            }
+            // NOTE: there is deliberately NO "skip the tick after a teleport" guard here.
+            //
+            // One used to exist, on the reasoning that the entity had to sit still at the teleported position
+            // for the server to accept our confirmation. Vanilla does no such thing: handleMovePlayer applies
+            // the position, sends AcceptTeleportation + one PosRot, and the very next client tick runs normal
+            // physics from the corrected position.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:752-762
+            //
+            // The guard actively fed a setback cascade: it froze us for a tick and re-sent an unchanged
+            // position while the server kept applying gravity to its own copy, so the freeze itself created
+            // the next divergence, which arrived as another correction one round-trip later.
 
             // ===== CHUNK GUARD =====
             // Don't apply physics if the chunk at the player's feet isn't loaded yet.
@@ -336,6 +336,20 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             velocityYAfterFriction,
             movement.Z * friction);
 
+        // Opt-in speed diagnostic (MCPROTO_SPEED_DIAG=1): dumps the inputs to the walking-speed formula for a
+        // ground tick, so an over-speed can be attributed to a specific term instead of inferred from the
+        // resulting displacement.
+        if (SpeedDiagEnabled && entity.IsOnGround)
+        {
+            var horizontal = Math.Sqrt(entity.Velocity.X * entity.Velocity.X + entity.Velocity.Z * entity.Velocity.Z);
+            logger.LogInformation(
+                "[SpeedDiag] sprint={Sprint} moveSpeed={MoveSpeed:F4} blockFriction={BlockFriction:F3} " +
+                "friction={Friction:F4} accel={Accel:F4} inputLen={InputLen:F3} |vel|={Vel:F4} blockBelow={Block}",
+                entity.IsSprinting, entity.MovementSpeed, blockFriction, friction,
+                GetFrictionInfluencedSpeed(entity, blockFriction), input.Length(), horizontal,
+                blockStateBelow?.Name ?? "<null>");
+        }
+
         // Clamp to terminal velocity (happens after friction is applied)
         if (entity.Velocity.Y < TerminalVelocity)
         {
@@ -549,7 +563,11 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Calculate effective movement speed with attribute modifiers
             // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2162-2168
             // Sprint modifier: ADD_MULTIPLIED_TOTAL with value 0.3 → speed * (1 + 0.3) = speed * 1.3
-            double effectiveSpeed = PhysicsConstants.BaseMovementSpeed;
+            // The server-sent minecraft:movement_speed attribute, not a constant. Vanilla reads
+            // getAttributeValue(Attributes.MOVEMENT_SPEED) here, which reflects whatever the server has set for
+            // armour, stat systems, effects or mounts. Hardcoding 0.1 makes the client move at a speed the
+            // server has not agreed to, and the server answers by setting the player back.
+            double effectiveSpeed = entity.MovementSpeed;
             if (entity.IsSprinting)
             {
                 effectiveSpeed *= (1.0 + PhysicsConstants.SprintSpeedModifier);
@@ -1271,6 +1289,18 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             {
                 Flags = flags
             });
+        }
+
+        if (SetbackDiagEnabled && (move || rot))
+        {
+            var step = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+            logger.LogInformation(
+                "[MoveSend] type={Type} step={Step:F4} dx={Dx:F4} dy={Dy:F4} dz={Dz:F4} " +
+                "pos=({X:F3},{Y:F3},{Z:F3}) vel=({Vx:F4},{Vy:F4},{Vz:F4}) flags={Flags}",
+                move && rot ? "PosRot" : move ? "Pos" : "Rot",
+                step, deltaX, deltaY, deltaZ,
+                entity.Position.X, entity.Position.Y, entity.Position.Z,
+                entity.Velocity.X, entity.Velocity.Y, entity.Velocity.Z, flags);
         }
 
         // Update last sent values

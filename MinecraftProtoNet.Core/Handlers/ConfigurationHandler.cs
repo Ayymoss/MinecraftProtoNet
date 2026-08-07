@@ -20,6 +20,8 @@ namespace MinecraftProtoNet.Core.Handlers;
 [HandlesPacket(typeof(Packets.Configuration.Clientbound.FinishConfigurationPacket))]
 [HandlesPacket(typeof(RegistryDataPacket))]
 [HandlesPacket(typeof(Packets.Configuration.Clientbound.CustomPayloadPacket))]
+[HandlesPacket(typeof(Packets.Configuration.Clientbound.ResourcePackPushPacket))]
+[HandlesPacket(typeof(Packets.Configuration.Clientbound.ResourcePackPopPacket))]
 public class ConfigurationHandler(
     ILogger<ConfigurationHandler> logger,
     IRegistryDataLoader registryDataLoader) : IPacketHandler
@@ -45,6 +47,15 @@ public class ConfigurationHandler(
 
             case RegistryDataPacket registryDataPacket:
                 HandleRegistryData(client, registryDataPacket);
+                break;
+
+            case Packets.Configuration.Clientbound.ResourcePackPushPacket resourcePackPush:
+                await HandleResourcePackPushAsync(client, resourcePackPush);
+                break;
+
+            case Packets.Configuration.Clientbound.ResourcePackPopPacket resourcePackPop:
+                logger.LogDebug("Resource pack popped during configuration: PackId={PackId}",
+                    resourcePackPop.PackId?.ToString() ?? "<all>");
                 break;
 
             case Packets.Configuration.Clientbound.CustomPayloadPacket customPayloadPacket:
@@ -78,6 +89,44 @@ public class ConfigurationHandler(
         });
     }
 
+    /// <summary>
+    /// Answers a configuration-phase resource pack push by accepting it.
+    ///
+    /// Vanilla flow: accept → download → apply, reporting each stage.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientCommonPacketListenerImpl.java
+    ///
+    /// The three stages are reported back-to-back with no simulated download delay, unlike the Play-state
+    /// handler. Configuration packets are processed on the network/keep-alive path, and a server that pushes a
+    /// pack here is *blocking* the handshake on our reply: sleeping in this method would stall keep-alive
+    /// responses and risk a timeout kick, to buy realism the server cannot act on at this point anyway.
+    ///
+    /// Declining is not an option in general — a pack marked Required disconnects clients that refuse.
+    /// </summary>
+    private async Task HandleResourcePackPushAsync(
+        IMinecraftClient client,
+        Packets.Configuration.Clientbound.ResourcePackPushPacket push)
+    {
+        logger.LogInformation(
+            "Resource pack push during configuration: PackId={PackId}, Url={Url}, Required={Required}",
+            push.PackId, push.Url, push.Required);
+
+        foreach (var action in new[]
+                 {
+                     Packets.Play.Serverbound.ResourcePackPacket.ResourcePackAction.Accepted,
+                     Packets.Play.Serverbound.ResourcePackPacket.ResourcePackAction.Downloaded,
+                     Packets.Play.Serverbound.ResourcePackPacket.ResourcePackAction.SuccessfullyLoaded
+                 })
+        {
+            await client.SendPacketAsync(new Packets.Configuration.Serverbound.ResourcePackPacket
+            {
+                PackId = push.PackId,
+                Action = action
+            });
+        }
+
+        logger.LogInformation("Resource pack accepted and reported loaded: PackId={PackId}", push.PackId);
+    }
+
     private async Task HandleFinishConfigurationAsync(IMinecraftClient client)
     {
         logger.LogDebug("Finishing configuration phase...");
@@ -90,6 +139,7 @@ public class ConfigurationHandler(
         InitializeBiomesFromServerRegistry(client);
         await InitializeItemsAsync();
         await InitializeEntityTypesAsync();
+        await InitializeAttributesAsync();
         InitializeEnchantmentsFromServerRegistry(client);
         InitializeMobEffectsFromServerRegistry(client);
 
@@ -164,6 +214,12 @@ public class ConfigurationHandler(
     {
         var entityTypes = await registryDataLoader.LoadEntityTypesAsync();
         ClientState.InitializeEntityTypeRegistry(entityTypes);
+    }
+
+    private async Task InitializeAttributesAsync()
+    {
+        var attributes = await registryDataLoader.LoadAttributesAsync();
+        ClientState.InitializeAttributeRegistry(attributes);
     }
 
     private static void HandleRegistryData(IMinecraftClient client, RegistryDataPacket registryDataPacket)

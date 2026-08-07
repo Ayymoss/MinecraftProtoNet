@@ -49,22 +49,35 @@ public class LookBehavior : Behavior, ILookBehavior
         _smoothPitchBuffer = new Queue<float>();
     }
 
+    /// <summary>
+    /// Reference: LookBehavior.java:67-69 - store the target ONLY. The rotation is applied once in
+    /// OnPlayerUpdate(PRE) and restored in POST. There is deliberately no eager write here: writing the aim
+    /// onto the entity permanently makes placement aims (pitch ~88deg, where yaw is degenerate) stick as the
+    /// player's heading, so the next tick's target is computed relative to the flipped yaw and has to flip
+    /// back - the paired 180deg snaps. Same-tick place checks stay correct because
+    /// BaritonePlayerContext.PlayerRotations() reads GetEffectiveRotation() (the rotation actually sent),
+    /// which is what Java does.
+    /// </summary>
     public void UpdateTarget(Rotation rotation, bool blockInteract)
     {
         _target = new Target(rotation, Target.Resolve(Ctx, blockInteract));
-
-        // Eager peek+write is LOAD-BEARING: the C# tick pipeline fires PlayerUpdate PRE before the bot tick
-        // computes its target, so apply the rotation now too. Same-tick place-aim checks — e.g.
-        // MovementPillar's `Ctx.IsLookingAt(Src.Below())` — depend on the player rotation already reflecting
-        // the target. (AIM4 removed this and reordered the events; that regressed pillaring — the bot jumped
-        // but never placed the support block. Caught by ClaudeHarness 2026-06-23 and reverted.)
-        var player = Ctx.Player() as Entity;
-        if (player != null && _target.Mode != Target.TargetMode.None)
-        {
-            var actual = _processor.PeekRotation(_target.Rotation);
-            player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
-        }
     }
+
+    /// <summary>
+    /// Reference: LookBehavior.java:161-167.
+    /// </summary>
+    public Rotation? GetEffectiveRotation()
+    {
+        if (Core.Baritone.Settings().FreeLook.Value)
+        {
+            return _serverRotation;
+        }
+        // If freeLook isn't on, just defer to the player's actual rotations
+        return null;
+    }
+
+    // TEMP diagnostic: trace the per-tick rotation write sequence (gated by MCPROTO_LOOK_DEBUG=1; off by default).
+    internal static bool LookDebug = Environment.GetEnvironmentVariable("MCPROTO_LOOK_DEBUG") == "1";
 
     public IAimProcessor GetAimProcessor() => _processor;
 
@@ -72,6 +85,7 @@ public class LookBehavior : Behavior, ILookBehavior
     {
         if (evt.GetType() == TickEvent.TickEventType.In)
         {
+            Utils.AimDiag.BeginTick((Ctx.World() as Level)?.ClientTickCounter ?? 0);
             _processor.Tick();
         }
     }
@@ -80,6 +94,7 @@ public class LookBehavior : Behavior, ILookBehavior
     {
         if (_target == null)
         {
+            if (LookDebug) Console.WriteLine($"[LOOK] OnPlayerUpdate {evt.GetState()} _target=NULL (skip)");
             return;
         }
 
@@ -94,9 +109,21 @@ public class LookBehavior : Behavior, ILookBehavior
                 var player = Ctx.Player() as Entity;
                 if (player != null)
                 {
+                    float before = player.YawPitch.X;
+                    float beforePitch = player.YawPitch.Y;
                     _prevRotation = new Rotation(player.YawPitch.X, player.YawPitch.Y);
                     var actual = _processor.PeekRotation(_target.Rotation);
                     player.YawPitch = new Vector2<float>(actual.GetYaw(), actual.GetPitch());
+                    // This is the rotation the outgoing movement packet will carry this tick (PRE runs after
+                    // the bot tick and before physics/packet send), i.e. "the rotation known to the server".
+                    // Java captures it in onSendPacket off the real ServerboundMovePlayerPacket; our Core has
+                    // no send-packet event wired (GameEventHandler.OnSendPacket is never fired), so capture it
+                    // here instead - equivalent given the PRE -> packet -> POST ordering.
+                    _serverRotation = actual;
+                    Utils.AimDiag.Write("pre", _target.Mode.ToString(),
+                        _target.Rotation.GetYaw(), _target.Rotation.GetPitch(),
+                        before, beforePitch, actual.GetYaw(), actual.GetPitch());
+                    if (LookDebug) Console.WriteLine($"[LOOK] PRE mode={_target.Mode} tgtYaw={_target.Rotation.GetYaw():F1} peekYaw={actual.GetYaw():F1} player {before:F1}->{player.YawPitch.X:F1}");
                 }
                 break;
 
@@ -117,6 +144,11 @@ public class LookBehavior : Behavior, ILookBehavior
 
                     if (_target.Mode == Target.TargetMode.Server)
                     {
+                        Utils.AimDiag.Write("post-restore", _target.Mode.ToString(),
+                            _target.Rotation.GetYaw(), _target.Rotation.GetPitch(),
+                            playerPost.YawPitch.X, playerPost.YawPitch.Y,
+                            _prevRotation.GetYaw(), _prevRotation.GetPitch());
+                        if (LookDebug) Console.WriteLine($"[LOOK] POST Server-restore player {playerPost.YawPitch.X:F1}->{_prevRotation.GetYaw():F1}");
                         playerPost.YawPitch = new Vector2<float>(_prevRotation.GetYaw(), _prevRotation.GetPitch());
                     }
                     // Reference: LookBehavior.java:117-122 - non-fall-flying: smooth YAW only and KEEP the
@@ -156,6 +188,7 @@ public class LookBehavior : Behavior, ILookBehavior
         if (_target != null)
         {
             var actual = _processor.PeekRotation(_target.Rotation);
+            if (LookDebug) Console.WriteLine($"[LOOK] RotationMove tgtYaw={_target.Rotation.GetYaw():F1} peekYaw={actual.GetYaw():F1} (livePrev={Ctx.PlayerRotations()?.GetYaw():F1})");
             evt.SetYaw(actual.GetYaw());
             evt.SetPitch(actual.GetPitch());
         }
@@ -179,14 +212,36 @@ public class LookBehavior : Behavior, ILookBehavior
             Server
         }
 
+        /// <summary>
+        /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:336-356
+        /// NOTE: this previously used RotateToBreakBlocks/RotateToPlaceBlocks, which are not what Java consults
+        /// here, and returned SERVER for block interaction - the opposite of Java. SERVER mode restores the
+        /// client rotation at POST, so placement aims were reverted every tick and the entity rotation froze at
+        /// a stale value (physics is yaw-relative, so the bot then walked the wrong way and never placed).
+        /// Java deliberately uses CLIENT for block interaction: the aim must actually stick, otherwise
+        /// objectMouseOver() reflects wherever the player is visually looking and Baritone halts.
+        /// </summary>
         public static TargetMode Resolve(IPlayerContext ctx, bool blockInteract)
         {
             var settings = Core.Baritone.Settings();
-            if (blockInteract)
+            bool antiCheat = settings.AntiCheatCompatibility.Value;
+            bool blockFreeLook = settings.BlockFreeLook.Value;
+
+            // Java checks ctx.player().isFallFlying() first; elytra state is not exposed on our player entity
+            // yet (see AIM7-ELYTRA), so the fall-flying branch is omitted and we fall through to freeLook.
+            if (settings.FreeLook.Value)
             {
-                return settings.RotateToBreakBlocks.Value ? TargetMode.Server : TargetMode.Client;
+                // Regardless of antiCheatCompatibility, a blockInteract needs the player rotation set somehow,
+                // otherwise Baritone halts since objectMouseOver() is whatever the player is mousing over.
+                if (blockInteract)
+                {
+                    return blockFreeLook ? TargetMode.Server : TargetMode.Client;
+                }
+                return antiCheat ? TargetMode.Server : TargetMode.None;
             }
-            return settings.RotateToPlaceBlocks.Value ? TargetMode.Server : TargetMode.Client;
+
+            // all freeLook settings are disabled so set the angles
+            return TargetMode.Client;
         }
     }
 }

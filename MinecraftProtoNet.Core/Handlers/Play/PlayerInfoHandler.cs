@@ -49,6 +49,20 @@ public class PlayerInfoHandler() : IPacketHandler
                                 player.Latency = updateLatency.Latency;
                                 break;
                             }
+                            case PlayerInfoUpdatePacket.UpdateDisplayName updateDisplayName:
+                            {
+                                var player = client.State.Level.GetPlayerByUuid(info.Uuid);
+                                if (player is null) break;
+                                player.DisplayName = updateDisplayName.DisplayName;
+                                break;
+                            }
+                            case PlayerInfoUpdatePacket.UpdateListed updateListed:
+                            {
+                                var player = client.State.Level.GetPlayerByUuid(info.Uuid);
+                                if (player is null) break;
+                                player.IsListed = updateListed.Listed;
+                                break;
+                            }
                         }
                     }
                 }

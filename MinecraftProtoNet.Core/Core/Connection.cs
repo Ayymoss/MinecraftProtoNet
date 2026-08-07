@@ -6,10 +6,6 @@ using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Base;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.Utilities;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Engines;
-using Org.BouncyCastle.Crypto.Modes;
-using Org.BouncyCastle.Crypto.Parameters;
 
 namespace MinecraftProtoNet.Core.Core;
 
@@ -79,23 +75,14 @@ public sealed class Connection : IPacketSender, IDisposable
 
         try
         {
-            var keyParam = new KeyParameter(sharedSecret);
-            var ivParam = new ParametersWithIV(keyParam, sharedSecret, 0, 16);
-
-            var decryptEngine = new AesEngine();
-            var decryptCipher = new CfbBlockCipher(decryptEngine, 8);
-            decryptCipher.Init(false, ivParam);
-            _decryptTransform = new BouncyCastleCryptoTransform(decryptCipher);
-
-            var encryptEngine = new AesEngine();
-            var encryptCipher = new CfbBlockCipher(encryptEngine, 8);
-            encryptCipher.Init(true, ivParam);
-            _encryptTransform = new BouncyCastleCryptoTransform(encryptCipher);
+            // AES/CFB8 with IV = the shared secret, one independent feedback register per direction.
+            _decryptTransform = new AesCfb8Transform(sharedSecret, encrypting: false);
+            _encryptTransform = new AesCfb8Transform(sharedSecret, encrypting: true);
 
             _decryptStream = new CryptoStream(_rawStream, _decryptTransform, CryptoStreamMode.Read, leaveOpen: true);
             _encryptStream = new CryptoStream(_rawStream, _encryptTransform, CryptoStreamMode.Write, leaveOpen: true);
             _useEncryption = true;
-            _logger.LogInformation("AES/CFB8 encryption enabled (using BouncyCastle)");
+            _logger.LogInformation("AES/CFB8 encryption enabled (BCL)");
         }
         catch (Exception ex)
         {
@@ -450,57 +437,4 @@ public sealed class Connection : IPacketSender, IDisposable
 
     #endregion
 
-    #region BouncyCastle
-
-    private class BouncyCastleCryptoTransform : ICryptoTransform
-    {
-        private readonly IBufferedCipher _cipher;
-
-        public BouncyCastleCryptoTransform(IBufferedCipher cipher)
-        {
-            _cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
-        }
-
-        public BouncyCastleCryptoTransform(IBlockCipher blockCipher)
-        {
-            _cipher = new BufferedBlockCipher(blockCipher ?? throw new ArgumentNullException(nameof(blockCipher)));
-        }
-
-        public int InputBlockSize => _cipher.GetBlockSize();
-        public int OutputBlockSize => _cipher.GetBlockSize();
-        public bool CanTransformMultipleBlocks => true;
-        public bool CanReuseTransform => false;
-
-        public int TransformBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset)
-        {
-            if (inputCount <= 0) return 0;
-
-            var processed = _cipher.ProcessBytes(inputBuffer, inputOffset, inputCount);
-            if (processed is not { Length: > 0 }) return 0;
-
-            if (outputBuffer.Length < outputOffset + processed.Length) throw new ArgumentException("outputBuffer too small");
-
-            Buffer.BlockCopy(processed, 0, outputBuffer, outputOffset, processed.Length);
-            return processed.Length;
-        }
-
-        public byte[] TransformFinalBlock(byte[] inputBuffer, int inputOffset, int inputCount)
-        {
-            var finalBytes = _cipher.DoFinal(inputBuffer, inputOffset, inputCount);
-            return finalBytes ?? [];
-        }
-
-        public void Dispose()
-        {
-            _cipher.Reset();
-            GC.SuppressFinalize(this);
-        }
-
-        ~BouncyCastleCryptoTransform()
-        {
-            Dispose();
-        }
-    }
-
-    #endregion
 }

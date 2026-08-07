@@ -38,12 +38,15 @@ public class BlockShapeRegistry : IBlockShapeRegistry
 
     private VoxelShape GetShapeCore(BlockState blockState)
     {
-        // DEVIATION FROM VANILLA: In vanilla, ladders have hasCollision=false (no collision shape).
-        // The player walks through the ladder and hits the solid wall behind it, which triggers
-        // HorizontalCollision and enables the 0.2 Y climb boost.
-        // We intentionally add thin collision shapes here so the bot gets HorizontalCollision
-        // from colliding with the ladder itself, without needing to reach the wall behind it.
-        // This is complemented by forced HorizontalCollision logic in PhysicsService.Move().
+        // NOT a deviation (an earlier comment here claimed it was): vanilla ladders DO have collision. In
+        // Blocks.java:1246 LADDER is registered WITHOUT noCollision() - compare RAIL on the next line, which
+        // has it - so its collision shape is getShape(), i.e. LadderBlock.SHAPES = Block.boxZ(16, 13, 16),
+        // the same thin slab against the support side that we build below.
+        // Consequence worth knowing: while inside a ladder block the player is stopped by this slab and sits
+        // tangent to the ladder's top face, so climbing alone never lands you on top of a ladder - you clear
+        // the top rung and then walk forward onto it. Baritone never needs this (it exits a ladder by a flat
+        // traverse onto a block level with the top rung), which is why paths that end on a ladder top drop.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/block/LadderBlock.java:111
         if (blockState.Name.Equals("minecraft:ladder", StringComparison.OrdinalIgnoreCase))
         {
             var facing = blockState.Properties.GetValueOrDefault("facing", "north");
@@ -55,6 +58,22 @@ public class BlockShapeRegistry : IBlockShapeRegistry
                 "east" => Shapes.Shapes.Box(0, 0, 0, 0.1875, 1, 1),
                 _ => Shapes.Shapes.Empty()
             };
+        }
+
+        // An OPEN fence gate or door has no collision at all, even though blocksMotion stays true for the
+        // block. Without this they fell through to the full-cube case below, so the bot could open a gate and
+        // still be walled out by it - it would open the gate, fail to walk through, and the next right-click
+        // would close it again, toggling forever (observed on the gate1 course: state 8675<->8677, 10 times).
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/block/FenceGateBlock.java:84-86
+        //   getCollisionShape -> state.getValue(OPEN) ? Shapes.empty() : SHAPE_COLLISION.get(axis)
+        // Doors behave the same way: the leaf swings aside, clearing the doorway (DoorBlock.java:67-70).
+        // Closed is modelled as a full cube rather than vanilla's thin leaf/post - conservative, and it only
+        // means the bot will not try to stand inside a closed gate or doorway, which it has no reason to do.
+        if (blockState.IsFenceGate || blockState.IsDoor)
+        {
+            return blockState.Properties.GetValueOrDefault("open", "false") == "true"
+                ? Shapes.Shapes.Empty()
+                : Shapes.Shapes.Block();
         }
 
         if (!blockState.BlocksMotion || blockState.IsAir || blockState.IsLiquid)

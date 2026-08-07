@@ -320,6 +320,20 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
                 !MovementHelper.IsGatePassable(Ctx, PositionsToBreak[0], Src.Above()) ? PositionsToBreak[0]
                 : !MovementHelper.IsGatePassable(Ctx, PositionsToBreak[1], Src) ? PositionsToBreak[1]
                 : null;
+            // DEVIATION (small, deliberate): never re-click a gate that is ALREADY open.
+            // Java's isGatePassable returns false whenever the player is standing IN the gate block, so once
+            // the bot steps into an open gateway the gate reads as "blocked" again and it clicks a second
+            // time. Measured on gate1: it opened gate 1 correctly, stopped clicking, then resumed clicking on
+            // entering the gate block - and since an open gate has no collision, that click's ray passed
+            // straight THROUGH gate 1 and opened gate 2 four blocks further on (4.49 blocks, legal reach but
+            // visibly out of sequence), as well as looking like click-spam. The playerPos-equals-gatePos rule
+            // exists to stop the bot walking into a CLOSED gate it occupies, not to re-toggle an open one.
+            if (blocked != null
+                && BlockStateInterface.Get(Ctx, blocked)?.Properties.GetValueOrDefault("open", "false") == "true")
+            {
+                blocked = null;
+            }
+
             if (blocked != null)
             {
                 var rotation = RotationUtils.Reachable(Ctx, blocked);
@@ -445,6 +459,28 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             // Reference: MovementTraverse.java:298 - wouldSneak = !assumeSafeWalk
             var placeResult = MovementHelper.AttemptToPlaceABlock(state, Baritone, Dest.Below(), false, !Core.Baritone.Settings().AssumeSafeWalk.Value);
             
+            if (MovementDiag.Enabled && PositionToPlace != null)
+            {
+                // Does the block we are trying to place actually exist yet? Compare Baritone's view
+                // (BlockStateInterface, what CanWalkOn/isTheBridgeBlockThere consult) against Core's raw
+                // world state. If they disagree, the client applied the server's Block Update but Baritone
+                // is reading a stale cache.
+                var bsiState = BlockStateInterface.Get(Ctx, PositionToPlace);
+                var coreState = (Ctx.World() as Level)?.GetBlockAt(PositionToPlace.X, PositionToPlace.Y, PositionToPlace.Z);
+                MovementDiag.Log($"  BRIDGE at={PositionToPlace} bsi={(bsiState == null ? "null" : bsiState.BlockType + "/air=" + bsiState.IsAir)} " +
+                    $"core={(coreState == null ? "null" : coreState.BlockType + "/air=" + coreState.IsAir)} " +
+                    $"canWalkOn={MovementHelper.CanWalkOn(Ctx, PositionToPlace)}");
+            }
+
+            if (MovementDiag.Enabled)
+            {
+                var tr = state.GetTarget()?.GetRotation();
+                MovementDiag.Log($"TRAV src={Src} dest={Dest} feet={Ctx.PlayerFeet()} " +
+                    $"pos=({playerBridge?.Position.X:F2},{playerBridge?.Position.Z:F2}) dist1={dist1:F2} " +
+                    $"place={placeResult} target={(tr == null ? "null" : $"y{tr.GetYaw():F1}/p{tr.GetPitch():F1}")} " +
+                    $"cur=y{Ctx.PlayerRotations()?.GetYaw():F1}/p{Ctx.PlayerRotations()?.GetPitch():F1}");
+            }
+
             // Reference: MovementTraverse.java:300-302 - Sneak when close or ready to place
             if ((placeResult == MovementHelper.PlaceResult.ReadyToPlace || dist1 < 0.6) && !Core.Baritone.Settings().AssumeSafeWalk.Value)
             {

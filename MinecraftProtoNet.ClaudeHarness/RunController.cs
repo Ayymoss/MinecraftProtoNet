@@ -8,6 +8,7 @@ using MinecraftProtoNet.Core.Core;
 using MinecraftProtoNet.Core.Core.Abstractions;
 using MinecraftProtoNet.Core.Packets.Base;
 using MinecraftProtoNet.Core.Packets.Play.Serverbound;
+using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.ClaudeHarness;
@@ -16,11 +17,16 @@ namespace MinecraftProtoNet.ClaudeHarness;
 /// Drives a scenario end-to-end with no manual input: authenticate → connect → wait spawn →
 /// teleport to start → issue the goal → monitor for a terminal outcome → write artifacts → disconnect.
 /// </summary>
-public sealed class RunController(IMinecraftClient client, IBaritoneProvider baritoneProvider, IGameLoop gameLoop)
+public sealed class RunController(
+    IMinecraftClient client,
+    IBaritoneProvider baritoneProvider,
+    IGameLoop gameLoop,
+    IContainerManager? containers = null,
+    IItemRegistryService? itemRegistry = null)
 {
     private static void Log(string msg) => Console.WriteLine($"[harness] {msg}");
 
-    public async Task<RunOutcome> RunAsync(Scenario scenario, string runDir, (int X, int Y, int Z)? diagPos = null)
+    public async Task<RunOutcome> RunAsync(Scenario scenario, string runDir, (int X, int Y, int Z)? diagPos = null, bool clearCourse = false, bool buildOnly = false, int settleSec = 0)
     {
         Log($"scenario={scenario.Name} server={scenario.Server}:{scenario.Port} start={scenario.Start} end={scenario.End}");
 
@@ -41,6 +47,25 @@ public sealed class RunController(IMinecraftClient client, IBaritoneProvider bar
 
         var baritone = baritoneProvider.CreateBaritone(client);
 
+        // Build-only mode: construct/restore the course and leave, so it can be inspected before the bot runs.
+        if (buildOnly)
+        {
+            if (scenario.BuildCommands is { Count: > 0 } buildCmds)
+            {
+                foreach (var cmd in buildCmds)
+                {
+                    await SendCommandAsync(cmd);
+                }
+                Log($"course '{scenario.Name}' built ({buildCmds.Count} commands) — start {scenario.Start}, goal {scenario.End}");
+            }
+            else
+            {
+                Log($"scenario '{scenario.Name}' has no BuildCommands; nothing to build");
+            }
+            await TeardownAsync();
+            return RunOutcome.Success;
+        }
+
         // Diagnostic mode: tp to a position and log every movement's cost from there (find why pathing stalls).
         if (diagPos is { } dp)
         {
@@ -58,9 +83,52 @@ public sealed class RunController(IMinecraftClient client, IBaritoneProvider bar
         long captureStartTick = 0;
         try
         {
-            // ----- Arrange: teleport to the parkour start and let physics settle -----
+            // ----- Arrange: reset the world FIRST, then teleport in -----
+            // Order matters: a rebuild starts by air-filling the whole course volume, which includes the
+            // ground under the start position. Teleporting first meant the bot could fall through the floor
+            // in the window before the platform was re-placed (seen as an instant Fall, 12 ticks, y73 -> y64).
+            // Only normalise the INVENTORY (bot must have throwaway blocks to place — "dirt only", matching the
+            // reference Baritone run). We deliberately DO NOT clear the course: leftover dirt from previous runs
+            // must be handled by the bot itself (re-path over / dig / build around), exactly as Baritone would.
+            // Clearing the course (/fill) masks that robustness and makes every run an identical pristine course.
+            // Methodology: only the FIRST run of a batch clears the course (establish a clean baseline that
+            // must pass); subsequent runs leave the deltas so we test robustness to leftover blocks. --clear-course
+            // removes only the bot's placed dirt (bedrock course + lava untouched; ~24k-block box < 32768 /fill limit).
+            if (clearCourse)
+            {
+                if (scenario.BuildCommands is { Count: > 0 } build)
+                {
+                    // Restore the course to its default state by rebuilding it. Required for courses with
+                    // breakable blocks: a dirt-only fill would leave the bot's mined-out holes in place.
+                    foreach (var cmd in build)
+                    {
+                        await SendCommandAsync(cmd);
+                    }
+                    Log($"course REBUILT to default state ({build.Count} commands)");
+                }
+                else
+                {
+                    foreach (var (x1, y1, z1, x2, y2, z2) in scenario.ClearBoxes)
+                    {
+                        await SendCommandAsync($"fill {x1} {y1} {z1} {x2} {y2} {z2} minecraft:air replace minecraft:dirt");
+                    }
+                    Log($"cleared placed dirt in {scenario.ClearBoxes.Count} box(es) (clean baseline run)");
+                }
+            }
+
+            // Now that the world is in its default state, put the bot on the start block.
             await SendCommandAsync($"tp @s {scenario.Start.X} {scenario.Start.Y} {scenario.Start.Z}");
             Log($"sent /tp to start {scenario.Start}");
+
+            await SendCommandAsync("clear @s");
+            var inventory = scenario.Inventory is { Count: > 0 }
+                ? scenario.Inventory
+                : ["give @s minecraft:dirt 64"];
+            foreach (var cmd in inventory)
+            {
+                await SendCommandAsync(cmd);
+            }
+            Log($"inventory normalised ({inventory.Count} item stack(s)); course {(clearCourse ? "RESET" : "NOT reset — deltas left in place")}");
 
             if (!await WaitAtStartAsync(scenario))
             {
@@ -70,11 +138,67 @@ public sealed class RunController(IMinecraftClient client, IBaritoneProvider bar
             }
             else
             {
+                // Dump inventory — bridging/pillaring parkour needs throwaway blocks. If empty, the
+                // pathfinder may plan place-routes the bot can't execute (jumps into gaps → falls).
+                var inv = client.State.LocalPlayer?.Entity?.Inventory;
+                if (inv != null)
+                {
+                    var nonEmpty = inv.Items.Where(kv => kv.Value.ItemId is > 0 && kv.Value.ItemCount > 0)
+                        .Select(kv => $"slot{kv.Key}=item{kv.Value.ItemId}x{kv.Value.ItemCount}").ToList();
+                    Log($"inventory: {(nonEmpty.Count == 0 ? "EMPTY" : string.Join(", ", nonEmpty))}");
+                    Log($"HasThrowawayBlocks={inv.HasThrowawayBlocks()}");
+                }
+
+                // Wait for the world around the start to actually EXIST before pathing. The pathfinder reads
+                // unloaded chunks as empty, so issuing a goal too early produces a route computed against a
+                // world that is not there yet - seen as parkour1 planning 56 movements heading away from the
+                // goal and going Stuck. This is a deterministic readiness check, not a sleep; a fixed delay
+                // only ever approximated it.
+                await WaitForChunksAsync(scenario.Start, radius: 3, timeout: TimeSpan.FromSeconds(20));
+
+                // Final gate before pathing: the bot must actually BE at the start with its inventory stocked.
+                // Setup commands are chat commands and the server can still be working through them; one run
+                // began with the bot 30 blocks away and an empty inventory, then "failed" after a single tick.
+                // That is a harness false negative, not bot behaviour, so re-issue and re-check rather than
+                // measuring a run that never started properly.
+                var startConfirmed = await EnsureAtStartAsync(scenario, inventory);
+
+                // Optional extra idle on top, for deliberately probing join-time behaviour (--settle-sec).
+                if (startConfirmed && settleSec > 0)
+                {
+                    Log($"settling for a further {settleSec}s before issuing the goal");
+                    await Task.Delay(TimeSpan.FromSeconds(settleSec));
+                }
+
                 // ----- Act: capture telemetry and issue the goal -----
                 captureStartTick = client.State.Level.ClientTickCounter;
                 recorder.BeginCapture(captureStartTick);
-                baritone.GetCustomGoalProcess().SetGoalAndPath(new GoalBlock(scenario.End.X, scenario.End.Y, scenario.End.Z));
-                Log($"goal set; monitoring (timeout {scenario.RunTimeoutSec}s)");
+
+                if (!startConfirmed)
+                {
+                    Log("FAILED to confirm start state (position/inventory) before issuing the goal");
+                    recorder.ForceTerminal(RunOutcome.Error, "start state not confirmed before goal");
+                }
+                else if (scenario.Name == "villager1")
+                {
+                    // Task-shaped scenario: the objective is an inventory outcome, not reaching a block, so it
+                    // drives Baritone itself rather than being handed a single goal.
+                    if (containers == null || itemRegistry == null)
+                    {
+                        recorder.ForceTerminal(RunOutcome.Error, "villager task needs IContainerManager + IItemRegistryService");
+                    }
+                    else
+                    {
+                        var task = new VillagerTask(client, baritone, containers, itemRegistry, SendCommandAsync);
+                        var (ok, detail) = await task.RunAsync("minecraft:emerald", TimeSpan.FromSeconds(scenario.RunTimeoutSec));
+                        recorder.ForceTerminal(ok ? RunOutcome.Success : RunOutcome.Stuck, detail);
+                    }
+                }
+                else
+                {
+                    baritone.GetCustomGoalProcess().SetGoalAndPath(new GoalBlock(scenario.End.X, scenario.End.Y, scenario.End.Z));
+                    Log($"goal set; monitoring (timeout {scenario.RunTimeoutSec}s)");
+                }
 
                 // Poll for a terminal: recorder verdict, mid-run disconnect, or wall-clock timeout. Detecting
                 // disconnect here ends the run immediately instead of waiting out the full timeout.
@@ -150,6 +274,85 @@ public sealed class RunController(IMinecraftClient client, IBaritoneProvider bar
         return false;
     }
 
+    /// <summary>
+    /// Confirms the bot is genuinely at the start with the expected inventory, re-issuing the setup commands if
+    /// not. Setup is done with chat commands, and the server can still be executing them while the harness moves
+    /// on — one parkour1 run started with the bot 30 blocks away and an empty inventory and "failed" after a
+    /// single tick, which measured nothing except the race.
+    /// </summary>
+    private async Task<bool> EnsureAtStartAsync(Scenario scenario, IReadOnlyList<string> inventory)
+    {
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var entity = client.State.LocalPlayer?.Entity;
+            var atStart = false;
+            if (entity != null)
+            {
+                var pos = entity.Position;
+                atStart = Math.Abs(pos.X - (scenario.Start.X + 0.5)) < 1.5
+                          && Math.Abs(pos.Z - (scenario.Start.Z + 0.5)) < 1.5
+                          && Math.Abs(pos.Y - scenario.Start.Y) < 1.5;
+            }
+
+            // Only scenarios that were given items need a stocked inventory; "clear @s" alone is legitimate.
+            var wantsItems = inventory.Any(c => c.Contains("give ", StringComparison.OrdinalIgnoreCase));
+            var hasItems = entity?.Inventory?.Items.Any(kv => kv.Value.ItemId is > 0 && kv.Value.ItemCount > 0) == true;
+            var stocked = !wantsItems || hasItems;
+
+            if (atStart && stocked)
+            {
+                if (attempt > 1) Log($"start state confirmed on attempt {attempt}");
+                return true;
+            }
+
+            Log($"start state not ready (attempt {attempt}/{maxAttempts}): atStart={atStart} stocked={stocked}; re-issuing setup");
+            await SendCommandAsync($"tp @s {scenario.Start.X} {scenario.Start.Y} {scenario.Start.Z}");
+            foreach (var cmd in inventory)
+            {
+                await SendCommandAsync(cmd);
+            }
+            await Task.Delay(1000);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Blocks until every chunk within <paramref name="radius"/> of <paramref name="around"/> is loaded, so the
+    /// pathfinder plans against a complete world. Logs and continues on timeout rather than failing the run —
+    /// a partially loaded world is worth reporting, but it is the pathing result we are here to measure.
+    /// </summary>
+    private async Task WaitForChunksAsync((int X, int Y, int Z) around, int radius, TimeSpan timeout)
+    {
+        var centreX = around.X >> 4;
+        var centreZ = around.Z >> 4;
+        var expected = (radius * 2 + 1) * (radius * 2 + 1);
+        var deadline = DateTime.UtcNow + timeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var loaded = 0;
+            for (var cx = centreX - radius; cx <= centreX + radius; cx++)
+            {
+                for (var cz = centreZ - radius; cz <= centreZ + radius; cz++)
+                {
+                    if (client.State.Level.HasChunk(cx, cz)) loaded++;
+                }
+            }
+
+            if (loaded == expected)
+            {
+                Log($"world ready: {loaded}/{expected} chunks loaded around {around}");
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        Log($"WARNING: timed out waiting for chunks around {around}; pathing may plan against an incomplete world");
+    }
+
     private async Task<bool> WaitAtStartAsync(Scenario scenario)
     {
         var deadline = DateTime.UtcNow.AddSeconds(20);
@@ -204,6 +407,11 @@ public sealed class RunController(IMinecraftClient client, IBaritoneProvider bar
             .ToDictionary(f => (Moves.MoveType)f.GetValue(null)!, f => f.Name);
 
         var ctx = new CalculationContext(baritone);
+        // The cost model's own limits — a dry fall taller than MaxFallHeightNoWater+1 must be CostInf, so if
+        // a long fall is being costed finitely these are the first thing to check.
+        Log($"[diag] context: MaxFallHeightNoWater={ctx.MaxFallHeightNoWater} MaxFallHeightBucket={ctx.MaxFallHeightBucket} " +
+            $"MinFallHeight={ctx.MinFallHeight} HasWaterBucket={ctx.HasWaterBucket} AllowFallIntoLava={ctx.AllowFallIntoLava} " +
+            $"AllowParkour={ctx.AllowParkour} HasThrowaway={ctx.HasThrowaway}");
         Log($"[diag] movement costs from ({pos.X},{pos.Y},{pos.Z}):");
         foreach (var mt in Moves.Values)
         {

@@ -39,5 +39,14 @@ public interface ILookBehavior : IBehavior
     /// Gets the aim processor instance.
     /// </summary>
     IAimProcessor GetAimProcessor();
+
+    /// <summary>
+    /// The rotation the server believes the player has, when freeLook is enabled. Consumed by
+    /// <c>BaritonePlayerContext.PlayerRotations()</c> so that bot logic (place/break raycasts, aim math)
+    /// reasons about the rotation that was actually SENT, while the client-side entity rotation is
+    /// restored after each tick. Returns null to defer to the player entity's own rotation.
+    /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/behavior/LookBehavior.java:161-167
+    /// </summary>
+    Rotation? GetEffectiveRotation();
 }
 

@@ -93,6 +93,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPacketHandler, Handlers.Play.PlayerInfoHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.TimeAndWorldHandler>();
         services.AddSingleton<IPacketHandler, Handlers.Play.SignHandler>();
+        services.AddSingleton<IPacketHandler, Handlers.Play.ScoreboardHandler>();
 
         // Logging - use the existing LoggingConfiguration
         services.AddSingleton<ILoggerFactory>(_ => LoggingConfiguration.CreateLoggerFactory());

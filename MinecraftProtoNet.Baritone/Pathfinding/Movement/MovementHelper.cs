@@ -88,9 +88,25 @@ public static class MovementHelper
         float yawRad = playerRot.GetYaw() * DegToRadF;
         float idealSin = (float)Math.Sin(idealYaw * DegToRadF);
         float idealCos = (float)Math.Cos(idealYaw * DegToRadF);
-        var best = MovementOption
+        var options = MovementOption
             .GetOptions((float)Math.Sin(yawRad), (float)Math.Cos(yawRad), Core.Baritone.Settings().AllowSprint.Value)
-            .MinBy(option => option.DistanceToSq(idealSin, idealCos));
+            .OrderBy(option => option.DistanceToSq(idealSin, idealCos))
+            .ToList();
+        var best = options.FirstOrDefault();
+        if (MovementDiag.Enabled && best != null)
+        {
+            // The scoring is L1 on UNNORMALIZED motion vectors, so the MOVE_FORWARD options carry the x1.3
+            // sprint multiplier and score worse purely on magnitude. When the margin to the runner-up is
+            // tiny, the chosen input is effectively a coin flip between "walk toward dest" and "strafe
+            // sideways" - which is what the wandering looks like. Log the margin so it is measurable.
+            var second = options.Count > 1 ? options[1] : null;
+            float bestScore = best.DistanceToSq(idealSin, idealCos);
+            float secondScore = second?.DistanceToSq(idealSin, idealCos) ?? float.NaN;
+            MovementDiag.Log($"  OPT idealYaw={idealYaw:F1} curYaw={playerRot.GetYaw():F1} " +
+                $"best={best.Input1}{(best.Input2 == null ? "" : "+" + best.Input2)}({bestScore:F3}) " +
+                $"second={(second == null ? "none" : $"{second.Input1}{(second.Input2 == null ? "" : "+" + second.Input2)}({secondScore:F3})")} " +
+                $"margin={secondScore - bestScore:F3}");
+        }
         best?.SetInputs(state);
     }
 
@@ -121,7 +137,27 @@ public static class MovementHelper
         float newYaw = distance > 0f
             ? (distance > 22.5f ? distance - 45f : distance)
             : (distance < -22.5f ? distance + 45f : distance);
-        state.SetTarget(new MovementState.MovementTarget(new Rotation(playerRot.GetYaw() - newYaw, playerRot.GetPitch()), true));
+        float targetYaw = playerRot.GetYaw() - newYaw;
+
+        // DEVIATION from baritone-1.21.11 MovementHelper.java:691-706 (gated by preferFacingTravelDirection).
+        // Java snaps the head onto the NEAREST multiple of 45 degrees relative to the travel direction. When the
+        // head is more than 22.5 degrees off, "nearest" is 45, so the head is rotated FURTHER from where the bot
+        // is walking. Measured on the -923,84,-26 -> -923,84,-25 sneak-approach: head 26.4 degrees off ideal, Java
+        // rule turns it to 45 degrees off; the input scorer had just chosen MOVE_FORWARD outright (margin 0.204),
+        // but after the turn MOVE_RIGHT wins and the bot crabs ~1.8 blocks sideways over 40 ticks before
+        // recovering. Keeping the head no further from the travel direction than it already is makes the approach
+        // deliberate without touching the 45-degree grid behaviour when the head is already well off-axis.
+        if (Core.Baritone.Settings().PreferFacingTravelDirection.Value)
+        {
+            float curOff = Math.Abs(Rotation.YawDistanceFromOffset(playerRot.GetYaw(), idealYaw));
+            float newOff = Math.Abs(Rotation.YawDistanceFromOffset(targetYaw, idealYaw));
+            if (newOff > curOff)
+            {
+                targetYaw = idealYaw;
+            }
+        }
+
+        state.SetTarget(new MovementState.MovementTarget(new Rotation(targetYaw, playerRot.GetPitch()), true));
         MoveTowardsWithoutRotation(ctx, state, idealYaw);
     }
 
@@ -1047,6 +1083,14 @@ public static class MovementHelper
                 
                 var world = ctx.World() as Level;
                 var result = RayTraceUtils.RayTraceTowards(player, world, actual, ctx.PlayerController().GetBlockReachDistance(), wouldSneak);
+                if (MovementDiag.Enabled)
+                {
+                    var hp = result?.BlockPosition;
+                    var ap = result?.GetAdjacentBlockPosition();
+                    MovementDiag.Log($"  PLACE-TRY at={pos} against={against1} face=({faceX:F2},{faceY:F2},{faceZ:F2}) " +
+                        $"aim=y{place.GetYaw():F1}/p{place.GetPitch():F1} actual=y{actual.GetYaw():F1}/p{actual.GetPitch():F1} " +
+                        $"hit={(hp == null ? "none" : $"({hp.X},{hp.Y},{hp.Z})")} adj={(ap == null ? "none" : $"({ap.X},{ap.Y},{ap.Z})")}");
+                }
                 if (result != null && result.Block != null)
                 {
                     var hitPos = result.BlockPosition;
@@ -1083,14 +1127,11 @@ public static class MovementHelper
                     state.SetInput(Input.Sneak, true);
                 }
                 
-                // CRITICAL: Even if we are already looking, we must SET THE TARGET to ensure it persists 
-                // and isn't clobbered by the previous movement's rotation or other logic.
-                var playerRot = ctx.PlayerRotations();
-                if (playerRot != null)
-                {
-                    state.SetTarget(new MovementState.MovementTarget(playerRot, true));
-                }
-                
+                // Reference: MovementHelper.java:828-833 - Java sets NO target here; it keeps whatever
+                // target the reachable/against-face search already set this tick. Setting the target to the
+                // player's CURRENT rotation made desiredPitch == prevPitch, which trips AimProcessor's
+                // NudgeToLevel (LookBehavior.java:219) and starts a 1.05deg/tick pitch sweep away from the
+                // placement aim at the exact moment we are ready to place.
                 var inventoryBehavior = ((Core.Baritone)baritone).GetInventoryBehavior();
                 inventoryBehavior.SelectThrowawayForLocation(true, pos.X, pos.Y, pos.Z);
                 return PlaceResult.ReadyToPlace;

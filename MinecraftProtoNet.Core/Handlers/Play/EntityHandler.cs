@@ -10,6 +10,7 @@ using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State;
+using MinecraftProtoNet.Core.State.Base;
 
 namespace MinecraftProtoNet.Core.Handlers.Play;
 
@@ -50,6 +51,46 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
     ];
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(EntityHandler));
+
+    /// <summary>
+    /// Combines an attribute's base value with its modifiers, in vanilla's order: all ADD_VALUE first, then
+    /// ADD_MULTIPLIED_BASE against the post-add base, then ADD_MULTIPLIED_TOTAL against the running total.
+    /// Order matters — the three operations are not commutative.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/ai/attributes/AttributeInstance.java:150-168
+    /// Operation ordinals: 0 ADD_VALUE, 1 ADD_MULTIPLIED_BASE, 2 ADD_MULTIPLIED_TOTAL (AttributeModifier.java:29-31)
+    /// </summary>
+    private static double CombineAttribute(UpdateAttributesPacket.Property property)
+    {
+        // The sprinting modifier is deliberately excluded. The server applies it to its own copy and broadcasts
+        // the result, but the client owns this one: setSprinting() removes it and re-adds it locally every time
+        // the state changes, and the speed calculation then applies it. Keeping the server's copy as well
+        // multiplies it in twice (0.1 -> 0.13 -> 0.169), producing ~1.3x the legal sprint speed — which a
+        // server with movement checks answers by setting the player back.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2238-2246
+        // (id "minecraft:sprinting", +0.3 ADD_MULTIPLIED_TOTAL, LivingEntity.java:152 and :3974)
+        var modifiers = property.Modifiers
+            .Where(m => m.Identifier is not ("minecraft:sprinting" or "sprinting"))
+            .ToArray();
+
+        var baseValue = property.Value;
+        foreach (var modifier in modifiers)
+        {
+            if (modifier.Operation == 0) baseValue += modifier.Amount;
+        }
+
+        var result = baseValue;
+        foreach (var modifier in modifiers)
+        {
+            if (modifier.Operation == 1) result += baseValue * modifier.Amount;
+        }
+
+        foreach (var modifier in modifiers)
+        {
+            if (modifier.Operation == 2) result *= 1.0 + modifier.Amount;
+        }
+
+        return result;
+    }
 
     private static Entity? ResolveEntity(IMinecraftClient client, int entityId)
     {
@@ -219,6 +260,14 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
                 // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java
                 foreach (var metadata in setEntityDataPacket.MetadataPayload)
                 {
+                    // Retain every field verbatim (the vanilla client keeps the whole SynchedEntityData set).
+                    // Identity fields — custom name, name visibility, invisibility — are decoded by the registry.
+                    client.State.WorldEntities.SetMetadata(
+                        setEntityDataPacket.EntityId,
+                        metadata.Index,
+                        metadata.Type is { } metadataType ? (int)metadataType : -1,
+                        metadata.Value);
+
                     if (metadata is { Index: 9, Type: SetEntityDataPacket.MetadataType.Float, Value: float health })
                     {
                         // Update player entity health
@@ -234,22 +283,40 @@ public class EntityHandler(ILogger<EntityHandler> logger, IPhysicsService physic
             case UpdateAttributesPacket updateAttributesPacket:
                 // Extract max_health attribute
                 // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/ai/attributes/Attributes.java
-                if (client.State.RegistryKeyOrder.TryGetValue("minecraft:attribute", out var attributes))
                 {
-                    var maxHealthIndex = attributes.IndexOf("minecraft:max_health");
-                    if (maxHealthIndex >= 0)
+                    // Attribute ids come from the STATIC registry, not RegistryKeyOrder: minecraft:attribute is
+                    // a built-in registry that servers never send, so the old lookup against server-sent
+                    // registry data never matched and this whole handler was dead code — max_health included.
+                    var attributes = ClientState.AttributeRegistry;
+
+                    // The local player is not in the Level entity registry, so resolve it explicitly —
+                    // otherwise the one entity whose speed actually drives our physics is the one we skip.
+                    var targetEntity = ResolveEntity(client, updateAttributesPacket.EntityId);
+
+                    foreach (var property in updateAttributesPacket.Properties)
                     {
-                        foreach (var property in updateAttributesPacket.Properties)
+                        var attributeName = attributes.GetValueOrDefault(property.Id);
+                        if (attributeName == "minecraft:max_health")
                         {
-                            if (property.Id != maxHealthIndex) continue;
                             var maxHealth = (float)property.Value;
-
-                            // Update player entity max health
-                            var playerEntity = client.State.Level.GetEntityOfId(updateAttributesPacket.EntityId);
-                            playerEntity?.MaxHealth = maxHealth;
-
-                            // Update world entity max health
+                            if (targetEntity is not null) targetEntity.MaxHealth = maxHealth;
                             client.State.WorldEntities.UpdateMaxHealth(updateAttributesPacket.EntityId, maxHealth);
+                        }
+                        else if (attributeName == "minecraft:movement_speed" && targetEntity is not null)
+                        {
+                            var speed = CombineAttribute(property);
+                            if (Math.Abs(speed - targetEntity.MovementSpeed) > 1.0E-9)
+                            {
+                                logger.LogInformation(
+                                    "Movement speed for entity {EntityId}: {Old:F4} -> {New:F4} (base {Base:F4}, modifiers: {Modifiers})",
+                                    updateAttributesPacket.EntityId, targetEntity.MovementSpeed, speed,
+                                    property.Value,
+                                    property.Modifiers.Length == 0
+                                        ? "<none>"
+                                        : string.Join(" | ", property.Modifiers.Select(m =>
+                                            $"{m.Identifier} amount={m.Amount:F4} op={m.Operation}")));
+                            }
+                            targetEntity.MovementSpeed = speed;
                         }
                     }
                 }

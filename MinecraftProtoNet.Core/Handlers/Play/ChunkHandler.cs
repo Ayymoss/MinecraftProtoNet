@@ -20,8 +20,6 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(SetChunkCacheCenterPacket))]
 public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
 {
-    private bool _playerLoadedSent;
-
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(ChunkHandler));
 
@@ -32,14 +30,19 @@ public class ChunkHandler(ILogger<ChunkHandler> logger) : IPacketHandler
             case LevelChunkWithLightPacket levelChunkWithLightPacket:
                 client.State.Level.AddChunk(levelChunkWithLightPacket.Chunk);
 
-                // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:2540-2543
+                // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:2536-2551
                 // Vanilla sends PlayerLoadedPacket when levelLoadTracker.isLevelReady() — i.e., after
                 // the first chunks around the player are loaded. We approximate by sending on first chunk.
-                if (!_playerLoadedSent)
+                //
+                // The "already sent" flag is per-LEVEL, on client state, and is cleared by handleLogin and
+                // handleRespawn. It used to be a field on this handler, which DI keeps alive for the whole
+                // process: the packet was therefore sent for the first world only, and after any server switch
+                // the new backend never learned the client had loaded and pinned the player at spawn.
+                if (!client.State.ClientLoadedNotified)
                 {
-                    _playerLoadedSent = true;
+                    client.State.ClientLoadedNotified = true;
                     await client.SendPacketAsync(new PlayerLoadedPacket());
-                    logger.LogInformation("Sent PlayerLoadedPacket after first chunk received");
+                    logger.LogInformation("Sent PlayerLoadedPacket after first chunk of this level");
                 }
                 // Store block entity NBT data (signs, chests, etc.)
                 foreach (var be in levelChunkWithLightPacket.BlockEntities)

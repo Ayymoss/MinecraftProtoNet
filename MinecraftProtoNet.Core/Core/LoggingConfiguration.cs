@@ -40,8 +40,18 @@ public static class LoggingConfiguration
     /// Creates or returns the shared logger factory configured with Serilog.
     /// </summary>
     /// <param name="minLevel">Minimum log level (default: Debug). Use Verbose for detailed tick-by-tick logs.</param>
-    public static ILoggerFactory CreateLoggerFactory(LogEventLevel minLevel = LogEventLevel.Debug)
+    /// <summary>
+    /// Builds the logger factory. The default level is Debug, which logs every packet to both console and file.
+    /// On a busy public server that is a real per-tick cost, so MCPROTO_LOG_LEVEL overrides it without needing
+    /// a rebuild — e.g. MCPROTO_LOG_LEVEL=Warning when measuring movement or tick rate.
+    /// </summary>
+    public static ILoggerFactory CreateLoggerFactory(LogEventLevel? minLevel = null)
     {
+        minLevel ??= Enum.TryParse<LogEventLevel>(
+            Environment.GetEnvironmentVariable("MCPROTO_LOG_LEVEL"), ignoreCase: true, out var configured)
+            ? configured
+            : LogEventLevel.Debug;
+
         if (_loggerFactory is not null)
         {
             return _loggerFactory;
@@ -53,7 +63,7 @@ public static class LoggingConfiguration
             var logPath = Path.Combine(binPath, "logs", "minecraftProtoNet-.log");
 
             var serilogLogger = new LoggerConfiguration()
-                .MinimumLevel.Is(minLevel)
+                .MinimumLevel.Is(minLevel.Value)
                 .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
                 .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
                 // Reduce noise from high-frequency components at Debug level

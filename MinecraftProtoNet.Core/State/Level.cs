@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using MinecraftProtoNet.Core.Enums;
 using MinecraftProtoNet.Core.Models.World;
 using MinecraftProtoNet.Core.Models.Core;
 using MinecraftProtoNet.Core.Models.World.Chunk;
@@ -28,6 +29,15 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
     /// Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/utils/pathing/BetterWorldBorder.java
     /// </summary>
     public WorldBorder WorldBorder { get; set; } = new(); // Default: infinite border
+
+    /// <summary>
+    /// Client-side mirror of the server scoreboard's teams.
+    ///
+    /// Vanilla hangs the scoreboard off the packet listener rather than the level; it lives here because the
+    /// only consumer that matters for physics is <see cref="GetPushableEntities"/>, which is a level method.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:412
+    /// </summary>
+    public TeamRegistry Teams { get; } = new();
     
     public event Action? OnPlayersChanged
     {
@@ -133,22 +143,47 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
     }
 
     /// <summary>
-    /// Gets all pushable entities within the specified bounding box.
-    /// For client-side, this returns all player entities that intersect the bounding box.
-    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientLevel.java:403-406
+    /// Gets the entities the local player exchanges a push with this tick.
+    ///
+    /// Vanilla's client is structured the other way round: <c>ClientLevel.getPushableEntities</c> can only ever
+    /// return the LOCAL player, and only when someone else is the pusher, so the local player never initiates a
+    /// push — it is pushed by each remote player's own tick. We do not simulate remote entity ticks, so we keep
+    /// the local player as the pusher and rely on <c>doPush</c> applying the equal-and-opposite half to it. The
+    /// direction and magnitude the local player ends up with are identical either way; only the roles differ.
+    ///
+    /// What is NOT optional is the filter. Vanilla gates every push on <c>EntitySelector.pushableBy</c>, whose
+    /// first branch is "collision rule NEVER -> nothing is pushable". Lobby servers set <c>collisionRule: never</c>
+    /// so a crowded spawn pad cannot shove players around; a client that ignores teams gets pushed by a crowd the
+    /// server is holding still, and every push becomes a desync the server corrects with a teleport.
+    ///
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientLevel.java:511-513
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/EntitySelector.java:38-70
     /// </summary>
     public IEnumerable<Entity> GetPushableEntities(Entity pusher, AABB boundingBox)
     {
-        var allEntities = GetAllEntities().ToList();
-        foreach (var entity in allEntities)
-        {
-            // Don't push self
-            if (entity.EntityId == pusher.EntityId)
-                continue;
+        var pusherName = GetPlayerByEntityId(pusher.EntityId)?.Username;
 
-            // Check if bounding boxes intersect
-            var entityBox = entity.GetBoundingBox();
-            if (boundingBox.Intersects(entityBox))
+        // pushableBy's first branch: if the pusher's own rule is NEVER, nothing is pushable at all.
+        if (Teams.GetCollisionRule(pusherName) == TeamCollisionRule.Never)
+        {
+            yield break;
+        }
+
+        foreach (var player in GetAllPlayers())
+        {
+            var entity = player.Entity;
+            if (entity is null) continue;
+
+            // Don't push self.
+            if (entity.EntityId == pusher.EntityId) continue;
+
+            // NO_SPECTATORS, plus LivingEntity.isPushable() == isAlive() && !isSpectator().
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/EntitySelector.java:41-42
+            if (player.GameMode == GameMode.Spectator) continue;
+
+            if (!Teams.ArePushCompatible(pusherName, player.Username)) continue;
+
+            if (boundingBox.Intersects(entity.GetBoundingBox()))
             {
                 yield return entity;
             }

@@ -151,8 +151,14 @@ public sealed class TelemetryRecorder(IBaritone baritone, Scenario scenario, str
         }
     }
 
+    // GoalYTolerance defaults to 1 (a bot that ends a block low on a course has still done the course). Tests
+    // that hinge on the exact final block - e.g. "stand ON TOP of the ladder", where one block low means
+    // still clinging to the top rung - set it to 0, and RequireOnGround so clinging cannot count as standing.
     private bool GoalReached(TelemetrySample s) =>
-        s.FeetX == scenario.End.X && s.FeetZ == scenario.End.Z && Math.Abs(s.FeetY - scenario.End.Y) <= 1;
+        scenario.GoalDrivenTermination
+        && s.FeetX == scenario.End.X && s.FeetZ == scenario.End.Z
+        && Math.Abs(s.FeetY - scenario.End.Y) <= scenario.GoalYTolerance
+        && (!scenario.RequireOnGround || s.OnGround);
 
     private TelemetrySample BuildSample(IMinecraftClient client)
     {

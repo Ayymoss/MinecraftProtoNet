@@ -12,8 +12,38 @@ public class Chunk(int x, int z)
     public int Z { get; private set; } = z;
     public ChunkSection[] Sections { get; private set; } = [];
 
-    private const int MinSection = -4; // Default for 1.18+ (Y=-64)
-    private const int MaxSection = 19; // Default for 1.18+ (Y=319)
+    /// <summary>
+    /// Index of the lowest chunk section, i.e. <c>dimension.minY >> 4</c>. Chunk data on the wire is just a
+    /// run of sections from the bottom of the world upwards, with no Y stamped on them, so this is what maps a
+    /// block Y onto a section — and it is a property of the DIMENSION, not a constant.
+    ///
+    /// It defaults to the vanilla overworld (-64), which is why a wrong value goes unnoticed on ordinary
+    /// servers. In a dimension that starts at Y=0 every lookup is displaced by 64 blocks: the world reads as
+    /// air where the ground is, so the player falls forever and the server rubber-bands them back.
+    ///
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/dimension/DimensionType.java (minY)
+    /// and net/minecraft/world/level/chunk/ChunkAccess.java (getMinSectionY).
+    ///
+    /// Static because chunk sections are decoded inside packet deserialisation, which has no client context.
+    /// Set it via <see cref="SetWorldMinY"/> whenever a level loads, BEFORE its chunks arrive.
+    /// </summary>
+    public static int MinSection { get; private set; } = -4;
+
+    /// <summary>
+    /// Number of sections the world is tall (<c>dimension.height / 16</c>), used to size the section array.
+    /// Defaults to the vanilla overworld's 24 (384 blocks).
+    /// </summary>
+    public static int SectionCount { get; private set; } = 24;
+
+    /// <summary>
+    /// Applies the current dimension's vertical bounds. Call on join and on respawn/dimension change, before
+    /// that level's chunks are decoded.
+    /// </summary>
+    public static void SetWorldBounds(int minY, int height)
+    {
+        MinSection = minY >> 4;
+        SectionCount = Math.Max(1, (height + SectionHeight - 1) / SectionHeight);
+    }
 
     public BlockState? GetBlock(int x, int y, int z)
     {
@@ -30,6 +60,8 @@ public class Chunk(int x, int z)
         if (sectionIndex < 0 || sectionIndex >= Sections.Length) return null;
 
         var section = Sections[sectionIndex];
+        // A trailing section can be absent when the server sends fewer than the dimension's full height.
+        if (section is null) return ClientState.BlockStateRegistry[0];
         return section.IsEmpty 
             // Empty sections are Air
             ? ClientState.BlockStateRegistry[0] 
@@ -78,7 +110,7 @@ public class Chunk(int x, int z)
 
     public void DeserializeSections(ref PacketBufferReader reader)
     {
-        var sectionList = new ChunkSection[MaxSection - MinSection + 1];
+        var sectionList = new ChunkSection[SectionCount];
 
         for (var i = 0; i < sectionList.Length; i++)
         {

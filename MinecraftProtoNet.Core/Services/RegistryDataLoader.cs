@@ -86,4 +86,20 @@ public class RegistryDataLoader : IRegistryDataLoader
         return registry["minecraft:entity_type"].Entries
             .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
     }
+
+    /// <summary>
+    /// Loads the attribute registry (protocol id -> name) from the generated report.
+    ///
+    /// minecraft:attribute is a BUILT-IN registry, so unlike dimensions or biomes the server never sends it —
+    /// the ids in UpdateAttributes can only be resolved from the report for the matching protocol version.
+    /// </summary>
+    public async Task<Dictionary<int, string>> LoadAttributesAsync()
+    {
+        var filePath = Path.Combine(_staticFilesPath, RegistriesFileName);
+        var json = await File.ReadAllTextAsync(filePath);
+        var registry = JsonSerializer.Deserialize<Dictionary<string, RegistryRoot>>(json) ?? [];
+
+        return registry["minecraft:attribute"].Entries
+            .ToDictionary(x => x.Value.ProtocolId, x => x.Key);
+    }
 }
