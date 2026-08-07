@@ -1115,7 +1115,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         // Get colliding shapes
         var collidingShapes = level.GetCollidingShapes(aabb.ExpandTowards(movement)).ToList();
 
-        // Collide with shapes (X, Y, Z order)
+        // Collide with shapes, Y first (see AxisStepOrder)
         var resolvedMovement = CollideWithShapes(movement, aabb, collidingShapes);
 
         // Check for collisions
@@ -1140,10 +1140,11 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
 
             foreach (var candidateHeight in candidateHeights)
             {
-                // CRITICAL FIX: Step-up must move Y (up) first, then horizontally
-                // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java
+                // Step-up resolves Y (up) first, then horizontally — the same axisStepOrder every other
+                // collision uses, so the horizontal pair is ordered by magnitude rather than always X-then-Z.
+                // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1236
                 var stepMovement = new Vector3<double>(movement.X, candidateHeight, movement.Z);
-                var stepFromGround = CollideWithShapes(stepMovement, groundedAABB, stepUpShapes, new[] { Axis.Y, Axis.X, Axis.Z });
+                var stepFromGround = CollideWithShapes(stepMovement, groundedAABB, stepUpShapes);
                 double horizontalDistSqr = stepFromGround.X * stepFromGround.X + stepFromGround.Z * stepFromGround.Z;
                 double resolvedDistSqr = resolvedMovement.X * resolvedMovement.X + resolvedMovement.Z * resolvedMovement.Z;
 
@@ -1162,10 +1163,28 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     }
 
     /// <summary>
-    /// Collides movement with a list of VoxelShapes.
-    /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1171-1189
+    /// The order collision is resolved in, one axis at a time. Y is ALWAYS resolved first, then the two
+    /// horizontal axes ordered so the smaller-magnitude one goes last.
+    ///
+    /// This ordering is load-bearing, not an optimisation. Resolving Y first means it is resolved from the
+    /// pre-movement horizontal position, so an entity walking off a ledge is still supported by the block it
+    /// is standing on for that tick: the downward movement clips to zero, verticalCollisionBelow stays true,
+    /// and the fall only begins on the following tick. Resolving X or Z first moves the box out over the drop
+    /// before Y is tested, which starts the fall a tick early and leaves the entity 0.0784 blocks low — enough
+    /// to miss a slab top that vanilla lands on.
+    ///
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/core/Direction.java:430-432
     /// </summary>
-    private Vector3<double> CollideWithShapes(Vector3<double> movement, AABB boundingBox, List<VoxelShape> shapes, Axis[]? axisOrder = null)
+    private static Axis[] AxisStepOrder(Vector3<double> movement) =>
+        Math.Abs(movement.X) < Math.Abs(movement.Z)
+            ? [Axis.Y, Axis.Z, Axis.X]
+            : [Axis.Y, Axis.X, Axis.Z];
+
+    /// <summary>
+    /// Collides movement with a list of VoxelShapes.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1250-1268
+    /// </summary>
+    private Vector3<double> CollideWithShapes(Vector3<double> movement, AABB boundingBox, List<VoxelShape> shapes)
     {
         if (shapes.Count == 0)
         {
@@ -1174,9 +1193,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
 
         var resolvedMovement = Vector3<double>.Zero;
 
-        // Resolve collisions in specified order (vanilla uses axisStepOrder which optimizes, but the order matters for step-up)
-        var axes = axisOrder ?? new[] { Axis.X, Axis.Y, Axis.Z };
-        foreach (var axis in axes)
+        foreach (var axis in AxisStepOrder(movement))
         {
             double axisMovement = axis switch
             {
@@ -1186,7 +1203,10 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                 _ => 0.0
             };
 
-            if (Math.Abs(axisMovement) > 1.0E-7)
+            // Vanilla tests `axisMovement != 0.0` exactly; an epsilon here silently drops sub-1e-7 movements
+            // that vanilla still resolves.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1260
+            if (axisMovement != 0.0)
             {
                 var movedBox = boundingBox.Move(resolvedMovement.X, resolvedMovement.Y, resolvedMovement.Z);
                 double collision = Shapes.Collide(axis, movedBox, shapes, axisMovement);

@@ -124,7 +124,18 @@ public sealed record ReconProfile(
                 // (0,77,-1) is the SkyBlock hub spawn the Hypixel runs and the Baritone captures all began at.
                 new ReconStep("setworldspawn 0 77 -1", 1),
                 new ReconStep("tp @s 0 77 -1", 2),
-                new ReconStep("attribute @s minecraft:movement_speed base set 0.1673", 2)
+                new ReconStep("attribute @s minecraft:movement_speed base set 0.1673", 2),
+                // GrimAC is installed on this server and, unlike Paper's own movement checks, it re-simulates
+                // vanilla physics every tick and reports the offset between its prediction and where we said we
+                // were. At the configured threshold of 0.001 that is a 1mm-resolution oracle for physics parity
+                // — far better than inferring divergence from Hypixel's opaque setbacks. Both subscriptions are
+                // per-player toggles delivered as system chat, so OP is enough and no server config changes.
+                // (Grim does not exempt operators: grim.exempt/grim.disabled/grim.nosetback all default false.)
+                //
+                // Only verbose is toggled here. Alerts are already on at join (grim.alerts.enable-on-join is
+                // default:op) so sending "grim alerts" would turn them OFF — and Grim drops the verbose
+                // subscription along with them, silencing the very stream this is here to collect.
+                new ReconStep("grim verbose", 1)
             ],
             CaptureRadius: 0,
             OutputSubdir: "local-bazaar",
@@ -173,9 +184,15 @@ public sealed class NpcReconTask(
         {
             var line = string.Join("", e.TextParts).Trim();
             if (line.Length == 0) return;
+
+            // Anticheat verbose output (GrimAC's per-tick prediction offset) arrives as system chat, one line
+            // per flagged tick. Stamping the client tick is what makes it correlatable with the movement diag;
+            // without it the offsets are just an unordered pile. The cap is generous for the same reason — a
+            // 45s path at 20 TPS can flag most of its ~900 ticks.
+            var stamped = $"[t{client.State.Level.ClientTickCounter}] {line}";
             lock (_chatLog)
             {
-                if (_chatLog.Count < 400) _chatLog.Add(line);
+                if (_chatLog.Count < 8000) _chatLog.Add(stamped);
             }
         }
 
