@@ -36,6 +36,99 @@ public class BlockShapeRegistry : IBlockShapeRegistry
         return _shapeCache.GetOrAdd(blockState.Id, _ => GetShapeCore(blockState));
     }
 
+    /// <summary>A horizontal half of the block, as an x/z range pair. Intersecting two perpendicular halves
+    /// gives a quarter; unioning them gives three quarters.</summary>
+    private readonly record struct Half(double MinX, double MaxX, double MinZ, double MaxZ);
+
+    /// <summary>
+    /// The half of the block a stair's raised step occupies, for the side the stair faces.
+    ///
+    /// The step is on the SAME side as `facing`: vanilla's SHAPE_OUTER is Block.box(0,8,0, 8,16,8) — the
+    /// north-west quarter — and Shapes.rotateHorizontal keys the unrotated shape as NORTH, so a north-facing
+    /// stair's step is on its north side. (This was previously inverted, putting every stair's step on the
+    /// opposite side to the one it faces.)
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/block/StairBlock.java:232-240
+    /// </summary>
+    private static Half StepHalf(string direction) => direction switch
+    {
+        "north" => new Half(0.0, 1.0, 0.0, 0.5),
+        "south" => new Half(0.0, 1.0, 0.5, 1.0),
+        "west" => new Half(0.0, 0.5, 0.0, 1.0),
+        "east" => new Half(0.5, 1.0, 0.0, 1.0),
+        _ => new Half(0.0, 1.0, 0.0, 0.5)
+    };
+
+    private static string ClockWise(string direction) => direction switch
+    {
+        "north" => "east", "east" => "south", "south" => "west", "west" => "north", _ => direction
+    };
+
+    private static string CounterClockWise(string direction) => direction switch
+    {
+        "north" => "west", "west" => "south", "south" => "east", "east" => "north", _ => direction
+    };
+
+    /// <summary>
+    /// A stair is its base slab plus a step in the opposite vertical half. Which part of that half the step
+    /// covers depends on the `shape` property, which the previous implementation ignored entirely — every
+    /// stair was treated as `straight`. That over-generates collision for outer corners (a full half-strip
+    /// where vanilla has only a quarter) and under-generates it for inner corners (a half where vanilla has
+    /// three quarters), so the bot could stand a half-block higher than vanilla allows on an outer corner.
+    ///
+    /// Vanilla selects a base shape by the shape value and then keys it by a direction derived from facing:
+    /// STRAIGHT/OUTER_LEFT/INNER_RIGHT use facing, INNER_LEFT uses counter-clockwise, OUTER_RIGHT uses
+    /// clockwise. Substituting OUTER(D) = strip(D) ∩ strip(ccw(D)) and INNER(D) = strip(D) ∪ strip(cw(D))
+    /// collapses that to the symmetric rule below.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/block/StairBlock.java:63-101
+    /// </summary>
+    private static VoxelShape GetStairShape(BlockState blockState)
+    {
+        var isTop = blockState.IsTop;
+        var baseBox = isTop
+            ? Shapes.Shapes.Box(0, 0.5, 0, 1, 1, 1)
+            : Shapes.Shapes.Box(0, 0, 0, 1, 0.5, 1);
+
+        var facing = blockState.Properties.GetValueOrDefault("facing", "north");
+        var shape = blockState.Properties.GetValueOrDefault("shape", "straight");
+
+        // The step sits in whichever vertical half the base slab does not occupy.
+        var stepMinY = isTop ? 0.0 : 0.5;
+        var stepMaxY = isTop ? 0.5 : 1.0;
+
+        var primary = StepHalf(facing);
+        VoxelShape step;
+
+        switch (shape)
+        {
+            case "outer_left":
+            case "outer_right":
+            {
+                var other = StepHalf(shape == "outer_left" ? CounterClockWise(facing) : ClockWise(facing));
+                step = Shapes.Shapes.Box(
+                    Math.Max(primary.MinX, other.MinX), stepMinY, Math.Max(primary.MinZ, other.MinZ),
+                    Math.Min(primary.MaxX, other.MaxX), stepMaxY, Math.Min(primary.MaxZ, other.MaxZ));
+                break;
+            }
+
+            case "inner_left":
+            case "inner_right":
+            {
+                var other = StepHalf(shape == "inner_left" ? CounterClockWise(facing) : ClockWise(facing));
+                step = Shapes.Shapes.Or(
+                    Shapes.Shapes.Box(primary.MinX, stepMinY, primary.MinZ, primary.MaxX, stepMaxY, primary.MaxZ),
+                    Shapes.Shapes.Box(other.MinX, stepMinY, other.MinZ, other.MaxX, stepMaxY, other.MaxZ));
+                break;
+            }
+
+            default:
+                step = Shapes.Shapes.Box(
+                    primary.MinX, stepMinY, primary.MinZ, primary.MaxX, stepMaxY, primary.MaxZ);
+                break;
+        }
+
+        return Shapes.Shapes.Or(baseBox, step);
+    }
+
     private VoxelShape GetShapeCore(BlockState blockState)
     {
         // NOT a deviation (an earlier comment here claimed it was): vanilla ladders DO have collision. In
@@ -101,40 +194,7 @@ public class BlockShapeRegistry : IBlockShapeRegistry
 
         if (blockState.IsStairs)
         {
-            var isTop = blockState.IsTop;
-            var baseBox = isTop 
-                ? Shapes.Shapes.Box(0, 0.5, 0, 1, 1, 1) 
-                : Shapes.Shapes.Box(0, 0, 0, 1, 0.5, 1);
-            
-            // Add the step part of the stair
-            var facing = blockState.Properties.GetValueOrDefault("facing", "north");
-            VoxelShape stepBox;
-            if (isTop)
-            {
-                // Top stairs: step is at the bottom half
-                stepBox = facing switch
-                {
-                    "north" => Shapes.Shapes.Box(0, 0, 0.5, 1, 0.5, 1),
-                    "south" => Shapes.Shapes.Box(0, 0, 0, 1, 0.5, 0.5),
-                    "west" => Shapes.Shapes.Box(0.5, 0, 0, 1, 0.5, 1),
-                    "east" => Shapes.Shapes.Box(0, 0, 0, 0.5, 0.5, 1),
-                    _ => Shapes.Shapes.Empty()
-                };
-            }
-            else
-            {
-                // Bottom stairs: step is at the top half
-                stepBox = facing switch
-                {
-                    "north" => Shapes.Shapes.Box(0, 0.5, 0.5, 1, 1, 1),
-                    "south" => Shapes.Shapes.Box(0, 0.5, 0, 1, 1, 0.5),
-                    "west" => Shapes.Shapes.Box(0.5, 0.5, 0, 1, 1, 1),
-                    "east" => Shapes.Shapes.Box(0, 0.5, 0, 0.5, 1, 1),
-                    _ => Shapes.Shapes.Empty()
-                };
-            }
-
-            return Shapes.Shapes.Or(baseBox, stepBox);
+            return GetStairShape(blockState);
         }
 
         if (ClientState.BlockTags.HasTag(blockState.Name, "wool_carpets"))
