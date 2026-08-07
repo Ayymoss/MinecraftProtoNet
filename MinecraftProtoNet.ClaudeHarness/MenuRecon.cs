@@ -74,13 +74,24 @@ public sealed record MenuProfile(
 /// run can only touch the buttons it was told to. Slots whose name or lore looks like it commits a trade are
 /// refused outright even when named, so an exploratory chain cannot accidentally buy or sell.
 /// </summary>
+/// <summary>One step of a menu walk: click a slot by name, or answer a sign-editor prompt with text.</summary>
+public sealed record MenuStep(MenuStepKind Kind, string Value);
+
+public enum MenuStepKind
+{
+    Click,
+    Sign
+}
+
 public sealed class MenuReconTask(
     IMinecraftClient client,
     IChatEventBus chatBus,
+    ISignEventBus signBus,
     IBaritoneProvider baritoneProvider,
     IContainerManager containers,
     IItemRegistryService items,
-    string outputRoot)
+    string outputRoot,
+    bool allowTrade = false)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -105,13 +116,28 @@ public sealed class MenuReconTask(
 
     private readonly List<string> _chatLog = [];
     private readonly List<MenuDump> _dumps = [];
+    private readonly System.Collections.Concurrent.ConcurrentQueue<SignEditorEventArgs> _signPrompts = new();
+
+    /// <summary>
+    /// Best ask (lowest sell offer) and best bid (highest buy order) as of the last product page seen. Kept so
+    /// a chain can price an order to cross the spread — `--sign "{ask}"` — instead of carrying a number over
+    /// from an earlier run, which is stale the moment anyone else trades.
+    /// </summary>
+    private double? _bestAsk;
+    private double? _bestBid;
+
+    private static readonly System.Text.RegularExpressions.Regex PriceLine =
+        new(@"-\s*([\d,]+(?:\.\d+)?)\s*coins each", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static void Log(string msg) => Console.WriteLine($"[menu] {msg}");
 
-    public async Task<bool> RunAsync(MenuProfile profile, IReadOnlyList<string> clicks)
+    public async Task<bool> RunAsync(MenuProfile profile, IReadOnlyList<MenuStep> steps)
     {
         Log($"profile={profile.Name} server={profile.Server}:{profile.Port} npc=\"{profile.NpcName}\"");
-        if (clicks.Count > 0) Log($"click chain: {string.Join(" -> ", clicks.Select(c => $"\"{c}\""))}");
+        if (steps.Count > 0)
+            Log($"steps: {string.Join(" -> ", steps.Select(s => $"{s.Kind.ToString().ToLowerInvariant()}(\"{s.Value}\")"))}");
+        if (allowTrade)
+            Log("!! --allow-trade: the commit guard is OFF for this run, buttons that spend coins WILL be clicked");
 
         if (!await client.AuthenticateAsync())
         {
@@ -129,7 +155,18 @@ public sealed class MenuReconTask(
             }
         }
 
+        // Registered for the whole run, not around a single step: the sign editor opens as a consequence of the
+        // click before it, so the prompt can land before the step that answers it is reached.
+        Task OnSign(SignEditorEventArgs e)
+        {
+            _signPrompts.Enqueue(e);
+            Log($"sign editor opened at ({e.Position.X},{e.Position.Y},{e.Position.Z}), " +
+                $"existing lines: [{string.Join(" | ", e.ExistingLines.Select(l => l ?? ""))}]");
+            return Task.CompletedTask;
+        }
+
         chatBus.OnSystemChat += OnChat;
+        signBus.OnSignEditorOpened += OnSign;
         try
         {
             if (!await ConnectAndSpawnAsync(profile)) { Log("CONNECT/SPAWN FAILED"); return false; }
@@ -174,9 +211,15 @@ public sealed class MenuReconTask(
             Capture("root", $"opened by right-clicking \"{profile.NpcName}\"");
             PrintLastDump();
 
-            foreach (var wanted in clicks)
+            foreach (var step in steps)
             {
-                if (!await ClickByNameAsync(wanted)) return false;
+                var ok = step.Kind switch
+                {
+                    MenuStepKind.Click => await ClickByNameAsync(step.Value),
+                    MenuStepKind.Sign => await AnswerSignAsync(step.Value),
+                    _ => false
+                };
+                if (!ok) return false;
             }
 
             // Whatever the last click did — switch server, print an error, open another menu — shows up in the
@@ -197,6 +240,7 @@ public sealed class MenuReconTask(
         finally
         {
             chatBus.OnSystemChat -= OnChat;
+            signBus.OnSignEditorOpened -= OnSign;
             try { await client.DisconnectAsync(); } catch { /* best-effort */ }
             Log("disconnected");
         }
@@ -476,8 +520,12 @@ public sealed class MenuReconTask(
         var commit = CommitKeywords.FirstOrDefault(k => haystack.Contains(k));
         if (commit is not null)
         {
-            Log($"REFUSING slot [{match.Index}] \"{match.Name}\": looks like it commits ({commit}). Recon runs do not trade.");
-            return false;
+            if (!allowTrade)
+            {
+                Log($"REFUSING slot [{match.Index}] \"{match.Name}\": looks like it commits ({commit}). Recon runs do not trade.");
+                return false;
+            }
+            Log($"!! slot [{match.Index}] \"{match.Name}\" commits ({commit}) — clicking it because --allow-trade was passed");
         }
 
         var signature = SignatureOf(container);
@@ -528,6 +576,57 @@ public sealed class MenuReconTask(
             await Task.Delay(100);
         }
         return false;
+    }
+
+    /// <summary>
+    /// Answers a sign-editor prompt — Hypixel's text input for "Search", "Custom Amount" and "Custom Price".
+    /// The server closes the menu, sends Open Sign Editor at a throwaway block, and waits for a Sign Update;
+    /// the typed value goes on the first line and the prompt lines below it are echoed back untouched, which
+    /// is exactly what the real client sends.
+    /// </summary>
+    private async Task<bool> AnswerSignAsync(string rawValue)
+    {
+        var value = ResolveSignValue(rawValue);
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        SignEditorEventArgs? prompt = null;
+        while (DateTime.UtcNow < deadline && !_signPrompts.TryDequeue(out prompt))
+        {
+            await Task.Delay(100);
+        }
+
+        if (prompt is null)
+        {
+            Log($"no sign editor appeared to answer with \"{value}\"");
+            return false;
+        }
+
+        var existing = prompt.ExistingLines;
+        string[] lines =
+        [
+            value,
+            existing.Length > 1 ? existing[1] ?? "" : "",
+            existing.Length > 2 ? existing[2] ?? "" : "",
+            existing.Length > 3 ? existing[3] ?? "" : ""
+        ];
+
+        Log($"answering the sign with \"{value}\"");
+        await client.SendPacketAsync(new SignUpdatePacket
+        {
+            Position = prompt.Position,
+            IsFrontText = prompt.IsFrontText,
+            Lines = lines
+        });
+
+        // The answer makes the server re-open the menu it interrupted, carrying the value through.
+        if (!await WaitForMenuContentAsync(TimeSpan.FromSeconds(8)))
+        {
+            Log("no menu came back after the sign answer");
+            return false;
+        }
+
+        Capture($"after-sign:{value}", $"menu returned after answering the sign with \"{value}\"");
+        PrintLastDump();
+        return true;
     }
 
     /// <summary>
@@ -624,6 +723,59 @@ public sealed class MenuReconTask(
             ChatAtCapture = chat.Count > 0 ? chat[^Math.Min(10, chat.Count)..] : []
         };
         _dumps.Add(dump);
+        TrackOrderBook(slots);
+    }
+
+    /// <summary>
+    /// Picks the top of book off a product page. "Create Buy Order" lists the standing BUY orders best-first
+    /// (the bid), "Create Sell Offer" the standing SELL offers best-first (the ask) — both as
+    /// "- 11,715.8 coins each | 396x in 1 order".
+    /// </summary>
+    private void TrackOrderBook(List<MenuSlot> slots)
+    {
+        foreach (var slot in slots)
+        {
+            var top = slot.Lore.Select(l => PriceLine.Match(l)).FirstOrDefault(m => m.Success);
+            if (top is null) continue;
+            if (!double.TryParse(top.Groups[1].Value.Replace(",", ""),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var price)) continue;
+
+            if (slot.Name?.Contains("Create Sell Offer", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                _bestAsk = price;
+                Log($"top of book: ask (lowest sell offer) = {price}");
+            }
+            else if (slot.Name?.Contains("Create Buy Order", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                _bestBid = price;
+                Log($"top of book: bid (highest buy order) = {price}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Substitutes {ask}/{bid} in a sign answer with the live top of book. Pricing a buy order AT the ask (or
+    /// a sell offer at the bid) is a limit order that crosses, so it fills immediately — which is the point:
+    /// it exercises the order path rather than the instant-buy path, without leaving an order hanging.
+    /// </summary>
+    private string ResolveSignValue(string value)
+    {
+        var resolved = value;
+        foreach (var (token, price) in new[] { ("{ask}", _bestAsk), ("{bid}", _bestBid) })
+        {
+            if (!resolved.Contains(token, StringComparison.OrdinalIgnoreCase)) continue;
+            if (price is null)
+            {
+                Log($"cannot resolve {token}: no product page with an order book has been seen yet");
+                continue;
+            }
+
+            var text = price.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+            resolved = resolved.Replace(token, text, StringComparison.OrdinalIgnoreCase);
+            Log($"resolved {token} -> {text}");
+        }
+        return resolved;
     }
 
     private void PrintLastDump()

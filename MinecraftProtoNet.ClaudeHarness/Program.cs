@@ -232,18 +232,33 @@ if (GetArg("--menu") is { } menuName)
     var menuOutRoot = GetArg("--out")
         ?? Path.Combine(slnDirForMenu?.FullName ?? AppContext.BaseDirectory, "_ServerReferences");
 
+    // --click and --sign interleave, so the chain is built in the order they appear on the command line
+    // rather than by collecting each flag separately.
+    var menuSteps = new List<MenuStep>();
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (args[i] == "--click") menuSteps.Add(new MenuStep(MenuStepKind.Click, args[i + 1]));
+        else if (args[i] == "--sign") menuSteps.Add(new MenuStep(MenuStepKind.Sign, args[i + 1]));
+    }
+
+    // Clicking a button that spends coins has to be asked for explicitly; without this the run refuses any
+    // slot that looks like it buys, sells, claims or cancels.
+    var allowTrade = Array.IndexOf(args, "--allow-trade") >= 0;
+
     var menuTask = new MenuReconTask(
         client,
         host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
         baritoneProvider,
         host.Services.GetRequiredService<IContainerManager>(),
         registryService,
-        menuOutRoot);
+        menuOutRoot,
+        allowTrade);
 
     bool menuOk;
     try
     {
-        menuOk = await menuTask.RunAsync(menuProfile, GetArgs("--click"));
+        menuOk = await menuTask.RunAsync(menuProfile, menuSteps);
     }
     catch (Exception ex)
     {
@@ -254,6 +269,95 @@ if (GetArg("--menu") is { } menuName)
     try { await gameLoop.StopAsync(); } catch { /* best-effort */ }
     Console.WriteLine($"[menu] DONE ok={menuOk}");
     return menuOk ? 0 : 1;
+}
+
+// --flip: the real thing. Ask BazaarCompanion what to trade, place a buy order, wait for it to fill, claim,
+// offer it back, wait, claim. Spends real coins, so it is its own mode rather than a flag on --menu.
+if (Array.IndexOf(args, "--flip") >= 0)
+{
+    // The key lives in Bot.Webcore's user secrets (BazaarTrading:BazaarCompanionApiKey) so it is shared with
+    // the web app rather than duplicated; env var and flag are escape hatches.
+    // Bot.Webcore's secret store, read directly: the generic host only layers user secrets in when the
+    // environment is Development, and the harness is normally run without DOTNET_ENVIRONMENT set at all.
+    static string? ReadWebcoreSecret(string key)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Microsoft", "UserSecrets", "7b99bc4a-fd1a-407f-b4bb-e8a3ff1f0e18", "secrets.json");
+            if (!File.Exists(path)) return null;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty(key, out var value) ? value.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    var apiKey = GetArg("--api-key")
+                 ?? Environment.GetEnvironmentVariable("BAZAAR_COMPANION_API_KEY")
+                 ?? builder.Configuration["BazaarTrading:BazaarCompanionApiKey"]
+                 ?? ReadWebcoreSecret("BazaarTrading:BazaarCompanionApiKey");
+    var apiBase = GetArg("--api-base")
+                  ?? builder.Configuration["BazaarTrading:BazaarCompanionBaseUrl"]
+                  ?? "https://bazaar.amosr.uk";
+
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        Console.Error.WriteLine("[flip] no BazaarCompanion API key. Pass --api-key, set BAZAAR_COMPANION_API_KEY, " +
+                                "or add BazaarTrading:BazaarCompanionApiKey to Bot.Webcore's user secrets.");
+        return 2;
+    }
+
+    var flipOptions = new FlipOptions(
+        Server: GetArg("--server") ?? "mc.hypixel.net",
+        Port: int.TryParse(GetArg("--port"), out var flipPort) ? flipPort : 25565,
+        HubNumber: int.TryParse(GetArg("--hub"), out var hub) ? hub : 21,
+        Quantity: int.TryParse(GetArg("--qty"), out var qty) ? qty : 4,
+        MaxUnitPrice: double.TryParse(GetArg("--max-price"), out var maxPrice) ? maxPrice : 3000,
+        ForceProduct: GetArg("--product"),
+        MonitorMinutes: int.TryParse(GetArg("--monitor-min"), out var monitorMin) ? monitorMin : 30,
+        PollSeconds: int.TryParse(GetArg("--poll-sec"), out var pollSec) ? pollSec : 30);
+
+    Console.WriteLine($"[flip] {apiBase} | hub {flipOptions.HubNumber} | qty {flipOptions.Quantity} | " +
+                      $"max unit price {flipOptions.MaxUnitPrice} | monitor {flipOptions.MonitorMinutes}min");
+
+    using var flipHttp = new HttpClient { BaseAddress = new Uri(apiBase), Timeout = TimeSpan.FromSeconds(30) };
+    flipHttp.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+
+    void FlipLog(string message) => Console.WriteLine($"[flip {DateTime.Now:HH:mm:ss}] {message}");
+
+    var flipSession = new BazaarSession(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        FlipLog);
+
+    if (!await client.AuthenticateAsync())
+    {
+        Console.Error.WriteLine("[flip] AUTH FAILED");
+        return 2;
+    }
+
+    bool flipOk;
+    try
+    {
+        flipOk = await new BazaarFlipTask(flipSession, flipHttp, FlipLog).RunAsync(flipOptions);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[flip] EXCEPTION: {ex}");
+        flipOk = false;
+    }
+
+    try { await gameLoop.StopAsync(); } catch { /* best-effort */ }
+    Console.WriteLine($"[flip] DONE profitable={flipOk}");
+    return flipOk ? 0 : 1;
 }
 
 var runDir = Path.Combine(AppContext.BaseDirectory, "runs", $"{scenario.Name}-{DateTime.Now:yyyyMMdd-HHmmss}");
