@@ -101,6 +101,34 @@ public sealed record ReconProfile(
             CaptureRadius: 0,
             OutputSubdir: "skyblock-bazaar",
             GoalPos: (-36, 72, -28),
+            GoalTimeoutSec: 45),
+
+        // The Hypixel SkyBlock hub geometry, downloaded and served by a local Paper server, so the movement
+        // work can be iterated offline. Same spawn and same goal as the live profile — the point is that the
+        // COLLISION divergence (falling through the bottom-slab at (-5,76,-4) that real Baritone lands on) is
+        // client-side, so it reproduces here regardless of how lenient Paper's movement checks are next to
+        // Hypixel's. No chat steps: there is no /skyblock or /hub on this server, the world IS the hub.
+        //
+        // `attribute` is sent first because the live account carries a SkyBlock speed stat (movement_speed
+        // 0.1673 vs the vanilla 0.1), and per-tick step size has to match the live captures for the traces to
+        // be comparable. JeffMaxxing is opped on this server.
+        ["local-bazaar"] = new(
+            Name: "local-bazaar",
+            Server: "127.0.0.1",
+            Port: 25565,
+            WaitAfterJoinSec: 3,
+            Steps:
+            [
+                // A default server spreads joins over a spawn radius, so without pinning this the bot starts
+                // somewhere different every run and the traces cannot be compared against the live captures.
+                // (0,77,-1) is the SkyBlock hub spawn the Hypixel runs and the Baritone captures all began at.
+                new ReconStep("setworldspawn 0 77 -1", 1),
+                new ReconStep("tp @s 0 77 -1", 2),
+                new ReconStep("attribute @s minecraft:movement_speed base set 0.1673", 2)
+            ],
+            CaptureRadius: 0,
+            OutputSubdir: "local-bazaar",
+            GoalPos: (-36, 72, -28),
             GoalTimeoutSec: 45)
     };
 }
