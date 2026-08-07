@@ -939,8 +939,15 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
 
         // Update collision flags and ground detection
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:784-790
-        bool xCollision = Math.Abs(delta.X - movement.X) > 1.0E-7;
-        bool zCollision = Math.Abs(delta.Z - movement.Z) > 1.0E-7;
+        // Vanilla uses Mth.equal, i.e. a 9.999999747378752E-6 tolerance — NOT 1e-7. A tighter epsilon
+        // over-detects: a sub-1e-5 clip that vanilla treats as no collision at all would zero the horizontal
+        // velocity on that axis AND raise HorizontalCollision, which additionally cancels sprint. The result
+        // is a client that stops dead against geometry the server thinks it slid past.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:789-791
+        //            minecraft-26.2-REFERENCE-ONLY/net/minecraft/util/Mth.java:161-163
+        const double mthEqualTolerance = 9.999999747378752E-6;
+        bool xCollision = Math.Abs(delta.X - movement.X) >= mthEqualTolerance;
+        bool zCollision = Math.Abs(delta.Z - movement.Z) >= mthEqualTolerance;
         entity.HorizontalCollision = xCollision || zCollision;
 
         // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:799-803
