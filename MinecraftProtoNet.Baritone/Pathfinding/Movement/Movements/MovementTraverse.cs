@@ -268,7 +268,12 @@ public class MovementTraverse(IBaritone baritone, BetterBlockPos from, BetterBlo
             if (playerHeadWb == null || playerRotWb == null) return state;
             float yawToDest = RotationUtils.CalcRotationFromVec3d(playerHeadWb, VecUtils.GetBlockPosCenter(Dest), playerRotWb).GetYaw();
             float pitchToBreak = targetRotWb.GetPitch();
-            if ((MovementHelper.IsBlockNormalCube(pb0) || pb0.IsAir) && (MovementHelper.IsBlockNormalCube(pb1) || pb1.IsAir))
+            // Java is `isNormalCube(pb0) || pb0 instanceof AirBlock && (isNormalCube(pb1) || pb1 instanceof AirBlock)`.
+            // && binds tighter than ||, so it reads A || (B && (C || D)) — NOT (A || B) && (C || D), which is
+            // what this used to be and which rejects a normal-cube pb0 whenever pb1 is neither.
+            // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/movement/movements/MovementTraverse.java:210
+            if (MovementHelper.IsBlockNormalCube(pb0)
+                || (pb0.IsAir && (MovementHelper.IsBlockNormalCube(pb1) || pb1.IsAir)))
             {
                 pitchToBreak = 26;
             }

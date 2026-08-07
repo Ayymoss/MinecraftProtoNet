@@ -64,6 +64,12 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
     private bool _sprintNextTick;
 
     /// <summary>
+    /// Set when a skip case that Java answers with "return true" fires this tick. Cleared at the top of every
+    /// tick. See <see cref="SkipResult.SkipAndSprint"/>.
+    /// </summary>
+    private bool _pendingForcedSprint;
+
+    /// <summary>
     /// Checks if the player's feet position is contained in a movement's valid positions,
     /// accounting for bottom slab offset. When standing on a bottom slab at block Y,
     /// the player's Y is Y+0.5 which floors to Y, but the path expects Y+1.
@@ -85,6 +91,7 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
     {
         var context = behavior.SecretInternalGetCalculationContext() ?? new CalculationContext(Baritone);
         bool canCancelResult = true;
+        _pendingForcedSprint = false;
 
         int iterations = 0;
         while (iterations++ < 100)
@@ -234,9 +241,13 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
             else
             {
                 var skipResult = CheckSkip(context);
-                if (skipResult == SkipResult.Skipped)
+                if (skipResult is SkipResult.Skipped or SkipResult.SkipAndSprint)
                 {
-                    _logger.LogDebug("[PathExec] CheckSkip=Skipped at pathPos={PathPos}", _pathPosition);
+                    // Java's "return true" happens AFTER the recursive onTick(), so it wins over whatever the
+                    // inner tick decided. The pending flag reproduces that: the re-entered loop below computes
+                    // its own result, and this ORs sprint back on top.
+                    if (skipResult == SkipResult.SkipAndSprint) _pendingForcedSprint = true;
+                    _logger.LogDebug("[PathExec] CheckSkip={Result} at pathPos={PathPos}", skipResult, _pathPosition);
                     continue;
                 }
                 if (MovementDiag.Enabled && (skipResult == SkipResult.Sprint) != _sprintNextTick)
@@ -248,7 +259,7 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                                      $"pathPos={_pathPosition} movement={movement.GetType().Name}");
                 }
 
-                _sprintNextTick = (skipResult == SkipResult.Sprint);
+                _sprintNextTick = (skipResult == SkipResult.Sprint) || _pendingForcedSprint;
                 // Re-set sprint on InputOverrideHandler. CheckSkip always clears sprint (line 196)
                 // then returns Sprint/NoSprint. We must propagate this back so
                 // InputOverrideHandler.OnTick() applies the correct state to Entity.
@@ -267,7 +278,14 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
         return canCancelResult;
     }
 
-    private enum SkipResult { NoSprint, Sprint, Skipped }
+    /// <summary>
+    /// <see cref="SkipAndSprint"/> models Java's <c>pathPosition++; onChangeInPathPosition(); onTick(); return true;</c>
+    /// pattern. The recursive onTick() is what our caller's <c>continue</c> emulates, but Java then returns
+    /// <c>true</c> — i.e. SPRINT — and because that assignment happens after the recursion it overrides
+    /// whatever the inner tick decided. Mapping these cases to a plain <see cref="Skipped"/> silently dropped
+    /// the sprint, which is one of the reasons the bot toggled sprint far more than a real client.
+    /// </summary>
+    private enum SkipResult { NoSprint, Sprint, Skipped, SkipAndSprint }
 
     private SkipResult CheckSkip(CalculationContext context)
     {
@@ -285,10 +303,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 {
                     _pathPosition++; OnChangeInPathPosition();
                     behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Jump, true);
-                    // Sprint must also be active for the sprint-jump boost (0.2 horizontal velocity)
-                    // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2229-2241
-                    behavior.Baritone.GetInputOverrideHandler().SetInputForceState(Api.Utils.Input.Input.Sprint, true);
-                    return SkipResult.Skipped;
+                    // Java sets JUMP here and gets the sprint from "return true" — hence SkipAndSprint rather
+                    // than force-setting the SPRINT input, which is not what the reference does.
+                    return SkipResult.SkipAndSprint;
                 }
             }
         }
@@ -316,7 +333,8 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 var next = path.Movements()[_pathPosition + 1];
                 if (next is MovementAscend && current.GetDirection().X == next.GetDirection().X && current.GetDirection().Z == next.GetDirection().Z)
                 {
-                    _pathPosition++; OnChangeInPathPosition(); return SkipResult.Skipped;
+                    // "Skipping descend to straight ascend" — Java returns true (sprint).
+                    _pathPosition++; OnChangeInPathPosition(); return SkipResult.SkipAndSprint;
                 }
                 if (CanSprintFromDescendInto(current, next, context))
                 {
@@ -329,9 +347,11 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                             return SkipResult.NoSprint;
                         }
                     }
+                    // Java advances when the feet have reached the descend's destination and returns true
+                    // EITHER WAY — the advance is not an alternative to sprinting.
                     if (_ctx.PlayerFeet()?.Equals(current.GetDest()) == true)
                     {
-                        _pathPosition++; OnChangeInPathPosition(); return SkipResult.Skipped;
+                        _pathPosition++; OnChangeInPathPosition(); return SkipResult.SkipAndSprint;
                     }
                     return SkipResult.Sprint;
                 }
@@ -374,7 +394,7 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                 if (_ctx.PlayerFeet()?.Equals(fallDest) == true)
                 {
                     _pathPosition = path.Positions().ToList().IndexOf(fallDest);
-                    OnChangeInPathPosition(); return SkipResult.Skipped;
+                    OnChangeInPathPosition(); return SkipResult.SkipAndSprint;
                 }
                 ClearKeys();
                 var playerHead = _ctx.PlayerHead(); var playerRot = _ctx.PlayerRotations();
@@ -422,7 +442,9 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
         var src = current.GetSrc();
         double offTarget = Math.Abs(dir.X * (src.Z + 0.5 - playerPos.Z)) + Math.Abs(dir.Z * (src.X + 0.5 - playerPos.X));
         if (offTarget > 0.1) return false;
-        var headBonk = new BetterBlockPos(src.X - dir.X, src.Y + 2, src.Z - dir.Z); 
+        // Java: src.subtract(direction).above(2) — subtract uses the full vector, so keep dir.Y. It is 0 for
+        // the MovementTraverse this is called with, but dropping it would be silently wrong for anything else.
+        var headBonk = new BetterBlockPos(src.X - dir.X, src.Y - dir.Y + 2, src.Z - dir.Z);
         if (MovementHelper.FullyPassable(context, headBonk.X, headBonk.Y, headBonk.Z)) return true;
         double flatDist = Math.Abs(dir.X * (headBonk.X + 0.5 - playerPos.X)) + Math.Abs(dir.Z * (headBonk.Z + 0.5 - playerPos.Z));
         return flatDist > 0.8;
