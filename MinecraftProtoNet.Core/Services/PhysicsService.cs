@@ -30,6 +30,14 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     private static readonly bool SetbackDiagEnabled =
         Environment.GetEnvironmentVariable("MCPROTO_SETBACK_DIAG") == "1";
 
+    /// <summary>
+    /// EXPERIMENT ONLY (MCPROTO_NO_SPRINT_MULT=1): skip the client-side x1.3 sprint multiplier and move at the
+    /// server's raw movement_speed even while sprinting. Deliberately NOT vanilla — it exists to test whether a
+    /// server's movement check expects the sprint boost to be absent.
+    /// </summary>
+    private static readonly bool SuppressSprintMultiplier =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_SPRINT_MULT") == "1";
+
     private const double PositionUpdateThreshold = 2.0E-4;
     private const int PositionReminderInterval = 20;
 
@@ -127,11 +135,39 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Handle entity-to-entity pushing/collisions
             PushEntities(entity, level);
 
-            // Sync entity.IsSprinting from input state BEFORE travel.
-            // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
-            // In Java, aiStep() determines sprint state before travel() and sendPosition().
-            // entity.IsSprinting drives speed calculations in GetFrictionInfluencedSpeed and JumpFromGround.
-            entity.IsSprinting = entity.InputState.Current.Sprint;
+            // Resolve sprint state BEFORE travel, applying vanilla's start/stop gating rather than taking the
+            // requested sprint flag at face value.
+            //
+            // This matters on a server that validates movement. The sprint flag used to be copied straight from
+            // input, so the client kept sprinting in situations where vanilla forcibly drops it — most often
+            // when brushing a wall or a stair corner, which happens constantly in a hub. The server applies the
+            // vanilla rule, expects walking speed, sees sprinting speed, and sets the player back.
+            //
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:764-786
+            //   canStartSprinting()      :1103-1104  — needs forward impulse, not crouching
+            //   shouldStopRunSprinting() :880-882    — stop on no forward impulse, or a non-minor h-collision
+            {
+                var sprintInput = entity.InputState.Current;
+
+                // canStartSprinting(): requires a forward impulse and not moving slowly (crouching).
+                if (!entity.IsSprinting
+                    && sprintInput.Sprint
+                    && sprintInput.HasForwardImpulse
+                    && !sprintInput.Shift)
+                {
+                    entity.IsSprinting = true;
+                }
+
+                // shouldStopRunSprinting(). The extra !Sprint term is ours: vanilla holds a key, whereas our
+                // sprint flag is a per-tick intent from the pathfinder, so dropping the intent must stop it.
+                if (entity.IsSprinting
+                    && (!sprintInput.Sprint
+                        || !sprintInput.HasForwardImpulse
+                        || (entity.HorizontalCollision && !entity.MinorHorizontalCollision)))
+                {
+                    entity.IsSprinting = false;
+                }
+            }
 
             // Calculate movement based on travel method
             // Travel applies movement internally and updates velocity for next tick
@@ -549,6 +585,36 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     }
 
     /// <summary>
+    /// Whether a horizontal collision only glanced us: the angle between the direction the input asked for
+    /// (rotated into world space by yaw) and the movement actually achieved is under 8 degrees.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:1055-1070
+    /// </summary>
+    private static bool IsHorizontalCollisionMinor(Entity entity, Vector3<double> movement)
+    {
+        var yRotRadians = entity.YawPitch.X * 0.017453292f;
+        var yRotSin = Math.Sin(yRotRadians);
+        var yRotCos = Math.Cos(yRotRadians);
+
+        // xxa = strafe impulse, zza = forward impulse (Java's LivingEntity fields).
+        var (xxa, zza) = entity.InputState.Current.GetMoveVector();
+
+        var globalXA = xxa * yRotCos - zza * yRotSin;
+        var globalZA = zza * yRotCos + xxa * yRotSin;
+
+        var aLengthSquared = globalXA * globalXA + globalZA * globalZA;
+        var movementLengthSquared = movement.X * movement.X + movement.Z * movement.Z;
+
+        if (aLengthSquared < 9.999999747378752E-6 || movementLengthSquared < 9.999999747378752E-6)
+        {
+            return false;
+        }
+
+        var dotProduct = globalXA * movement.X + globalZA * movement.Z;
+        var angle = Math.Acos(dotProduct / Math.Sqrt(aLengthSquared * movementLengthSquared));
+        return angle < 0.13962633907794952;
+    }
+
+    /// <summary>
     /// Gets friction-influenced speed based on block friction.
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2549-2551
     /// In Java, getSpeed() returns the MOVEMENT_SPEED attribute value which includes modifiers.
@@ -568,7 +634,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // armour, stat systems, effects or mounts. Hardcoding 0.1 makes the client move at a speed the
             // server has not agreed to, and the server answers by setting the player back.
             double effectiveSpeed = entity.MovementSpeed;
-            if (entity.IsSprinting)
+            if (entity.IsSprinting && !SuppressSprintMultiplier)
             {
                 effectiveSpeed *= (1.0 + PhysicsConstants.SprintSpeedModifier);
             }
@@ -868,6 +934,10 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         bool xCollision = Math.Abs(delta.X - movement.X) > 1.0E-7;
         bool zCollision = Math.Abs(delta.Z - movement.Z) > 1.0E-7;
         entity.HorizontalCollision = xCollision || zCollision;
+
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:799-803
+        entity.MinorHorizontalCollision =
+            entity.HorizontalCollision && IsHorizontalCollisionMinor(entity, movement);
 
         // DEVIATION FROM VANILLA: Force HorizontalCollision on climbable blocks.
         // In vanilla, ladders have hasCollision=false (no collision shape), so the player walks through

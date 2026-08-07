@@ -105,6 +105,14 @@ MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().RandomLooking.Value = 0
 MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().RandomLooking113.Value = 0;
 Console.WriteLine("[harness] anti-cheat aim jitter disabled (RandomLooking + RandomLooking113 = 0)");
 
+// --no-sprint: walk instead of sprint. Halves the per-packet distance, which isolates "is the server
+// rejecting on a per-packet distance threshold" from every other movement hypothesis.
+if (Array.IndexOf(args, "--no-sprint") >= 0)
+{
+    MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().AllowSprint.Value = false;
+    Console.WriteLine("[harness] sprinting disabled (AllowSprint=false)");
+}
+
 // Non-perturbing in-memory movement trace (flushed to the run dir after the run).
 MinecraftProtoNet.Baritone.Utils.MovementDiag.Enabled = true;
 

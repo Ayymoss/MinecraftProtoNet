@@ -138,6 +138,14 @@ public class Entity
     public bool HorizontalCollision { get; set; }
 
     /// <summary>
+    /// Whether the horizontal collision barely deflected us — the angle between where the input asked us to go
+    /// and where we actually moved is under 8 degrees. Vanilla uses this to decide that a collision is too
+    /// glancing to cancel sprinting.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:1055-1070
+    /// </summary>
+    public bool MinorHorizontalCollision { get; set; }
+
+    /// <summary>
     /// Whether the entity is currently submerged in water.
     /// </summary>
     public bool IsInWater { get; set; }
