@@ -1357,11 +1357,13 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             var step = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
             logger.LogInformation(
                 "[MoveSend] type={Type} step={Step:F4} dx={Dx:F4} dy={Dy:F4} dz={Dz:F4} " +
-                "pos=({X:F3},{Y:F3},{Z:F3}) vel=({Vx:F4},{Vy:F4},{Vz:F4}) flags={Flags}",
+                "pos=({X:F3},{Y:F3},{Z:F3}) vel=({Vx:F4},{Vy:F4},{Vz:F4}) flags={Flags} " +
+                "yaw={Yaw:F2} pitch={Pitch:F2} dyaw={DYaw:F2}",
                 move && rot ? "PosRot" : move ? "Pos" : "Rot",
                 step, deltaX, deltaY, deltaZ,
                 entity.Position.X, entity.Position.Y, entity.Position.Z,
-                entity.Velocity.X, entity.Velocity.Y, entity.Velocity.Z, flags);
+                entity.Velocity.X, entity.Velocity.Y, entity.Velocity.Z, flags,
+                packetYaw, packetPitch, deltaYRot);
         }
 
         // Update last sent values
