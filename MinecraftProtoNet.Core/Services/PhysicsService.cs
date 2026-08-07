@@ -631,13 +631,23 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                 effectiveSpeed *= (1.0 + PhysicsConstants.SprintSpeedModifier);
             }
 
-            return (float)(effectiveSpeed * (0.21600002f / (blockFriction * blockFriction * blockFriction)));
+            // Vanilla only applies the friction scaling when the block is actually slippier than default;
+            // otherwise the raw speed is used. Note the comparison is done in double after widening a float,
+            // so a nominal 0.6 block reads as 0.600000023... and DOES take the scaled branch — the guard only
+            // bites for blocks with genuinely lower friction.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2639-2645
+            return (double)blockFriction > 0.6
+                ? (float)(effectiveSpeed * (0.21600002f / (blockFriction * blockFriction * blockFriction)))
+                : (float)effectiveSpeed;
         }
-        else
-        {
-            // Flying speed (0.02 for players)
-            return PhysicsConstants.DefaultFlyingSpeed;
-        }
+
+        // Airborne. Player overrides LivingEntity's flat 0.02 and accelerates faster while sprinting, so a
+        // single constant applies 30% too little air control on every airborne sprint tick — which is exactly
+        // the horizontal-only, velocity-collinear error GrimAC reported on mid-fall ticks.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:1847-1853
+        return entity.IsSprinting
+            ? PhysicsConstants.SprintingFlyingSpeed
+            : PhysicsConstants.DefaultFlyingSpeed;
     }
 
     /// <summary>
@@ -1383,8 +1393,11 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         {
             var step = Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
             logger.LogInformation(
+                // Position at full precision: the server rejects a move whose box overlaps a collider it was
+                // not already overlapping, deflated by only 1e-5, so a sub-millimetre penetration left by our
+                // own collision resolution is invisible at 3 decimal places but is exactly what gets rejected.
                 "[MoveSend] type={Type} step={Step:F4} dx={Dx:F4} dy={Dy:F4} dz={Dz:F4} " +
-                "pos=({X:F3},{Y:F3},{Z:F3}) vel=({Vx:F4},{Vy:F4},{Vz:F4}) flags={Flags} " +
+                "pos=({X:R},{Y:R},{Z:R}) vel=({Vx:F4},{Vy:F4},{Vz:F4}) flags={Flags} " +
                 "yaw={Yaw:F2} pitch={Pitch:F2} dyaw={DYaw:F2}",
                 move && rot ? "PosRot" : move ? "Pos" : "Rot",
                 step, deltaX, deltaY, deltaZ,

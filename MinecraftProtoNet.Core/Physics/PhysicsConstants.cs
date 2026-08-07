@@ -112,6 +112,13 @@ public static class PhysicsConstants
     /// </summary>
     public const float DefaultFlyingSpeed = 0.02f;
 
+    /// <summary>
+    /// Airborne acceleration while sprinting. Player.getFlyingSpeed() overrides LivingEntity's flat 0.02.
+    /// Source: Player.getFlyingSpeed()
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/player/Player.java:1851
+    /// </summary>
+    public const float SprintingFlyingSpeed = 0.025999999f;
+
     // ===== Collisions =====
     
     /// <summary>

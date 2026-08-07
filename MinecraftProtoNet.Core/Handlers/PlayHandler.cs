@@ -175,7 +175,7 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                         var horizontal = Math.Sqrt(dx * dx + dz * dz);
                         logger.LogInformation(
                             "[SetbackDiag] tick={Tick} id={TeleportId} flags={Flags} dx={Dx:F4} dy={Dy:F4} dz={Dz:F4} " +
-                            "dh={Dh:F4} from=({Fx:F3},{Fy:F3},{Fz:F3}) to=({Tx:F3},{Ty:F3},{Tz:F3}) " +
+                            "dh={Dh:F4} from=({Fx:R},{Fy:R},{Fz:R}) to=({Tx:R},{Ty:R},{Tz:R}) " +
                             "priorVel=({Vx:F4},{Vy:F4},{Vz:F4}) newVel=({Nx:F4},{Ny:F4},{Nz:F4}) onGround={OnGround} " +
                             "input=[{Held}] moveSpeed={MoveSpeed:F4}",
                             client.State.Level.ClientTickCounter, playerPositionPacket.TeleportId, flags,
