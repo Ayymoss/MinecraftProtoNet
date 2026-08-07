@@ -181,7 +181,18 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Calculate movement based on travel method
             // Travel applies movement internally and updates velocity for next tick
             var input = ConvertInputToVector3(entity);
+            var yawUsedForMovement = entity.YawPitch.X;
             Travel(entity, level, input);
+
+            // A server that re-simulates the player derives the expected displacement from the rotation in the
+            // movement packet. If anything rewrites the yaw between travel() and the send, we move along one
+            // heading and claim another, and the error scales with speed.
+            if (SetbackDiagEnabled && Math.Abs(entity.YawPitch.X - yawUsedForMovement) > 1.0E-4)
+            {
+                logger.LogWarning(
+                    "[YawSkew] yaw changed between movement and send: moved with {Moved:F2}, sending {Sent:F2} (delta {Delta:F2})",
+                    yawUsedForMovement, entity.YawPitch.X, entity.YawPitch.X - yawUsedForMovement);
+            }
 
             // Send position updates to server
             await SendPositionAsync(entity, packetSender);
