@@ -48,6 +48,21 @@ static string? GuessWebcoreConfigDir()
     }
 }
 
+// A previous run tripped the intercept latch: something moved or froze the bot that it could not explain.
+// Nothing that connects may run until a person has looked and acknowledged.
+if (Array.IndexOf(args, "--ack-intercept") >= 0)
+{
+    InterceptGuard.Acknowledge();
+}
+else if (InterceptGuard.IsHalted())
+{
+    Console.Error.WriteLine("[harness] REFUSING TO CONNECT — a possible admin intercept is unacknowledged.");
+    Console.Error.WriteLine($"[harness] Read {InterceptGuard.HaltFilePath}, then re-run with --ack-intercept.");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine(InterceptGuard.ReadNotice());
+    return 3;
+}
+
 // --recon runs a read-only visit to a public server instead of a scenario: no world edits, no pathing, no
 // teleports (none of which we could do there anyway). It shares only auth + connection with the scenario path.
 var reconName = GetArg("--recon");
@@ -238,6 +253,7 @@ if (GetArg("--menu") is { } menuName)
     for (var i = 0; i < args.Length - 1; i++)
     {
         if (args[i] == "--click") menuSteps.Add(new MenuStep(MenuStepKind.Click, args[i + 1]));
+        else if (args[i] == "--right-click") menuSteps.Add(new MenuStep(MenuStepKind.RightClick, args[i + 1]));
         else if (args[i] == "--sign") menuSteps.Add(new MenuStep(MenuStepKind.Sign, args[i + 1]));
     }
 
@@ -319,7 +335,8 @@ if (Array.IndexOf(args, "--flip") >= 0)
         MaxUnitPrice: double.TryParse(GetArg("--max-price"), out var maxPrice) ? maxPrice : 3000,
         ForceProduct: GetArg("--product"),
         MonitorMinutes: int.TryParse(GetArg("--monitor-min"), out var monitorMin) ? monitorMin : 30,
-        PollSeconds: int.TryParse(GetArg("--poll-sec"), out var pollSec) ? pollSec : 30);
+        PollSeconds: int.TryParse(GetArg("--poll-sec"), out var pollSec) ? pollSec : 30,
+        MinHubPlayers: int.TryParse(GetArg("--min-hub-players"), out var minHubPlayers) ? minHubPlayers : 20);
 
     Console.WriteLine($"[flip] {apiBase} | hub {flipOptions.HubNumber} | qty {flipOptions.Quantity} | " +
                       $"max unit price {flipOptions.MaxUnitPrice} | monitor {flipOptions.MonitorMinutes}min");

@@ -80,6 +80,7 @@ public sealed record MenuStep(MenuStepKind Kind, string Value);
 public enum MenuStepKind
 {
     Click,
+    RightClick,
     Sign
 }
 
@@ -203,7 +204,7 @@ public sealed class MenuReconTask(
             // NPC's real position is known.
             await ApproachNpcAsync(npc);
 
-            if (!await OpenNpcMenuAsync(npc)) { Log("no menu opened after interacting"); return false; }
+            if (!await OpenNpcMenuAsync(npc, profile.NpcName)) { Log("no menu opened after interacting"); return false; }
 
             // The open event fires on the OpenScreen packet, which carries only the title — the items arrive
             // afterwards in Set Container Content. Capturing on the event alone records an empty menu.
@@ -216,6 +217,7 @@ public sealed class MenuReconTask(
                 var ok = step.Kind switch
                 {
                     MenuStepKind.Click => await ClickByNameAsync(step.Value),
+                    MenuStepKind.RightClick => await ClickByNameAsync(step.Value, button: 1),
                     MenuStepKind.Sign => await AnswerSignAsync(step.Value),
                     _ => false
                 };
@@ -434,10 +436,20 @@ public sealed class MenuReconTask(
     /// Interact, which is the pair the real client sends and what server-side reach checks expect.
     /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java
     /// </summary>
-    private async Task<bool> OpenNpcMenuAsync(WorldEntity npc)
+    private async Task<bool> OpenNpcMenuAsync(WorldEntity npc, string expectedTitle)
     {
         for (var attempt = 1; attempt <= 3; attempt++)
         {
+            // SkyBlock hands the player a menu item and Baritone right-clicks while pathing, so the "Game
+            // Menu" is often already open by the time we reach an NPC. An interact never re-fires "opened"
+            // over an open container, so without closing first this reads the wrong menu entirely.
+            if (containers.IsContainerOpen)
+            {
+                Log($"closing a stale \"{CleanTitle(containers.CurrentContainer!)}\" before interacting");
+                await containers.CloseContainerAsync();
+                await Task.Delay(600);
+            }
+
             await AimAtAsync(npc);
             await Task.Delay(400);
 
@@ -449,20 +461,41 @@ public sealed class MenuReconTask(
 
             // One packet, not the old InteractAt+Interact pair: 26.x carries the hit location in the single
             // Interact packet. Location is relative to the NPC's own position.
-            if (await containers.InteractWithEntityAsync(
-                    npc.EntityId,
-                    Hand.MainHand,
-                    new Vector3<double>(0, target.Y - npc.Position.Y, 0)))
+            var opened = await containers.InteractWithEntityAsync(
+                npc.EntityId,
+                Hand.MainHand,
+                new Vector3<double>(0, target.Y - npc.Position.Y, 0));
+
+            if ((opened || containers.IsContainerOpen) && await WaitForMenuContentAsync(TimeSpan.FromSeconds(6)))
             {
-                return true;
+                var title = CleanTitle(containers.CurrentContainer!);
+                if (title.Contains(expectedTitle, StringComparison.OrdinalIgnoreCase)) return true;
+                Log($"opened \"{title}\" but wanted \"{expectedTitle}\" (attempt {attempt})");
+            }
+            else
+            {
+                Log("no menu yet; retrying");
             }
 
-            // A container that was already open when the interact landed never fires "opened" again.
-            if (containers.IsContainerOpen) return true;
-            Log("no menu yet; retrying");
             await Task.Delay(1000);
         }
         return false;
+    }
+
+    /// <summary>Switches to an empty hotbar slot so a stray right-click while pathing uses nothing.</summary>
+    private async Task SelectEmptyHotbarSlotAsync()
+    {
+        var entity = client.State.LocalPlayer?.Entity;
+        if (entity is null) return;
+
+        for (short hotbar = 0; hotbar <= 8; hotbar++)
+        {
+            if (!entity.Inventory.GetSlot((short)(hotbar + 36)).IsEmpty) continue;
+            await client.SendPacketAsync(new SetCarriedItemPacket { Slot = hotbar });
+            entity.Inventory.HeldSlot = hotbar;
+            Log($"holding empty hotbar slot {hotbar}");
+            return;
+        }
     }
 
     private async Task AimAtAsync(WorldEntity npc)
@@ -487,7 +520,7 @@ public sealed class MenuReconTask(
 
     // ===== Clicking =====
 
-    private async Task<bool> ClickByNameAsync(string wanted)
+    private async Task<bool> ClickByNameAsync(string wanted, sbyte button = 0)
     {
         var container = containers.CurrentContainer;
         if (container is null || !container.IsOpen)
@@ -529,8 +562,8 @@ public sealed class MenuReconTask(
         }
 
         var signature = SignatureOf(container);
-        Log($"clicking slot [{match.Index}] \"{match.Name}\" (matched \"{wanted}\")");
-        await containers.ClickSlotAsync(match.Index);
+        Log($"{(button == 1 ? "right-clicking" : "clicking")} slot [{match.Index}] \"{match.Name}\" (matched \"{wanted}\")");
+        await containers.ClickSlotAsync(match.Index, ClickContainerMode.Pickup, button);
 
         var changed = await WaitForMenuChangeAsync(signature, TimeSpan.FromSeconds(6));
         if (!changed)

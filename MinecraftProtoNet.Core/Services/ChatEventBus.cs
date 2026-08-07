@@ -10,9 +10,15 @@ namespace MinecraftProtoNet.Core.Services;
 public sealed class ChatEventBus : IChatEventBus
 {
     public event Action<SystemChatEventArgs>? OnSystemChat;
+    public event Action<ScreenTextEventArgs>? OnScreenText;
 
     public void PublishSystemChat(NbtTag tags, bool overlay, string? translateKey, List<string> textParts)
     {
         OnSystemChat?.Invoke(new SystemChatEventArgs(tags, overlay, translateKey, textParts));
+    }
+
+    public void PublishScreenText(ScreenTextKind kind, string text)
+    {
+        OnScreenText?.Invoke(new ScreenTextEventArgs(kind, text));
     }
 }

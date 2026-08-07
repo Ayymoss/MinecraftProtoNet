@@ -34,6 +34,13 @@ public sealed class BazaarSession(
     Action<string> log)
 {
     private readonly List<string> _chatLog = [];
+
+    /// <summary>
+    /// Title/subtitle/action-bar text, kept separately from chat. It never lands in a chat log, so if staff
+    /// address the bot this way it would otherwise vanish — and it is the first thing worth reading after an
+    /// intercept.
+    /// </summary>
+    private readonly List<string> _screenText = [];
     private readonly System.Collections.Concurrent.ConcurrentQueue<SignEditorEventArgs> _signPrompts = new();
     private WorldEntity? _npc;
     private bool _subscribed;
@@ -67,11 +74,16 @@ public sealed class BazaarSession(
         get { lock (_chatLog) return _chatLog.Count; }
     }
 
+    private CancellationTokenSource? _watchdog;
+
     public void Subscribe()
     {
         if (_subscribed) return;
         chatBus.OnSystemChat += OnChat;
+        chatBus.OnScreenText += OnScreenText;
         signBus.OnSignEditorOpened += OnSign;
+        _watchdog = new CancellationTokenSource();
+        _ = WatchForUnexpectedTeleportsAsync(_watchdog.Token);
         _subscribed = true;
     }
 
@@ -79,7 +91,11 @@ public sealed class BazaarSession(
     {
         if (!_subscribed) return;
         chatBus.OnSystemChat -= OnChat;
+        chatBus.OnScreenText -= OnScreenText;
         signBus.OnSignEditorOpened -= OnSign;
+        _watchdog?.Cancel();
+        _watchdog?.Dispose();
+        _watchdog = null;
         _subscribed = false;
     }
 
@@ -95,6 +111,246 @@ public sealed class BazaarSession(
         {
             if (_chatLog.Count < 20000) _chatLog.Add(line);
         }
+
+        NoteIfOutage(line);
+        NoteIfRestart(line);
+        NoteIfIntercepted(line);
+    }
+
+    /// <summary>
+    /// True once something happened that a human has to look at. The caller stops trading and disconnects; the
+    /// latch on disk is what stops the next run from reconnecting.
+    /// </summary>
+    public bool Intercepted { get; private set; }
+
+    /// <summary>
+    /// Set while a relocation is EXPECTED — clicking a hub, sending /hub, or being evacuated. Any large jump
+    /// outside one of those windows was not our doing.
+    /// </summary>
+    public bool ExpectRelocation { get; set; }
+
+    private static readonly string[] InterceptPhrases =
+    [
+        // Being frozen for a check, and the usual staff vocabulary around it.
+        "frozen", "freeze", "do not log out", "don't log out", "under investigation", "being investigated",
+        "staff member", "an admin", "[admin]", "watchdog has", "you have been banned", "you are banned",
+        "temporarily banned", "punishment", "appeal"
+    ];
+
+    private void NoteIfIntercepted(string line)
+    {
+        if (Intercepted) return;
+
+        var lower = line.ToLowerInvariant();
+        var phrase = InterceptPhrases.FirstOrDefault(p => lower.Contains(p));
+        if (phrase is null) return;
+
+        RaiseIntercept("staff/ban language in chat", $"matched \"{phrase}\" in: {line}");
+    }
+
+    /// <summary>
+    /// Trips the latch: writes the notice, stops the bot moving, and marks the session so the caller bails out.
+    /// Deliberately one-way — nothing in the bot clears it.
+    /// </summary>
+    public void RaiseIntercept(string reason, string details)
+    {
+        if (Intercepted) return;
+        Intercepted = true;
+
+        var pos = client.State.LocalPlayer?.Entity?.Position;
+        var position = pos is null ? null : $"({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1})";
+
+        log($"!!!! INTERCEPT: {reason} — {details}");
+        log("!!!! disconnecting and halting; a human must acknowledge before the bot runs again");
+
+        StopMoving();
+
+        // Both streams go into the notice: what was said in chat, and what was painted on the screen.
+        var context = new List<string>();
+        var screen = ScreenTextSnapshot();
+        if (screen.Count > 0)
+        {
+            context.Add("--- on-screen text (titles / subtitles / action bar) ---");
+            context.AddRange(screen.TakeLast(25));
+            context.Add("");
+        }
+        context.Add("--- chat ---");
+        context.AddRange(ChatSnapshot().TakeLast(40));
+
+        InterceptGuard.Raise(reason, details, position, context);
+    }
+
+    /// <summary>
+    /// Watches for teleports nobody asked for. Hypixel moves players around legitimately (hub switches,
+    /// evacuations, our own /hub), so those windows are flagged by <see cref="ExpectRelocation"/>; anything
+    /// else that throws the bot 20+ blocks in a second is someone else's hand.
+    /// </summary>
+    private async Task WatchForUnexpectedTeleportsAsync(CancellationToken ct)
+    {
+        Vector3<double>? last = null;
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(1000, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (Intercepted) return;
+            if (!client.IsConnected) { last = null; continue; }
+
+            var pos = client.State.LocalPlayer?.Entity?.Position;
+            if (pos is null) { last = null; continue; }
+
+            if (last is not null && !ExpectRelocation && !Evacuated && RestartWarningAt is null)
+            {
+                var jump = Dist(pos, last);
+                // Sprinting tops out near 7 blocks/s, so 20 in a second cannot be movement we produced.
+                if (jump > 20)
+                {
+                    RaiseIntercept("unexplained teleport",
+                        $"moved {jump:F1} blocks in ~1s to ({pos.X:F1},{pos.Y:F1},{pos.Z:F1}) with no hub switch, " +
+                        "/hub or evacuation in flight");
+                    return;
+                }
+            }
+
+            last = pos;
+        }
+    }
+
+    /// <summary>
+    /// Set by "This server will restart soon" / "You have 60 seconds to warp out!". A hub that is about to
+    /// reboot will evacuate everyone to their island, so this is 60 seconds of warning to be somewhere else.
+    /// </summary>
+    public DateTime? RestartWarningAt { get; private set; }
+
+    /// <summary>
+    /// Set by "Evacuating to Your Island...". The island is dangerous ground for a bot: it spawns in the air
+    /// over a void and falling is fatal, so nothing may move while this is set.
+    /// </summary>
+    public bool Evacuated { get; private set; }
+
+    public void ClearRestartState()
+    {
+        RestartWarningAt = null;
+        Evacuated = false;
+    }
+
+    private void NoteIfRestart(string line)
+    {
+        if (line.Contains("restart soon", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("warp out", StringComparison.OrdinalIgnoreCase))
+        {
+            if (RestartWarningAt is null)
+            {
+                RestartWarningAt = DateTime.UtcNow;
+                log($"!! SERVER RESTART WARNING: {line}");
+            }
+            return;
+        }
+
+        if (line.Contains("Evacuating to Your Island", StringComparison.OrdinalIgnoreCase))
+        {
+            Evacuated = true;
+            log($"!! EVACUATED TO ISLAND: {line} — freezing all movement");
+            StopMoving();
+        }
+    }
+
+    /// <summary>
+    /// Drops every movement input and cancels pathing. Used the moment an evacuation is seen: the bot lands on
+    /// its island somewhere it did not choose, and a pathfinder that starts walking there can walk it off the
+    /// edge.
+    /// </summary>
+    public void StopMoving()
+    {
+        try
+        {
+            baritoneProvider.CreateBaritone(client).GetPathingBehavior().CancelEverything();
+        }
+        catch
+        {
+            // Cancelling is best-effort; the input clear below is what actually keeps the bot still.
+        }
+
+        // Input is immutable per tick, so releasing everything means installing the empty one.
+        if (client.State.LocalPlayer?.Entity is { } entity)
+        {
+            entity.InputState.Current = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Set when the server says the Bazaar is unavailable — SkyBlock disables it when a hub is under load.
+    /// Cleared by <see cref="ClearOutage"/> once the caller has moved somewhere else.
+    /// </summary>
+    public string? OutageNotice { get; private set; }
+
+    public void ClearOutage() => OutageNotice = null;
+
+    /// <summary>
+    /// Recognises an outage without needing Hypixel's exact wording, which we have not observed yet and which
+    /// they are free to change: a line that mentions the Bazaar (or a trade verb) alongside language about
+    /// being off, busy or postponed. Deliberately broad — a false positive costs one hub hop, a false negative
+    /// costs a bot that keeps clicking a dead menu.
+    /// </summary>
+    private void NoteIfOutage(string line)
+    {
+        if (OutageNotice is not null) return;
+
+        var lower = line.ToLowerInvariant();
+        var mentionsBazaar = lower.Contains("bazaar") || lower.Contains("buy order") || lower.Contains("sell offer");
+        if (!mentionsBazaar) return;
+
+        string[] outageWords =
+        [
+            "disabled", "unavailable", "temporarily", "currently closed", "is closed", "try again",
+            "too busy", "high load", "server load", "overloaded", "maintenance", "not available", "failed"
+        ];
+
+        var hit = outageWords.FirstOrDefault(w => lower.Contains(w));
+        if (hit is null) return;
+
+        OutageNotice = line;
+        log($"!! BAZAAR OUTAGE NOTICE (matched \"{hit}\"): {line}");
+    }
+
+    private void OnScreenText(ScreenTextEventArgs e)
+    {
+        var text = ItemTextHelper.StripFormattingCodes(e.Text).Trim();
+        if (text.Length == 0) return;
+
+        // SkyBlock paints stats and pickup spam here constantly; keep the rest.
+        if (text.Contains("Mana") && text.Contains("/")) return;
+
+        var stamped = $"[{e.Kind}] {text}";
+        lock (_screenText)
+        {
+            if (_screenText.Count < 5000) _screenText.Add(stamped);
+        }
+
+        log($"screen text {stamped}");
+
+        // A book or a dialog is never something this bot asked for. We cannot answer a challenge we have not
+        // seen before — and guessing at one would be worse than stopping — so the response is to keep the
+        // evidence and hand it to a human.
+        if (e.Kind is ScreenTextKind.Book or ScreenTextKind.Dialog)
+        {
+            RaiseIntercept($"unsolicited {e.Kind.ToString().ToLowerInvariant()}",
+                "the server pushed a screen the bot never requested; payload preserved in the screen-text dump above");
+            return;
+        }
+
+        NoteIfIntercepted(stamped);
+    }
+
+    public List<string> ScreenTextSnapshot()
+    {
+        lock (_screenText) return [.. _screenText];
     }
 
     private Task OnSign(SignEditorEventArgs e)
@@ -141,6 +397,16 @@ public sealed class BazaarSession(
 
     public async Task SendCommandAsync(string command)
     {
+        // A warp command is a relocation we asked for; give the watchdog a window so it does not read the
+        // resulting teleport as somebody else moving us.
+        if (command.StartsWith("hub", StringComparison.OrdinalIgnoreCase)
+            || command.StartsWith("skyblock", StringComparison.OrdinalIgnoreCase)
+            || command.StartsWith("warp", StringComparison.OrdinalIgnoreCase))
+        {
+            ExpectRelocation = true;
+            _ = Task.Delay(TimeSpan.FromSeconds(25)).ContinueWith(_ => ExpectRelocation = false);
+        }
+
         IServerboundPacket packet = new ChatCommandPacket(command);
         if (client.State.ServerSettings.EnforcesSecureChat && client.AuthResult is not null)
         {
@@ -156,6 +422,7 @@ public sealed class BazaarSession(
 
     public async Task<bool> WalkToAsync((int X, int Y, int Z) goal, int timeoutSec)
     {
+        // Pathing produces continuous movement, never a jump, so the watchdog stays armed while walking.
         var baritone = baritoneProvider.CreateBaritone(client);
         log($"pathing to ({goal.X},{goal.Y},{goal.Z}), timeout {timeoutSec}s");
         baritone.GetCustomGoalProcess().SetGoalAndPath(new GoalNear(goal.X, goal.Y, goal.Z, 3));
@@ -348,7 +615,7 @@ public sealed class BazaarSession(
     /// match so "Buy Order" does not hit "Cancel Buy Order". Returns false if nothing matched, listing what
     /// was there — a name miss is the usual cause of a stalled chain.
     /// </summary>
-    public async Task<bool> ClickAsync(string wanted, bool waitForChange = true)
+    public async Task<bool> ClickAsync(string wanted, bool waitForChange = true, sbyte button = 0)
     {
         var container = containers.CurrentContainer;
         if (container is null || !container.IsOpen)
@@ -375,9 +642,14 @@ public sealed class BazaarSession(
             return false;
         }
 
+        // Let the window settle before touching it. A click carries the container's StateId, and Hypixel
+        // closes the GUI outright when that is stale — which is what a click sent ~1s after the menu opened,
+        // while contents were still arriving, actually did.
+        await Task.Delay(350);
+
         var signature = SignatureOf(container);
-        log($"click [{match.Index}] \"{match.Name}\"");
-        await containers.ClickSlotAsync(match.Index);
+        log($"{(button == 1 ? "right-click" : "click")} [{match.Index}] \"{match.Name}\"");
+        await containers.ClickSlotAsync(match.Index, ClickContainerMode.Pickup, button);
 
         if (!waitForChange) return true;
 

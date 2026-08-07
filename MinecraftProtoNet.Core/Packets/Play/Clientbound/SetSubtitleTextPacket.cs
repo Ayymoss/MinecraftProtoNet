@@ -12,8 +12,11 @@ namespace MinecraftProtoNet.Core.Packets.Play.Clientbound;
 [Packet(0x70, ProtocolState.Play, silent: true)]
 public class SetSubtitleTextPacket : IClientboundPacket
 {
+    /// <summary>Plain text of the component, formatting codes stripped by the reader.</summary>
+    public string Text { get; set; } = string.Empty;
+
     public void Deserialize(ref PacketBufferReader buffer)
     {
-        // Component (JSON chat) — variable length, not needed by the bot
+        Text = buffer.ReadChatComponent();
     }
 }
