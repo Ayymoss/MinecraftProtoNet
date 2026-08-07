@@ -52,15 +52,23 @@ public static class ItemTextHelper
 
         var loreLines = new List<string>();
 
-        if (loreComponent?.Data is NbtList list)
+        // The component is a LIST of text components, and Slot.ReadNbtList hands it back as object?[] — each
+        // element its own NbtTag. Only matching NbtList here silently produced empty lore everywhere, which on
+        // Hypixel means no prices, no stats and no "Click to..." hints.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/item/component/ItemLore.java:48
+        IEnumerable<NbtTag?> entries = loreComponent?.Data switch
         {
-            foreach (var item in list.Value)
+            object?[] array => array.Select(x => x as NbtTag),
+            NbtList list => list.Value.Cast<NbtTag?>(),
+            _ => []
+        };
+
+        foreach (var entry in entries)
+        {
+            var text = FormatTextComponent(entry);
+            if (!string.IsNullOrEmpty(text))
             {
-                var text = FormatTextComponent(item);
-                if (!string.IsNullOrEmpty(text))
-                {
-                    loreLines.Add(text);
-                }
+                loreLines.Add(text);
             }
         }
 

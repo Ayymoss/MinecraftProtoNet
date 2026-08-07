@@ -164,8 +164,8 @@ public partial class EntityList
         await Bot.Client.SendPacketAsync(new InteractPacket
         {
             EntityId = entity.EntityId,
-            Type = InteractType.Interact,
             Hand = Hand.MainHand,
+            Location = new Vector3<double>(0, 1.0, 0),
             SneakKeyPressed = localEntity.IsSneaking
         });
 

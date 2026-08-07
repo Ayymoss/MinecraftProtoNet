@@ -55,7 +55,7 @@ public class ContainerManager : IContainerManager
     public event Action<ContainerState>? OnContainerOpened;
     public event Action? OnContainerClosed;
 
-    public async Task<bool> InteractWithEntityAsync(int entityId, Hand hand = Hand.MainHand)
+    public async Task<bool> InteractWithEntityAsync(int entityId, Hand hand = Hand.MainHand, Models.Core.Vector3<double>? location = null)
     {
         if (!_state.LocalPlayer.HasEntity)
         {
@@ -65,11 +65,14 @@ public class ContainerManager : IContainerManager
 
         _containerOpenWaiter = new TaskCompletionSource<ContainerState>();
 
+        // Location is the click point relative to the entity's position; 1 block up is inside the hitbox of
+        // anything player-shaped, which is what a server's reach check looks at.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:429
         var interactPacket = new InteractPacket
         {
             EntityId = entityId,
-            Type = InteractType.Interact,
             Hand = hand,
+            Location = location ?? new Models.Core.Vector3<double>(0, 1.0, 0),
             SneakKeyPressed = _state.LocalPlayer.Entity.IsSneaking
         };
 

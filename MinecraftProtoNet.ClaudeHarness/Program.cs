@@ -18,6 +18,16 @@ string? GetArg(string name)
     return null;
 }
 
+// Repeatable flags: --click "A" --click "B" is an ordered chain, not a last-one-wins setting.
+List<string> GetArgs(string name)
+{
+    var values = new List<string>();
+    for (int i = 0; i < args.Length - 1; i++)
+        if (args[i] == name)
+            values.Add(args[i + 1]);
+    return values;
+}
+
 // Locate Webcore's Configuration dir (active-account.json + MSAL cache) so the harness reuses its login.
 // Harness bin is <sln>/MinecraftProtoNet.ClaudeHarness/bin/<Cfg>/<tfm>; mirror <Cfg>/<tfm> for Bot.Webcore.
 static string? GuessWebcoreConfigDir()
@@ -201,6 +211,49 @@ if (reconProfile is not null)
 
     Console.WriteLine($"[recon] DONE ok={reconOk}");
     return reconOk ? 0 : 1;
+}
+
+// --menu <profile>: walk to a named NPC on a public server, right-click it, and dump the menu tree it opens.
+// Recon, like --recon, but for container UIs rather than entities: it only clicks slots named with --click,
+// and refuses any slot that looks like it commits a trade.
+if (GetArg("--menu") is { } menuName)
+{
+    if (!MenuProfile.All.TryGetValue(menuName, out var menuProfile))
+    {
+        Console.Error.WriteLine($"[menu] Unknown menu profile '{menuName}'. Known: {string.Join(", ", MenuProfile.All.Keys)}");
+        return 2;
+    }
+
+    if (GetArg("--server") is { } menuServer) menuProfile = menuProfile with { Server = menuServer };
+    if (GetArg("--port") is { } menuPortStr && int.TryParse(menuPortStr, out var menuPort)) menuProfile = menuProfile with { Port = menuPort };
+    if (GetArg("--npc") is { } npcOverride) menuProfile = menuProfile with { NpcName = npcOverride };
+
+    var slnDirForMenu = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Parent?.Parent?.Parent;
+    var menuOutRoot = GetArg("--out")
+        ?? Path.Combine(slnDirForMenu?.FullName ?? AppContext.BaseDirectory, "_ServerReferences");
+
+    var menuTask = new MenuReconTask(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        menuOutRoot);
+
+    bool menuOk;
+    try
+    {
+        menuOk = await menuTask.RunAsync(menuProfile, GetArgs("--click"));
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[menu] EXCEPTION: {ex}");
+        menuOk = false;
+    }
+
+    try { await gameLoop.StopAsync(); } catch { /* best-effort */ }
+    Console.WriteLine($"[menu] DONE ok={menuOk}");
+    return menuOk ? 0 : 1;
 }
 
 var runDir = Path.Combine(AppContext.BaseDirectory, "runs", $"{scenario.Name}-{DateTime.Now:yyyyMMdd-HHmmss}");

@@ -24,8 +24,9 @@ public interface IContainerManager
     /// </summary>
     /// <param name="entityId">The entity ID to interact with.</param>
     /// <param name="hand">Which hand to use for interaction.</param>
+    /// <param name="location">Click point relative to the entity's position; defaults to 1 block above it.</param>
     /// <returns>True if a container was opened within timeout, false otherwise.</returns>
-    Task<bool> InteractWithEntityAsync(int entityId, Hand hand = Hand.MainHand);
+    Task<bool> InteractWithEntityAsync(int entityId, Hand hand = Hand.MainHand, Models.Core.Vector3<double>? location = null);
 
     /// <summary>
     /// Clicks a slot in the current container.

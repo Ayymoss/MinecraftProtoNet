@@ -421,11 +421,15 @@ public class InteractionManager : IInteractionManager
                 Flags = MovementFlags.None
             });
 
+            // The hit location is relative to the target's position, as vanilla sends it. We do not keep the
+            // exact ray hit here, so the aim point used for the look above — mid-height on the entity — stands
+            // in for it; that is inside the hitbox, which is what the server validates.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:429
             await _client.SendPacketAsync(new InteractPacket
             {
                 EntityId = targetEntity.EntityId,
-                Type = InteractType.Interact,
                 Hand = hand,
+                Location = new Vector3<double>(0, 1.0, 0),
                 SneakKeyPressed = entity.IsSneaking
             });
             await _client.SendPacketAsync(new SwingPacket { Hand = hand });
@@ -494,12 +498,9 @@ public class InteractionManager : IInteractionManager
             Flags = MovementFlags.None
         });
 
-        await _client.SendPacketAsync(new InteractPacket
-        {
-            EntityId = target.EntityId,
-            Type = InteractType.Attack,
-            SneakKeyPressed = entity.IsSneaking
-        });
+        // Attacking is its own packet in 26.x and carries only the target id.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:414
+        await _client.SendPacketAsync(new AttackPacket { EntityId = target.EntityId });
         await _client.SendPacketAsync(new SwingPacket { Hand = Hand.MainHand });
     }
 
