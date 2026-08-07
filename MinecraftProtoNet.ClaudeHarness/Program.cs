@@ -224,7 +224,8 @@ var controller = new RunController(
 RunOutcome outcome;
 try
 {
-    outcome = await controller.RunAsync(scenario, runDir, diagPos, clearCourse, buildOnly, settleSec);
+    outcome = await controller.RunAsync(scenario, runDir, diagPos, clearCourse, buildOnly, settleSec,
+        probeDecode: Array.IndexOf(args, "--probe-decode") >= 0);
 }
 catch (Exception ex)
 {

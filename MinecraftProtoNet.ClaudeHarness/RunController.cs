@@ -26,7 +26,72 @@ public sealed class RunController(
 {
     private static void Log(string msg) => Console.WriteLine($"[harness] {msg}");
 
-    public async Task<RunOutcome> RunAsync(Scenario scenario, string runDir, (int X, int Y, int Z)? diagPos = null, bool clearCourse = false, bool buildOnly = false, int settleSec = 0)
+    /// <summary>
+    /// Places known block-state variants and reads them back through our own world model.
+    ///
+    /// Ground truth for the palette/property decode: if a slab placed as <c>type=top</c> comes back as
+    /// <c>type=bottom</c>, our collision surface for it is half a block low, which is exactly the kind of
+    /// silent disagreement that makes a server reject a descent.
+    /// </summary>
+    private async Task ProbeBlockDecodeAsync(Scenario scenario)
+    {
+        // Scratch column well above the course so nothing real is disturbed.
+        var (bx, by, bz) = (scenario.Start.X + 6, scenario.Start.Y + 6, scenario.Start.Z + 6);
+
+        var cases = new (string Block, string Expect)[]
+        {
+            ("minecraft:stone_brick_slab[type=top,waterlogged=false]",        "type=top"),
+            ("minecraft:stone_brick_slab[type=bottom,waterlogged=false]",     "type=bottom"),
+            ("minecraft:stone_brick_slab[type=double,waterlogged=false]",     "type=double"),
+            ("minecraft:cobbled_deepslate_slab[type=top,waterlogged=false]",  "type=top"),
+            ("minecraft:stone_brick_stairs[facing=west,half=top,shape=straight,waterlogged=false]", "half=top"),
+            ("minecraft:stone_brick_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]", "half=bottom"),
+        };
+
+        // Clear first so a stale block cannot be mistaken for a correct decode.
+        for (var i = 0; i < cases.Length; i++)
+        {
+            await SendCommandAsync($"setblock {bx + i * 2} {by} {bz} minecraft:air replace");
+        }
+        await Task.Delay(500);
+
+        for (var i = 0; i < cases.Length; i++)
+        {
+            await SendCommandAsync($"setblock {bx + i * 2} {by} {bz} {cases[i].Block} replace");
+        }
+        await Task.Delay(1500);
+
+        Log("block-decode probe (placed -> decoded):");
+        var failures = 0;
+        for (var i = 0; i < cases.Length; i++)
+        {
+            var x = bx + i * 2;
+            var state = client.State.Level.GetBlockAt(x, by, bz);
+            if (state is null)
+            {
+                Log($"  FAIL {cases[i].Block} -> <null> (chunk not loaded?)");
+                failures++;
+                continue;
+            }
+
+            var props = state.Properties.Count == 0
+                ? "{}"
+                : "{" + string.Join(",", state.Properties.Select(p => $"{p.Key}={p.Value}")) + "}";
+            var shape = MinecraftProtoNet.Core.Physics.BlockShapeRegistry.Shared.GetShape(state);
+            var top = shape.IsEmpty() ? "none" : shape.ToAABBs().Max(b => b.MaxY).ToString("F2");
+            var ok = props.Contains(cases[i].Expect, StringComparison.Ordinal);
+            if (!ok) failures++;
+
+            Log($"  {(ok ? "ok  " : "FAIL")} {cases[i].Block}");
+            Log($"       -> {state.Name}#{state.Id}{props} collisionTop={top}");
+        }
+
+        Log(failures == 0
+            ? "block-decode probe: ALL CORRECT — palette/property decode is not the problem"
+            : $"block-decode probe: {failures} MISMATCH(ES) — decode is wrong");
+    }
+
+    public async Task<RunOutcome> RunAsync(Scenario scenario, string runDir, (int X, int Y, int Z)? diagPos = null, bool clearCourse = false, bool buildOnly = false, int settleSec = 0, bool probeDecode = false)
     {
         Log($"scenario={scenario.Name} server={scenario.Server}:{scenario.Port} start={scenario.Start} end={scenario.End}");
 
@@ -62,6 +127,13 @@ public sealed class RunController(
             {
                 Log($"scenario '{scenario.Name}' has no BuildCommands; nothing to build");
             }
+            await TeardownAsync();
+            return RunOutcome.Success;
+        }
+
+        if (probeDecode)
+        {
+            await ProbeBlockDecodeAsync(scenario);
             await TeardownAsync();
             return RunOutcome.Success;
         }
