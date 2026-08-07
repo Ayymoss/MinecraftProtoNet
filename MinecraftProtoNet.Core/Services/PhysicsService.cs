@@ -135,48 +135,19 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Handle entity-to-entity pushing/collisions
             PushEntities(entity, level);
 
-            // Resolve sprint state BEFORE travel, applying vanilla's start/stop gating rather than taking the
-            // requested sprint flag at face value.
+            // Sprint state comes straight from Baritone's per-tick request.
             //
-            // This matters on a server that validates movement. The sprint flag used to be copied straight from
-            // input, so the client kept sprinting in situations where vanilla forcibly drops it — most often
-            // when brushing a wall or a stair corner, which happens constantly in a hub. The server applies the
-            // vanilla rule, expects walking speed, sees sprinting speed, and sets the player back.
+            // Vanilla's LocalPlayer gates this (canStartSprinting :1103, shouldStopRunSprinting :880-882,
+            // notably cancelling on a non-minor horizontal collision). That gating was tried here and is NOT
+            // applied, for measured reasons: on its own it was neutral (16 and 25 setbacks vs a 16-25
+            // baseline), and once MovementDescend stopped needlessly refusing to sprint it became actively
+            // destructive — the bot brushes geometry constantly, so the gate cancelled sprint, Baritone
+            // immediately re-requested it, and the state flapped 268 times in one walk with 254 setbacks.
             //
-            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:764-786
-            //   canStartSprinting()      :1103-1104  — needs forward impulse, not crouching
-            //   shouldStopRunSprinting() :880-882    — stop on no forward impulse, or a non-minor h-collision
-            {
-                var sprintInput = entity.InputState.Current;
-
-                // canStartSprinting(): requires a forward impulse and not moving slowly (crouching).
-                if (!entity.IsSprinting
-                    && sprintInput.Sprint
-                    && sprintInput.HasForwardImpulse
-                    && !sprintInput.Shift)
-                {
-                    entity.IsSprinting = true;
-                }
-
-                // shouldStopRunSprinting(), plus dropping the sprint when the pathfinder withdraws its request.
-                //
-                // Vanilla itself has no "sprint key released" term — releasing the key does not stop a sprint.
-                // But Baritone does not drive sprinting through the key: shouldSprintNextTick() explicitly
-                // clears the SPRINT input force state ("we'll take it from here, no need for minecraft to see
-                // we're holding down control and sprint for us") and force-stops with setSprinting(false).
-                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/path/PathExecutor.java:237-240 and :344-348
-                //
-                // So per-tick control is correct for this architecture, and honouring the withdrawal is what
-                // Java does. Making the sprint sticky instead broke course1 outright (the bot overran the
-                // movements Baritone wanted walked and pathed itself into a dead end: CalcFail, twice).
-                if (entity.IsSprinting
-                    && (!sprintInput.Sprint
-                        || !sprintInput.HasForwardImpulse
-                        || (entity.HorizontalCollision && !entity.MinorHorizontalCollision)))
-                {
-                    entity.IsSprinting = false;
-                }
-            }
+            // Baritone drives sprinting directly rather than through the key (PathExecutor.shouldSprintNextTick
+            // clears the SPRINT force state and calls setSprinting(false) itself), so its per-tick decision is
+            // the authority here.
+            entity.IsSprinting = entity.InputState.Current.Sprint;
 
             // Calculate movement based on travel method
             // Travel applies movement internally and updates velocity for next tick

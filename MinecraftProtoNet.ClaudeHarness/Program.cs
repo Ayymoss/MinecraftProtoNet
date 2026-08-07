@@ -188,6 +188,17 @@ if (reconProfile is not null)
     }
 
     try { await gameLoop.StopAsync(); } catch { /* best-effort */ }
+
+    // The movement trace is just as useful on a public server as on a course — that is where the movement
+    // problems actually show up — so flush it here too rather than only on the scenario path.
+    if (MinecraftProtoNet.Baritone.Utils.MovementDiag.Lines.Count > 0)
+    {
+        var reconDiag = Path.Combine(outRoot, "movement_diag.txt");
+        Directory.CreateDirectory(outRoot);
+        await File.WriteAllLinesAsync(reconDiag, MinecraftProtoNet.Baritone.Utils.MovementDiag.Lines);
+        Console.WriteLine($"[recon] movement_diag.txt written ({MinecraftProtoNet.Baritone.Utils.MovementDiag.Lines.Count} lines) -> {reconDiag}");
+    }
+
     Console.WriteLine($"[recon] DONE ok={reconOk}");
     return reconOk ? 0 : 1;
 }

@@ -239,6 +239,15 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
                     _logger.LogDebug("[PathExec] CheckSkip=Skipped at pathPos={PathPos}", _pathPosition);
                     continue;
                 }
+                if (MovementDiag.Enabled && (skipResult == SkipResult.Sprint) != _sprintNextTick)
+                {
+                    // Every sprint transition becomes a ServerboundPlayerCommand. A real client running the
+                    // same route sends 2 of them; the bot sends ~20, and setbacks track them closely — so it
+                    // matters which movement is withdrawing the request.
+                    MovementDiag.Log($"SPRINT {(_sprintNextTick ? "ON" : "OFF")}->{(skipResult == SkipResult.Sprint ? "ON" : "OFF")} " +
+                                     $"pathPos={_pathPosition} movement={movement.GetType().Name}");
+                }
+
                 _sprintNextTick = (skipResult == SkipResult.Sprint);
                 // Re-set sprint on InputOverrideHandler. CheckSkip always clears sprint (line 196)
                 // then returns Sprint/NoSprint. We must propagate this back so
@@ -443,7 +452,15 @@ public class PathExecutor(PathingBehavior behavior, IPath path) : IPathExecutor
     private bool CanSprintFromDescendInto(IMovement current, IMovement next, CalculationContext context)
     {
         if (next is MovementDescend && next.GetDirection().Equals(current.GetDirection())) return true;
-        if (!MovementHelper.CanWalkOn(context, current.GetDest().X + current.GetDirection().X, current.GetDest().Y, current.GetDest().Z + current.GetDirection().Z)) return false;
+
+        // Java is dest.offset(direction) — the FULL direction, including its Y. A descend's direction has
+        // Y = -1, so this tests the block the descend is stepping down onto. Passing dest.Y unchanged tested
+        // the air one block above it instead, canWalkOn said no, and sprinting was refused on every descend —
+        // which is what killed the sprint repeatedly on a staircase.
+        // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/path/PathExecutor.java (canSprintFromDescendInto)
+        var dir = current.GetDirection();
+        var dest = current.GetDest();
+        if (!MovementHelper.CanWalkOn(context, dest.X + dir.X, dest.Y + dir.Y, dest.Z + dir.Z)) return false;
         if (next is MovementTraverse && next.GetDirection().Equals(current.GetDirection())) return true;
         return next is MovementDiagonal && BaritoneSettings.Settings().AllowOvershootDiagonalDescend.Value;
     }
