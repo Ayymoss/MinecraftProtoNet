@@ -158,8 +158,17 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                     entity.IsSprinting = true;
                 }
 
-                // shouldStopRunSprinting(). The extra !Sprint term is ours: vanilla holds a key, whereas our
-                // sprint flag is a per-tick intent from the pathfinder, so dropping the intent must stop it.
+                // shouldStopRunSprinting(), plus dropping the sprint when the pathfinder withdraws its request.
+                //
+                // Vanilla itself has no "sprint key released" term — releasing the key does not stop a sprint.
+                // But Baritone does not drive sprinting through the key: shouldSprintNextTick() explicitly
+                // clears the SPRINT input force state ("we'll take it from here, no need for minecraft to see
+                // we're holding down control and sprint for us") and force-stops with setSprinting(false).
+                // Reference: baritone-1.21.11-REFERENCE-ONLY/src/main/java/baritone/pathing/path/PathExecutor.java:237-240 and :344-348
+                //
+                // So per-tick control is correct for this architecture, and honouring the withdrawal is what
+                // Java does. Making the sprint sticky instead broke course1 outright (the bot overran the
+                // movements Baritone wanted walked and pathed itself into a dead end: CalcFail, twice).
                 if (entity.IsSprinting
                     && (!sprintInput.Sprint
                         || !sprintInput.HasForwardImpulse
@@ -1247,17 +1256,37 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     /// </summary>
     private async Task SendPositionAsync(Entity entity, IPacketSender packetSender)
     {
-        // ===== STEP 1: Send PlayerCommand + PlayerInput packets FIRST (matching Java order) =====
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java
-        // Java order in tick(): sendShiftKeyState() → sendPlayerInput() → sendPosition()
-        // And within sendPosition(): sendIsSprintingIfNeeded() → position packets
-        // Net effect: commands + input before position packets.
-        
+        // ===== STEP 1: input, then sprint state, then position =====
+        // Vanilla's order in LocalPlayer.tick() is: super.tick() (the move) -> ServerboundPlayerInput ->
+        // sendPosition(), which itself begins with sendIsSprintingIfNeeded(). So the key presses reach the
+        // server BEFORE the sprint command that they justify.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:219-234
+
         var currentInput = entity.InputState.Current;
-        
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:288-296
-        // sendIsSprintingIfNeeded() - uses dedicated wasSprinting field, NOT lastSentInput
-        bool currentlySprinting = currentInput.Sprint;
+
+        // NOTE: In 1.21.x, sneaking is communicated ONLY via PlayerInputPacket (0x2A) Shift flag.
+        // The PRESS_SHIFT_KEY/RELEASE_SHIFT_KEY actions were REMOVED from ServerboundPlayerCommandPacket.
+        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/network/protocol/game/ServerboundPlayerCommandPacket.java:57-64
+        // The Shift flag in PlayerInputPacket handles sneak state for the server.
+        var lastSentInput = entity.InputState.LastSent;
+        var keyPresses = currentInput.ToByte();
+        var lastKeyPresses = lastSentInput.ToByte();
+
+        if (keyPresses != lastKeyPresses)
+        {
+            logger.LogDebug("[Input] Flags changed: 0x{Old:X2} -> 0x{New:X2} (Sprint={Sprint}, Forward={Forward}, Shift={Shift})",
+                lastKeyPresses, keyPresses, currentInput.Sprint, currentInput.Forward, currentInput.Shift);
+            var flag = (PlayerInputPacket.MovementFlag)keyPresses;
+            await packetSender.SendPacketAsync(new PlayerInputPacket(flag));
+            entity.InputState.LastSent = currentInput;
+        }
+
+        // sendIsSprintingIfNeeded() reports the entity's ACTUAL sprint state — isSprinting(), post-gating —
+        // not the raw sprint key. Announcing the ungated intent instead tells the server we are sprinting on
+        // ticks where the gate has us walking, so it expects sprint speed from a walking player and sets us
+        // back. That is the same failure as suppressing the sprint multiplier, which measured 102 setbacks.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:293-301
+        bool currentlySprinting = entity.IsSprinting;
         if (currentlySprinting != entity.WasSprinting)
         {
             logger.LogInformation("[Sprint] State change: {Old} -> {New}, sending {Action}",
@@ -1271,27 +1300,7 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             });
             entity.WasSprinting = currentlySprinting;
         }
-        
-        // NOTE: In 1.21.x, sneaking is communicated ONLY via PlayerInputPacket (0x2A) Shift flag.
-        // The PRESS_SHIFT_KEY/RELEASE_SHIFT_KEY actions were REMOVED from ServerboundPlayerCommandPacket.
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/network/protocol/game/ServerboundPlayerCommandPacket.java:57-64
-        // The Shift flag in PlayerInputPacket (sent below) handles sneak state for the server.
-        
-        // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:215-217
-        // Send PlayerInput packet when input flags change
-        var lastSentInput = entity.InputState.LastSent;
-        var keyPresses = currentInput.ToByte();
-        var lastKeyPresses = lastSentInput.ToByte();
-        
-        if (keyPresses != lastKeyPresses)
-        {
-            logger.LogDebug("[Input] Flags changed: 0x{Old:X2} -> 0x{New:X2} (Sprint={Sprint}, Forward={Forward}, Shift={Shift})",
-                lastKeyPresses, keyPresses, currentInput.Sprint, currentInput.Forward, currentInput.Shift);
-            var flag = (PlayerInputPacket.MovementFlag)keyPresses;
-            await packetSender.SendPacketAsync(new PlayerInputPacket(flag));
-            entity.InputState.LastSent = currentInput;
-        }
-        
+
         // ===== STEP 2: Send position/rotation packets =====
         // Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:248-286
         
