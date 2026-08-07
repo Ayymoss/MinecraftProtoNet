@@ -287,6 +287,106 @@ if (GetArg("--menu") is { } menuName)
     return menuOk ? 0 : 1;
 }
 
+// --portfolio: an unattended trading session. Several flips in flight at once, because a leg spends nearly
+// all its life waiting and the order manager shows every order on one screen — so the waiting overlaps
+// instead of serialising. Spends real coins.
+if (Array.IndexOf(args, "--portfolio") >= 0)
+{
+    static string? ReadWebcoreSecretForPortfolio(string key)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Microsoft", "UserSecrets", "7b99bc4a-fd1a-407f-b4bb-e8a3ff1f0e18", "secrets.json");
+            if (!File.Exists(path)) return null;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty(key, out var value) ? value.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    var portfolioKey = GetArg("--api-key")
+                       ?? Environment.GetEnvironmentVariable("BAZAAR_COMPANION_API_KEY")
+                       ?? ReadWebcoreSecretForPortfolio("BazaarTrading:BazaarCompanionApiKey");
+    var portfolioBase = GetArg("--api-base") ?? "https://bazaar.amosr.uk";
+
+    if (string.IsNullOrWhiteSpace(portfolioKey))
+    {
+        Console.Error.WriteLine("[portfolio] no BazaarCompanion API key.");
+        return 2;
+    }
+
+    var portfolioOptions = new PortfolioOptions(
+        Server: GetArg("--server") ?? "mc.hypixel.net",
+        Port: int.TryParse(GetArg("--port"), out var pPort) ? pPort : 25565,
+        HubNumber: int.TryParse(GetArg("--hub"), out var pHub) ? pHub : 1,
+        MinHubPlayers: int.TryParse(GetArg("--min-hub-players"), out var pPlayers) ? pPlayers : 20,
+        Capital: double.TryParse(GetArg("--capital"), out var pCapital) ? pCapital : 200_000,
+        MaxPositions: int.TryParse(GetArg("--max-positions"), out var pMax) ? pMax : 4,
+        TradingMinutes: int.TryParse(GetArg("--trading-min"), out var pTrading) ? pTrading : 45,
+        WindDownMinutes: int.TryParse(GetArg("--winddown-min"), out var pWind) ? pWind : 20,
+        // The companion API refreshes about once a minute; polling faster only re-reads the same numbers.
+        PollSeconds: Math.Max(60, int.TryParse(GetArg("--poll-sec"), out var pPoll) ? pPoll : 60),
+        MaxUnitPrice: double.TryParse(GetArg("--max-price"), out var pPrice) ? pPrice : 50_000,
+        MaxFillMinutes: int.TryParse(GetArg("--max-fill-min"), out var pFill) ? pFill : 45);
+
+    using var portfolioStatus = new StatusServer(
+        int.TryParse(GetArg("--status-port"), out var statusPort) ? statusPort : 5099);
+    try
+    {
+        portfolioStatus.Start();
+        Console.WriteLine($"[portfolio] status page: http://localhost:{portfolioStatus.Port}/");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[portfolio] status page unavailable ({ex.Message}); trading continues regardless");
+    }
+
+    Console.WriteLine($"[portfolio] {portfolioBase} | capital {portfolioOptions.Capital:N0} | " +
+                      $"{portfolioOptions.MaxPositions} positions | trading {portfolioOptions.TradingMinutes}m " +
+                      $"+ {portfolioOptions.WindDownMinutes}m wind-down");
+
+    using var portfolioHttp = new HttpClient { BaseAddress = new Uri(portfolioBase), Timeout = TimeSpan.FromSeconds(30) };
+    portfolioHttp.DefaultRequestHeaders.Add("X-Api-Key", portfolioKey);
+
+    void PortfolioLog(string message) => Console.WriteLine($"[portfolio {DateTime.Now:HH:mm:ss}] {message}");
+
+    var portfolioSession = new BazaarSession(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        PortfolioLog);
+
+    if (!await client.AuthenticateAsync())
+    {
+        Console.Error.WriteLine("[portfolio] AUTH FAILED");
+        return 2;
+    }
+
+    bool portfolioOk;
+    try
+    {
+        portfolioOk = await new BazaarPortfolioTask(portfolioSession, portfolioHttp, PortfolioLog, portfolioStatus)
+            .RunAsync(portfolioOptions);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[portfolio] EXCEPTION: {ex}");
+        portfolioOk = false;
+    }
+
+    try { await gameLoop.StopAsync(); } catch { /* best-effort */ }
+    Console.WriteLine($"[portfolio] DONE profitable={portfolioOk}");
+    return portfolioOk ? 0 : 1;
+}
+
 // --flip: the real thing. Ask BazaarCompanion what to trade, place a buy order, wait for it to fill, claim,
 // offer it back, wait, claim. Spends real coins, so it is its own mode rather than a flag on --menu.
 if (Array.IndexOf(args, "--flip") >= 0)

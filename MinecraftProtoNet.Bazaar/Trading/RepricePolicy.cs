@@ -122,7 +122,11 @@ public static class RepricePolicy
     {
         // Never act on a book we know is stale — that is how you chase prices that no longer exist. The
         // service refreshes about once a minute, so anything much older than that is a missed refresh.
-        if (ctx.DataAge > TimeSpan.FromMinutes(3))
+        //
+        // An absurd age means the source never stamped one, which is not the same as stale data; treating
+        // "unknown" as "stale" would freeze repricing entirely on an endpoint that simply forgot the field.
+        var ageKnown = ctx.DataAge < TimeSpan.FromDays(1);
+        if (ageKnown && ctx.DataAge > TimeSpan.FromMinutes(3))
         {
             return new RepriceDecision(RepriceAction.Hold, ctx.OurPrice,
                 $"book data is {ctx.DataAge.TotalSeconds:F0}s old — too stale to price against");
