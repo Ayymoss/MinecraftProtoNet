@@ -8,6 +8,7 @@ using MinecraftProtoNet.Core.Physics;
 using MinecraftProtoNet.Core.Physics.Shapes;
 using MinecraftProtoNet.Core.State;
 using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.Core.Services;
 
@@ -583,8 +584,8 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     private static bool IsHorizontalCollisionMinor(Entity entity, Vector3<double> movement)
     {
         var yRotRadians = entity.YawPitch.X * 0.017453292f;
-        var yRotSin = Math.Sin(yRotRadians);
-        var yRotCos = Math.Cos(yRotRadians);
+        var yRotSin = Mth.Sin(yRotRadians);
+        var yRotCos = Mth.Cos(yRotRadians);
 
         // xxa = strafe impulse, zza = forward impulse (Java's LivingEntity fields).
         var (xxa, zza) = entity.InputState.Current.GetMoveVector();
@@ -666,9 +667,13 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
 
         var movement = lengthSqr > 1.0 ? input.Normalized() * speed : input * speed;
 
-        float yawRad = yaw * (MathF.PI / 180.0f);
-        float sin = MathF.Sin(yawRad);
-        float cos = MathF.Cos(yawRad);
+        // Mth, not MathF: vanilla rotates the input vector with its 65536-entry sine table, and the server
+        // predicts movement with those same quantised values. Exact trig here is more accurate than vanilla
+        // and reads as a per-tick lateral divergence of ~1e-5 to an anticheat.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1700-1701
+        float yawRad = yaw * 0.017453292f;
+        float sin = Mth.Sin(yawRad);
+        float cos = Mth.Cos(yawRad);
 
         // Rotation matrix matches Java implementation exactly
         return new Vector3<double>(
@@ -786,9 +791,11 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Apply sprint jump boost
             if (entity.IsSprinting)
             {
-                float yawRad = entity.YawPitch.X * (MathF.PI / 180.0f);
-                double boostX = -Math.Sin(yawRad) * PhysicsConstants.SprintJumpBoost;
-                double boostZ = Math.Cos(yawRad) * PhysicsConstants.SprintJumpBoost;
+                // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java
+                // — the sprint-jump boost is built from Mth.sin/Mth.cos, same table as everything else.
+                float yawRad = entity.YawPitch.X * 0.017453292f;
+                double boostX = -Mth.Sin(yawRad) * PhysicsConstants.SprintJumpBoost;
+                double boostZ = Mth.Cos(yawRad) * PhysicsConstants.SprintJumpBoost;
                 entity.Push(boostX, 0.0, boostZ);
             }
         }
