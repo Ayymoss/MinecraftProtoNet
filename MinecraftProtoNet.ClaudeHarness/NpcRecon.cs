@@ -140,6 +140,26 @@ public sealed record ReconProfile(
             CaptureRadius: 0,
             OutputSubdir: "local-bazaar",
             GoalPos: (-36, 72, -28),
+            GoalTimeoutSec: 45),
+
+        // Identical to local-bazaar but aimed at a SniffCraft proxy listening on 25555, which forwards to the
+        // same Paper server. The point is a byte-level capture of OUR packet stream that can be diffed against
+        // the Java Baritone captures over the same route. Still 127.0.0.1, so the humanizer stays inactive and
+        // the run is comparable to a direct one.
+        ["local-sniff"] = new(
+            Name: "local-sniff",
+            Server: "127.0.0.1",
+            Port: 25555,
+            WaitAfterJoinSec: 3,
+            Steps:
+            [
+                new ReconStep("setworldspawn 0 77 -1", 1),
+                new ReconStep("tp @s 0 77 -1", 2),
+                new ReconStep("attribute @s minecraft:movement_speed base set 0.1673", 2)
+            ],
+            CaptureRadius: 0,
+            OutputSubdir: "local-sniff",
+            GoalPos: (-36, 72, -28),
             GoalTimeoutSec: 45)
     };
 }
