@@ -18,6 +18,17 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
     private Thread? _gameLoopThread;
     private volatile bool _isRunning;
 
+    /// <summary>
+    /// Opt-in loop diagnostic (MCPROTO_LOOP_DIAG=1). Reports any tick whose start-to-start interval overruns
+    /// the target, broken down by phase and stamped with the thread it ran on. Isolated multi-tick overruns
+    /// are what an anticheat sees as several ticks of movement arriving in one packet.
+    /// </summary>
+    private static readonly bool LoopDiagEnabled =
+        Environment.GetEnvironmentVariable("MCPROTO_LOOP_DIAG") == "1";
+
+    private static double MsSince(long startTimestamp) =>
+        (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
+
     public bool IsRunning => _isRunning;
     public event Action<Entity>? PhysicsTick;
     
@@ -63,17 +74,40 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
             var rateWindow = Stopwatch.StartNew();
             var ticksThisWindow = 0;
 
+            long previousTickStart = 0;
+            double drainMs = 0, preTickMs = 0, physicsMs = 0, postTickMs = 0, tickEndMs = 0;
+
             try
             {
                 while (!token.IsCancellationRequested)
                 {
+                    var tickStart = Stopwatch.GetTimestamp();
+                    if (LoopDiagEnabled && previousTickStart != 0)
+                    {
+                        var interval = (tickStart - previousTickStart) * 1000.0 / Stopwatch.Frequency;
+                        var target = Math.Max(1, Math.Min(1000, client.State.Level.TickInterval));
+                        if (interval > target * 1.5)
+                        {
+                            logger.LogInformation(
+                                "[LoopDiag] tick interval {Interval:F1}ms (target {Target}) — drain={Drain:F1} " +
+                                "preTick={Pre:F1} physics={Phys:F1} postTick={Post:F1} tickEnd={End:F1} " +
+                                "thread={Thread} pool={IsPool} gen0={G0} gen1={G1} gen2={G2}",
+                                interval, target, drainMs, preTickMs, physicsMs, postTickMs, tickEndMs,
+                                Environment.CurrentManagedThreadId, Thread.CurrentThread.IsThreadPoolThread,
+                                GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+                        }
+                    }
+
+                    previousTickStart = tickStart;
                     stopwatch.Restart();
 
                     try
                     {
                         // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/client/Minecraft.java:1247
                         // Vanilla drains all queued packets BEFORE running tick logic.
+                        var phase = Stopwatch.GetTimestamp();
                         await packetProcessor.ProcessQueuedPacketsAsync();
+                        drainMs = MsSince(phase);
 
                         // Only run tick logic + emit Play packets while actually in Play. The drain above can
                         // switch us to Configuration mid-tick (server reconfiguration / proxy backend switch);
@@ -105,20 +139,28 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
                                     logger.LogDebug("GameLoop: Invoking PreTick event (subscribers: {Count}, tick: {Tick})",
                                         PreTick.GetInvocationList().Length, client.State.Level.ClientTickCounter);
                                 }
+                                phase = Stopwatch.GetTimestamp();
                                 PreTick.Invoke(client);
+                                preTickMs = MsSince(phase);
                             }
 
+                            phase = Stopwatch.GetTimestamp();
                             await client.PhysicsTickAsync(entity => PhysicsTick?.Invoke(entity));
+                            physicsMs = MsSince(phase);
 
                             // Invoke post-tick hook for external systems (e.g., Baritone)
                             if (PostTick != null)
                             {
                                 logger.LogDebug("GameLoop: Invoking PostTick event (subscribers: {Count})", PostTick.GetInvocationList().Length);
+                                phase = Stopwatch.GetTimestamp();
                                 PostTick.Invoke(client);
+                                postTickMs = MsSince(phase);
                             }
 
                             // Send ClientTickEndPacket at end of tick BEFORE sleep (matches vanilla Minecraft.java:1864)
+                            phase = Stopwatch.GetTimestamp();
                             await client.SendPacketAsync(new ClientTickEndPacket(), token);
+                            tickEndMs = MsSince(phase);
                         }
                     }
                     catch (ObjectDisposedException)
