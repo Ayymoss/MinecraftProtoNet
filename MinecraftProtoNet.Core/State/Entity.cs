@@ -203,6 +203,13 @@ public class Entity
     public bool WasSprinting { get; set; }
 
     /// <summary>
+    /// Ticks a sprint is still held for before a stop request is honoured. See the hysteresis note in
+    /// PhysicsService — Baritone re-decides sprint every tick, which produced 322 sprint commands in ten
+    /// minutes against the vanilla control's four in thirty.
+    /// </summary>
+    public int SprintHoldTicks { get; set; }
+
+    /// <summary>
     /// Whether the entity was sneaking in the previous tick.
     /// Used to detect sneak state changes for packet sending.
     /// </summary>

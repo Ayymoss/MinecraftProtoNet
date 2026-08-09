@@ -21,6 +21,7 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 [HandlesPacket(typeof(ResourcePackPushPacket))]
 [HandlesPacket(typeof(ResourcePackPopPacket))]
 [HandlesPacket(typeof(StartConfigurationPacket))]
+[HandlesPacket(typeof(TransferPacket))]
 [HandlesPacket(typeof(Packets.Play.Clientbound.CustomPayloadPacket))]
 public class ConnectionHandler(ILogger<ConnectionHandler> logger, IHumanizer humanizer) : IPacketHandler
 {
@@ -62,6 +63,18 @@ public class ConnectionHandler(ILogger<ConnectionHandler> logger, IHumanizer hum
                 logger.LogInformation("Server requested reconfiguration; acknowledging and returning to Configuration phase");
                 await client.SendPacketAsync(new ConfigurationAcknowledgedPacket());
                 client.ProtocolState = ProtocolState.Configuration;
+                break;
+
+            case TransferPacket transferPacket:
+                // The server is handing us to a different host. Vanilla disconnects and reconnects there.
+                // Reference: minecraft-26.2-REFERENCE-ONLY .../ClientCommonPacketListenerImpl.handleTransfer
+                //
+                // Recorded on the client rather than acted on here: the reconnect has to re-run
+                // authentication and the join sequence, which belongs to whoever owns the session (the
+                // harness / BotService), not to a packet handler on the network thread. Exposing it means a
+                // Transfer is no longer silently dropped, which is what made direct connections impossible.
+                logger.LogWarning("Server transferred us to {Host}:{Port}", transferPacket.Host, transferPacket.Port);
+                client.PendingTransfer = (transferPacket.Host, transferPacket.Port);
                 break;
 
             case ChunkBatchFinishedPacket chunkBatchFinishedPacket:

@@ -568,6 +568,14 @@ public sealed class BazaarSession(
     private DateTime _lastMovementUtc = DateTime.UtcNow;
 
     /// <summary>
+    /// MCPROTO_STILL=1: never take a step once we are at the NPC — look and jump on the spot instead.
+    /// Removes the sidestep -> out-of-reach -> re-path loop that puts a walk between every pair of menu
+    /// opens. See the note in <see cref="FidgetAsync"/>.
+    /// </summary>
+    private static readonly bool StayPut =
+        Environment.GetEnvironmentVariable("MCPROTO_STILL") == "1";
+
+    /// <summary>
     /// How long the bot may go without moving before it is nudged.
     ///
     /// Hypixel warns at about five minutes and then moves the player to the lobby, which is what was ending
@@ -575,6 +583,49 @@ public sealed class BazaarSession(
     /// steps that look like a bored player — the same thing a bored player actually does.
     /// </summary>
     private static readonly TimeSpan AfkNudgeAfter = TimeSpan.FromSeconds(90);
+
+    /// <summary>
+    /// How long the idle timer may run with a menu open before the menu is closed so the bot can move.
+    ///
+    /// Well inside Hypixel's AFK window (measured: a vanilla client was transferred ~3.6 min after its last
+    /// real movement), but long enough that an ordinary trading pass finishes without interruption.
+    /// </summary>
+    private static readonly TimeSpan AfkCloseMenuAfter = TimeSpan.FromSeconds(150);
+
+    /// <summary>
+    /// The point at which an in-flight order stops being protected from the anti-AFK nudge. Losing one order
+    /// is survivable; being transferred to Limbo mid-session is not.
+    /// </summary>
+    private static readonly TimeSpan AfkAbandonTransactionAfter = TimeSpan.FromSeconds(240);
+
+    private int _criticalDepth;
+
+    /// <summary>True while a multi-step order placement is part-way through and must not be interrupted.</summary>
+    public bool InCriticalTransaction => Volatile.Read(ref _criticalDepth) > 0;
+
+    /// <summary>
+    /// Marks a section that must not have the menu closed under it — the click/sign sequence that places an
+    /// order. Reference-counted and disposable so it cannot leak if a step throws.
+    /// </summary>
+    public IDisposable CriticalTransaction() => new CriticalScope(this);
+
+    private sealed class CriticalScope : IDisposable
+    {
+        private readonly BazaarSession _session;
+        private int _disposed;
+
+        public CriticalScope(BazaarSession session)
+        {
+            _session = session;
+            Interlocked.Increment(ref session._criticalDepth);
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                Interlocked.Decrement(ref _session._criticalDepth);
+        }
+    }
 
     /// <summary>
     /// Moves a little, wherever the bot happens to be. Unlike <see cref="IdleAsync"/> this is not tied to the
@@ -607,11 +658,43 @@ public sealed class BazaarSession(
                 if (!client.IsConnected || Intercepted || LobbyEjection is not null) continue;
                 if (DateTime.UtcNow - _lastMovementUtc < AfkNudgeAfter) continue;
 
-                // Never while a menu is open: vanilla cannot walk with a screen up, so doing it here would be
-                // a more obvious tell than the idling it is meant to disguise.
-                if (containers.IsContainerOpen) continue;
+                // Vanilla cannot walk with a screen up, so the nudge normally waits for the menu to close.
+                //
+                // But waiting FOR EVER is how the session dies a different way. Hypixel does not count menu
+                // opens as activity -- proven by a vanilla capture that was transferred to the Prototype
+                // Lobby after 80 menu opens in 30 minutes -- and a trading pass keeps a menu up most of the
+                // time (observed 37 opens against 13 closes with ZERO nudges in six minutes). So once the
+                // idle timer is genuinely close to expiring, closing the menu to move is the lesser evil:
+                // a player closing a screen, walking a few steps and reopening it is ordinary behaviour,
+                // whereas being transferred out mid-trade loses the whole session.
+                if (containers.IsContainerOpen)
+                {
+                    if (DateTime.UtcNow - _lastMovementUtc < AfkCloseMenuAfter) continue;
 
-                log("anti-AFK nudge");
+                    // Never close the menu out from under an order that is part-placed.
+                    //
+                    // These two safety mechanisms were fighting: the menu rate gate deliberately holds a click
+                    // for up to ~18s to stay under the 12/min ceiling, which is long enough for this watchdog
+                    // to decide the menu has been open too long. Observed 2026-08-09 on Shard Honeybuzz — the
+                    // quantity sign was open, the nudge closed it, the held "1" was then typed into a dead
+                    // editor, and the position failed with "could not open a position".
+                    //
+                    // The cap still applies: a transaction that has somehow been stuck for AfkAbandonAfter is
+                    // not worth being transferred to Limbo over, so past that the nudge wins.
+                    if (InCriticalTransaction && DateTime.UtcNow - _lastMovementUtc < AfkAbandonTransactionAfter)
+                    {
+                        continue;
+                    }
+
+                    log("anti-AFK nudge: menu has been open too long, closing it to move");
+                    await containers.CloseContainerAsync();
+                    await Task.Delay(300, ct);
+                }
+                else
+                {
+                    log("anti-AFK nudge");
+                }
+
                 await NudgeAsync(ct);
             }
             catch (OperationCanceledException)
@@ -678,6 +761,29 @@ public sealed class BazaarSession(
 
         var roll = Random.Shared.Next(100);
         var input = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+
+        // STAY-PUT mode: look around and jump on the spot, never take a step.
+        //
+        // Measured in the 3s after every Container Close -- the window the ejection actually fires in -- we
+        // send 3.4x vanilla's Move Player Pos, 30x its PosRot, and take 2.6 server position corrections per
+        // close where vanilla takes ZERO. The chain is: this fidget steps sideways, that puts us outside the
+        // 3.2-block reach, so the next cycle re-paths to the NPC ("closing in" on every cycle) and the walk
+        // draws the corrections.
+        //
+        // Deliberately NOT "stand perfectly still": Hypixel warns at ~5 minutes of no INPUT and then moves
+        // the player to the lobby, which arrives as the very same uncommanded Start Configuration we are
+        // trying to measure -- going inert would trade one transfer for another and prove nothing. A jump is
+        // real movement input with zero horizontal displacement, so the idle timer stays fed while our
+        // position never changes.
+        if (StayPut)
+        {
+            if (roll < 50) return; // look only
+            entity.InputState.Current = MinecraftProtoNet.Core.Models.Input.Input.Empty with { Jump = true };
+            await Task.Delay(Random.Shared.Next(180, 400), ct);
+            entity.InputState.Current = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+            _lastMovementUtc = DateTime.UtcNow;
+            return;
+        }
 
         if (strayed || roll < 45)
         {
@@ -1048,6 +1154,17 @@ public sealed class BazaarSession(
         var entity = client.State.LocalPlayer?.Entity;
         if (entity is null || !client.IsConnected || Intercepted) return;
 
+        // In stay-put mode the whole point is that our position never changes, and a sidestep is followed by
+        // ApproachNpcAsync re-pathing back — exactly the walk being measured out. Re-aim instead; a blocked
+        // interact will simply fail again and the cycle handles that.
+        if (StayPut)
+        {
+            log("stay-put: re-aiming instead of stepping aside");
+            await AimAtNpcAsync();
+            await Task.Delay(300, ct);
+            return;
+        }
+
         log("stepping aside before retrying");
 
         var left = Random.Shared.Next(2) == 0;
@@ -1123,7 +1240,9 @@ public sealed class BazaarSession(
                 await Task.Delay(600);
             }
 
-            await AimAtNpcAsync();
+            // Bail rather than press on: the very next statement dereferences _npc for its entity id, so
+            // continuing after a failed aim just moves the NullReferenceException one line down.
+            if (!await AimAtNpcAsync()) return false;
             await Task.Delay(400);
 
             // null = let ContainerManager compute the real ray/hitbox intersection. Passing the constant
@@ -1206,10 +1325,24 @@ public sealed class BazaarSession(
         log("no empty hotbar slot — stray right-clicks may open menus");
     }
 
-    private async Task AimAtNpcAsync()
+    /// <summary>
+    /// Points the player at the resolved NPC. Returns false when there is nothing to aim at.
+    ///
+    /// The null-forgiving `_npc!` here used to throw a NullReferenceException outright. It became reachable
+    /// once the bot started recovering from ejections on its own: an ejection lands it in the Prototype Lobby,
+    /// where no Bazaar NPC exists, so `_npc` is null and every caller in that state crashed the cycle. Failing
+    /// softly lets the caller give up on the menu and lets the per-cycle SkyBlock guard warp us back.
+    /// </summary>
+    private async Task<bool> AimAtNpcAsync()
     {
-        var entity = client.State.LocalPlayer.Entity!;
-        var dx = _npc!.Position.X - entity.Position.X;
+        var entity = client.State.LocalPlayer?.Entity;
+        if (entity is null || _npc is null)
+        {
+            log("no NPC resolved (are we still in SkyBlock?) — skipping the aim");
+            return false;
+        }
+
+        var dx = _npc.Position.X - entity.Position.X;
         var dy = (_npc.Position.Y + 1.0) - (entity.Position.Y + 1.62);
         var dz = _npc.Position.Z - entity.Position.Z;
 
@@ -1223,6 +1356,8 @@ public sealed class BazaarSession(
             Pitch = pitch,
             Flags = entity.IsOnGround ? MovementFlags.OnGround : MovementFlags.None
         });
+
+        return true;
     }
 
     // ===== Menu interaction =====
@@ -1279,7 +1414,12 @@ public sealed class BazaarSession(
     /// Answers a sign-editor prompt — Hypixel's text input for Search, Custom Amount and Custom Price. The
     /// typed value goes on the first line, the prompt lines below it are echoed back untouched.
     /// </summary>
-    public async Task<bool> SignAsync(string value)
+    /// <param name="expectMenu">
+    /// True for the Bazaar/Auction search sign, where submitting reopens a results menu and the menu is the
+    /// only proof the server accepted the text. False for a plain world sign, which opens nothing at all --
+    /// waiting for a menu there always times out and scores a perfectly good edit as a failure.
+    /// </param>
+    public async Task<bool> SignAsync(string value, bool expectMenu = true)
     {
         await MenuGateAsync($"sign '{value}'");
         var deadline = DateTime.UtcNow.AddSeconds(8);
@@ -1321,7 +1461,7 @@ public sealed class BazaarSession(
             Lines = lines
         });
 
-        return await WaitForMenuContentAsync(TimeSpan.FromSeconds(8));
+        return expectMenu ? await WaitForMenuContentAsync(TimeSpan.FromSeconds(8)) : true;
     }
 
     /// <summary>Waits for the open menu to hold items and stop changing — contents arrive after Open Screen.</summary>

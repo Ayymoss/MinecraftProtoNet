@@ -63,6 +63,22 @@ public class ContainerManager : IContainerManager
             return false;
         }
 
+        // Is the entity we are about to address still one the server tracks?
+        //
+        // Hypixel recycles its NPC entities -- the Bazaar NPC has been observed as 376 and later 375 in the
+        // same run -- and the Bazaar cycle opens the menu from a CACHED _npc.EntityId that is only resolved
+        // on the initial walk, never per cycle. If the server replaces the entity underneath us we keep
+        // right-clicking a dead id. That is invisible to every wire comparison done so far, because the
+        // packet bytes are identical; only the validity of the id inside them differs, and an interact
+        // against a non-existent entity is exactly what a server counts strikes for.
+        var known = _state.Level.GetEntityOfId(entityId) is not null
+                    || _state.Level.GetAllPlayers().Any(p => p.Entity?.EntityId == entityId);
+        if (!known)
+        {
+            _logger.LogWarning(
+                "[StaleInteract] interacting with entity {EntityId}, which the level no longer tracks", entityId);
+        }
+
         _containerOpenWaiter = new TaskCompletionSource<ContainerState>();
 
         // Location is the click point relative to the entity's position — the real ray/hitbox intersection,

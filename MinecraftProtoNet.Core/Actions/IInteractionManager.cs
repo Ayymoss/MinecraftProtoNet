@@ -32,6 +32,14 @@ public interface IInteractionManager
     Task<bool> PlaceBlockAtAsync(int x, int y, int z, Hand hand = Hand.MainHand);
 
     /// <summary>
+    /// Right-clicks a specific block, aiming at it first. Unlike <see cref="PlaceBlockAtAsync"/> this targets
+    /// the block itself rather than an adjacent one, and needs no item in hand — it is the primitive behind
+    /// opening a sign editor, a door, or any block with a use action.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java useItemOn
+    /// </summary>
+    Task<bool> UseItemOnBlockAsync(int x, int y, int z, Hand hand = Hand.MainHand);
+
+    /// <summary>
     /// Attempts to interact (right-click) with the entity or block the player is looking at.
     /// </summary>
     Task<bool> InteractAsync(Hand hand = Hand.MainHand);

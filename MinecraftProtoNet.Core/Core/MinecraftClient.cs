@@ -29,6 +29,9 @@ public class MinecraftClient : IMinecraftClient
     /// </summary>
     private readonly System.Collections.Concurrent.ConcurrentQueue<Func<Task>> _preMovementActions = new();
 
+    /// <inheritdoc />
+    public (string Host, int Port)? PendingTransfer { get; set; }
+
     public void EnqueuePreMovementAction(Func<Task> action) => _preMovementActions.Enqueue(action);
 
     public async Task DrainPreMovementActionsAsync()

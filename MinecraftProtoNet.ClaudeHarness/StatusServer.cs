@@ -258,11 +258,15 @@ public sealed class StatusServer : IDisposable
   .card .value { font-size:16px; margin-top:2px; white-space:nowrap; }
 
   /* Two columns of two panels. The book is the widest thing here, so it gets the larger column. */
+  /* Left column is one tall panel (open positions); the right column stacks the three things you glance at
+     while it runs — what it is holding, what it prefers, what it is doing. Inventory gets the smallest share
+     because it is usually a handful of stacks, and Activity the largest because it scrolls. */
   .grid {
     flex:1; min-height:0; display:grid; gap:10px; padding:10px 16px 14px;
     grid-template-columns: 1.35fr 1fr;
-    grid-template-rows: minmax(0,1.15fr) minmax(0,1fr);
+    grid-template-rows: minmax(0,0.85fr) minmax(0,0.9fr) minmax(0,1.1fr);
   }
+  .grid > .tall { grid-row: span 3; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; display:flex; flex-direction:column; min-height:0; }
   .panel > h2 {
     font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim);
@@ -296,6 +300,8 @@ public sealed class StatusServer : IDisposable
   @media (max-width: 1080px) {
     body { overflow:auto; }
     .grid { grid-template-columns:1fr; grid-template-rows:none; grid-auto-rows:minmax(220px,auto); }
+    /* One column means nothing spans rows — without this the open-positions panel claims three of them. */
+    .grid > .tall { grid-row:auto; }
   }
 </style>
 </head>
@@ -310,12 +316,22 @@ public sealed class StatusServer : IDisposable
 </header>
 
 <div class="grid">
-  <section class="panel" style="grid-row:span 2">
+  <section class="panel tall">
     <h2><span>Open positions</span><span class="hint" id="opencount"></span></h2>
     <div class="body">
       <table id="open"><thead><tr>
         <th>Product</th><th>Leg</th><th class="num">Qty</th><th class="num">Price</th>
-        <th class="num">Held</th><th class="num">Spent</th><th class="num">Age</th><th class="num">Steps</th>
+        <th class="num">Filled</th><th class="num">Held</th><th class="num">Tied up</th>
+        <th class="num">Age</th><th class="num">Steps</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span>Inventory</span><span class="hint" id="invcount"></span></h2>
+    <div class="body">
+      <table id="inv"><thead><tr>
+        <th class="num">Slot</th><th>Where</th><th>Item</th><th class="num">Count</th><th>Accounted for</th>
       </tr></thead><tbody></tbody></table>
     </div>
   </section>
@@ -415,15 +431,44 @@ async function tick() {
         + (d.realisedPerHour ? ` <span class="rate">${coins(d.realisedPerHour)}/h</span>` : '')],
       ['Closed', `${d.profitableCount}/${d.closedCount} profitable`],
       ['Open', d.open.length],
-      ['Committed', `${coins(d.committed)} / ${coins(d.capital)}`],
+      ['Committed', `${coins(d.committed)} / ${coins(d.capital)}`
+        + (d.committed > d.capital ? ' <span class="warn">over cap</span>' : '')],
+
+      // Split out, because one "committed" total told nobody where the money actually was. These two are
+      // the whole of it: coins Hypixel holds against our buy orders, and what we paid for stock we are
+      // still trying to sell. They sum to Committed.
+      ['In buy orders', `${coins(d.buyEscrow ?? 0)}`
+        + (d.unitsOnOrder ? ` <span class="rate">${d.unitsOnOrder} awaiting fill</span>` : '')],
+      ['Stock held (at cost)', `${coins(d.sellCost ?? 0)}`
+        + (d.unitsHeld ? ` <span class="rate">${d.unitsHeld} item(s)</span>` : '')],
+      ['Listed for', `${coins(d.sellValue ?? 0)}`
+        + ` <span class="${cls(d.expectedGain ?? 0)}">${(d.expectedGain ?? 0) >= 0 ? '+' : ''}${coins(d.expectedGain ?? 0)} pending</span>`],
     ].map(([l,v]) => `<div class="card"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+
+    // Read-only inventory. "Accounted for" is the question worth answering at a glance: stock the ledger has
+    // no open position for is exactly the case where the bot will sit on something and never sell it.
+    const inv = d.inventory ?? [];
+    const stray = inv.filter(i => !i.accountedFor).length;
+    document.getElementById('invcount').innerHTML = inv.length
+      ? `${inv.reduce((n,i) => n + i.count, 0)} item(s) in ${inv.length} stack(s)`
+        + (stray ? ` · <span class="warn">${stray} unaccounted</span>` : '')
+      : 'empty';
+    document.querySelector('#inv tbody').innerHTML = inv.map(i =>
+      `<tr><td class="num muted">${i.slot}</td><td class="muted">${i.where}</td><td>${i.name}</td>`
+      + `<td class="num">${i.count}</td>`
+      + `<td>${i.accountedFor ? '<span class="muted">yes</span>' : '<span class="warn">no position</span>'}</td></tr>`).join('')
+      || '<tr><td colspan="5" class="muted">empty</td></tr>';
 
     document.getElementById('opencount').textContent = `${d.open.length} working`;
     document.querySelector('#open tbody').innerHTML = d.open.map(p =>
+      // "Filled" is how much of the order has executed; "Held" is what we still own and are trying to sell;
+      // "Tied up" is the coins that stock (or that escrow) is currently holding. The old table showed
+      // unitsBought under a "Held" heading, which conflated the first two.
       `<tr><td>${p.name}</td><td class="muted">${p.side}</td><td class="num">${p.quantity}</td>`
-      + `<td class="num">${coins(p.price)}</td><td class="num">${p.unitsBought}</td><td class="num">${coins(p.spent)}</td>`
+      + `<td class="num">${coins(p.price)}</td><td class="num">${p.unitsBought}</td>`
+      + `<td class="num">${p.held ?? 0}</td><td class="num">${coins(p.committed ?? 0)}</td>`
       + `<td class="num muted">${p.ageMinutes.toFixed(0)}m</td><td class="num muted">${p.steps}</td></tr>`).join('')
-      || '<tr><td colspan="8" class="muted">none</td></tr>';
+      || '<tr><td colspan="9" class="muted">none</td></tr>';
 
     // Relative, not absolute: the question this answers is "is the bot still closing trades?", and an age is
     // readable at a glance where a wall-clock time needs subtracting from now.

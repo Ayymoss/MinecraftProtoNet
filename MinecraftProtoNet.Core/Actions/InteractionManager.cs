@@ -375,6 +375,91 @@ public class InteractionManager : IInteractionManager
         return false;
     }
 
+    public async Task<bool> UseItemOnBlockAsync(int x, int y, int z, Hand hand = Hand.MainHand)
+    {
+        if (!_client.State.LocalPlayer.HasEntity) return false;
+        var entity = _client.State.LocalPlayer.Entity;
+
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:309
+        await EnsureHasSentCarriedItemAsync();
+
+        // Aim at the block centre first, then derive the face from where the eye actually is. Vanilla's
+        // BlockHitResult face is the one the ray enters through, so the axis with the largest eye-to-centre
+        // component is the face a real click would land on.
+        var eyeX = entity.Position.X;
+        var eyeY = entity.Position.Y + 1.62;
+        var eyeZ = entity.Position.Z;
+
+        var dx = x + 0.5 - eyeX;
+        var dy = y + 0.5 - eyeY;
+        var dz = z + 0.5 - eyeZ;
+
+        var flat = Math.Sqrt(dx * dx + dz * dz);
+        var yaw = (float)(Math.Atan2(-dx, dz) * (180.0 / Math.PI));
+        var pitch = (float)(-Math.Atan2(dy, flat) * (180.0 / Math.PI));
+        await SendAimRotationAsync(entity, new Vector2<float>(yaw, pitch));
+
+        // Face pointing back at the eye, plus the cursor pinned to that face.
+        BlockFace face;
+        float cursorX = 0.5f, cursorY = 0.5f, cursorZ = 0.5f;
+        if (Math.Abs(dx) >= Math.Abs(dy) && Math.Abs(dx) >= Math.Abs(dz))
+        {
+            face = dx > 0 ? BlockFace.West : BlockFace.East;
+            cursorX = dx > 0 ? 0.0f : 1.0f;
+        }
+        else if (Math.Abs(dy) >= Math.Abs(dz))
+        {
+            face = dy > 0 ? BlockFace.Bottom : BlockFace.Top;
+            cursorY = dy > 0 ? 0.0f : 1.0f;
+        }
+        else
+        {
+            face = dz > 0 ? BlockFace.North : BlockFace.South;
+            cursorZ = dz > 0 ? 0.0f : 1.0f;
+        }
+
+        _logger.LogInformation("Using item on block ({X}, {Y}, {Z}) face {Face}", x, y, z, face);
+
+        var useOn = new UseItemOnPacket
+        {
+            Hand = hand,
+            Position = new Vector3<double>(x, y, z),
+            BlockFace = face,
+            Cursor = new Vector3<float>(cursorX, cursorY, cursorZ),
+            InsideBlock = false,
+            Sequence = entity.IncrementSequence()
+        };
+
+        // Same ordering constraint as the entity interact: vanilla runs handleKeybinds() BEFORE player.tick()
+        // sends the position, so a use-on-block that leaves an async task lands after the movement packet and
+        // GrimAC flags it as "Post". Queue it for the game loop to drain in the vanilla slot.
+        var done = new TaskCompletionSource();
+        _client.EnqueuePreMovementAction(async () =>
+        {
+            try
+            {
+                await _client.SendPacketAsync(useOn);
+                await _client.SendPacketAsync(new SwingPacket { Hand = hand });
+                done.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                done.TrySetException(ex);
+            }
+        });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var completed = await Task.WhenAny(done.Task, Task.Delay(Timeout.Infinite, cts.Token));
+        if (completed != done.Task)
+        {
+            _logger.LogWarning("Use-on-block at ({X}, {Y}, {Z}) was never drained by the game loop", x, y, z);
+            return false;
+        }
+
+        await done.Task;
+        return true;
+    }
+
     /// <summary>
     /// Where the aim ray enters the target's hitbox, expressed relative to the target's position — the value
     /// vanilla puts in the Interact packet.

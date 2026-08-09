@@ -24,6 +24,76 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         Environment.GetEnvironmentVariable("MCPROTO_SPEED_DIAG") == "1";
 
     /// <summary>
+    /// Wraps a yaw into [-180, 180), as vanilla stores rotations.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/util/Mth.java wrapDegrees
+    /// </summary>
+    private static float WrapDegrees(float degrees)
+    {
+        var wrapped = degrees % 360.0f;
+        if (wrapped >= 180.0f) wrapped -= 360.0f;
+        if (wrapped < -180.0f) wrapped += 360.0f;
+        return wrapped;
+    }
+
+    /// <summary>MCPROTO_STUCK_DIAG=1 — log any tick that asked to move horizontally and did not.</summary>
+    private static readonly bool StuckDiagEnabled =
+        Environment.GetEnvironmentVariable("MCPROTO_STUCK_DIAG") == "1";
+
+    /// <summary>
+    /// The rotation step a real client can produce: 0.15 degrees at the default sensitivity of 0.5, because
+    /// vanilla accumulates INTEGER mouse deltas scaled by (sensitivity*0.6+0.2)^3 * 8 * 0.15. Set to 0 to
+    /// send raw computed rotations (which is what tripped GrimAC's AimModulo360).
+    /// </summary>
+    private static readonly float RotationQuantum =
+        float.TryParse(Environment.GetEnvironmentVariable("MCPROTO_ROTATION_QUANTUM"), out var q) && q >= 0f
+            ? q
+            : 0.15f;
+
+    /// <summary>
+    /// How long a sprint is held before we will honour a request to stop. DEFAULT 0 = disabled.
+    ///
+    /// The problem it was aimed at is real: 322 sprint Player Commands in ten minutes against the vanilla
+    /// control's FOUR in thirty, ~245x normalised. But holding the decision is not the cure. Measured on the
+    /// Paper walk rig, identical 15-second windows:
+    ///
+    ///     hold 0  (off)   6 legs, 0 setbacks, 9 sprint commands
+    ///     hold 20 (1s)    1 leg, 271 setbacks, 1 sprint command
+    ///
+    /// Sprinting when Baritone has decided to stop means moving when the server expects us not to, so every
+    /// held tick is a disagreement. Packet-level debouncing was tried first and is also wrong: it changed
+    /// nothing (322 either way, the average spacing already exceeded the gate) and it desyncs us the same way.
+    ///
+    /// The chatter is Baritone re-deciding every tick, so the fix has to be a STABLER DECISION upstream, not
+    /// an override downstream of it. Left here as a knob for sweeping values against the rig.
+    /// </summary>
+    private static readonly int SprintHoldTicks =
+        int.TryParse(Environment.GetEnvironmentVariable("MCPROTO_SPRINT_HOLD_TICKS"), out var t) && t >= 0
+            ? t
+            : 0;   // OFF -- see below, holding the decision is far worse than the chatter it removes
+
+    /// <summary>
+    /// OPT-IN (MCPROTO_MIN_MOVE=1) and OFF by default, despite being what vanilla does.
+    ///
+    /// Vanilla clamps sub-MIN_MOVEMENT_DISTANCE velocity at the top of aiStep
+    /// (LivingEntity.java:2969-2992) and we do not, so this looked like a clear parity defect — the drift it
+    /// produces is millimetres per tick, matching the correction magnitudes coming back from Hypixel.
+    ///
+    /// Measured on Paper over a 10-minute walk loop (161 legs), one binary, this flag the only variable:
+    ///
+    ///   clamp off : 9 real setbacks      <-- shipped behaviour
+    ///   clamp on  : 369, then 364 on repeat
+    ///
+    /// and the regression is DETERMINISTIC: the same three corrections (0.1274, 0.0255, 0.0741) repeat ~120
+    /// times each from the same spot in both runs, which is the signature of a real physics interaction
+    /// rather than a bad lap. Enabling it therefore needs the cause found first, and the likeliest one is
+    /// that our Velocity at this point in the tick is not the same quantity as Java's deltaMovement here —
+    /// if Move() does not write the post-collision velocity back, this clamps a DESIRED velocity that
+    /// vanilla would never clamp.
+    /// </summary>
+    private static readonly bool MinMoveClampEnabled =
+        Environment.GetEnvironmentVariable("MCPROTO_MIN_MOVE") == "1";
+
+    /// <summary>
     /// Opt-in movement-send diagnostic (MCPROTO_SETBACK_DIAG=1), paired with the setback diag in PlayHandler.
     /// Logs every outgoing position packet with the step since the last one, so a setback can be attributed to
     /// an oversized step (skipped ticks) rather than guessed at from the correction alone.
@@ -82,6 +152,17 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Invoke pre-physics callback (e.g., for pathfinding input)
             prePhysicsCallback?.Invoke(entity);
 
+            // ===== COMMIT THE ROTATION WE WILL SEND, BEFORE PHYSICS READS IT =====
+            // Baritone has just set the aim in the callback above. Jitter and quantisation used to be applied
+            // to the outgoing packet ONLY ("not stored on entity"), so our physics integrated the raw aim while
+            // the server -- and GrimAC -- recomputed movement from the quantised value they received. That is a
+            // permanent per-tick disagreement in movement DIRECTION, and it measured as a steady .002170 offset
+            // flagged 100x in a 40-second walk, comfortably over Grim's 0.001 default threshold.
+            //
+            // Vanilla has no such split: a real client's yaw IS the quantised value (integer mouse deltas), and
+            // its physics uses that same field it sends. Committing it here restores that.
+            CommitTickRotation(entity);
+
             // Update fluid state
             UpdateFluidState(entity, level);
 
@@ -103,6 +184,48 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                 };
 
                 logger.LogInformation("PhysicsService: PhysicsTickAsync - tick={Tick}, State={@State}", tick, state);
+            }
+
+            // Zero out sub-threshold velocity, exactly as vanilla does at the top of aiStep().
+            //
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/LivingEntity.java:2969-2992
+            //   Vec3 movement = this.getDeltaMovement();
+            //   if (this.is(EntityTypes.PLAYER)) {
+            //      if (movement.horizontalDistanceSqr() < 9.0E-6) { dx = 0.0; dz = 0.0; }
+            //   } else { per-axis 0.003 tests }
+            //   if (Math.abs(movement.y) < 0.003) { dy = 0.0; }
+            //
+            // MinMovementDistance was defined in PhysicsConstants and never referenced anywhere, so this step
+            // was simply missing. The consequence is not cosmetic: the SERVER runs this clamp, so once our
+            // velocity decays below 3mm/tick it holds the player still while we keep integrating a residue
+            // forever. The two copies drift apart by millimetres per tick, which is precisely the correction
+            // magnitude observed coming back from Hypixel (dx=0.0026 dz=0.0030 dh=0.0037), and matches the
+            // open Grim finding of Simulation flags on a single axis with the other components exactly zero.
+            //
+            // Note the PLAYER branch is NOT per-axis: it tests the COMBINED horizontal distance, so a player
+            // creeping at 0.0025 on both X and Z (0.0035 combined, above the threshold) keeps that velocity,
+            // while the per-axis form used by every other entity would wrongly zero both.
+            // OFF by default — see MinMoveClampEnabled for the measured regression this caused.
+            if (MinMoveClampEnabled)
+            {
+                var vel = entity.Velocity;
+                var clampedX = vel.X;
+                var clampedY = vel.Y;
+                var clampedZ = vel.Z;
+
+                if (vel.X * vel.X + vel.Z * vel.Z <
+                    PhysicsConstants.MinMovementDistance * PhysicsConstants.MinMovementDistance)
+                {
+                    clampedX = 0.0;
+                    clampedZ = 0.0;
+                }
+
+                if (Math.Abs(vel.Y) < PhysicsConstants.MinMovementDistance)
+                {
+                    clampedY = 0.0;
+                }
+
+                entity.Velocity = new Vector3<double>(clampedX, clampedY, clampedZ);
             }
 
             // Handle jump input BEFORE travel (matches Java: jump happens before travel)
@@ -148,7 +271,33 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             // Baritone drives sprinting directly rather than through the key (PathExecutor.shouldSprintNextTick
             // clears the SPRINT force state and calls setSprinting(false) itself), so its per-tick decision is
             // the authority here.
-            entity.IsSprinting = entity.InputState.Current.Sprint;
+            // Hysteresis on the sprint DECISION, not on the packet.
+            //
+            // Measured on the Paper walk loop (161 legs, 10 min): 322 sprint Player Commands, against the
+            // vanilla control's FOUR in a thirty-minute session -- ~245x once normalised per movement packet.
+            // Baritone re-decides sprint every tick and the bot brushes geometry constantly, so the decision
+            // chatters and every flip becomes a packet.
+            //
+            // Debouncing the PACKET was tried first and is wrong twice over: it changed nothing (322 either
+            // way, because the average spacing already exceeded the gate even though the bursts did not), and
+            // it would have desynced us from the server -- we would sprint physically while the server still
+            // believed we walked, which is precisely what an anti-cheat re-simulating our movement will flag.
+            // Holding the DECISION keeps client and server agreeing; the quieter wire is a consequence.
+            //
+            // Only the transition out of sprinting is held. Starting a sprint stays instant so Baritone never
+            // fails a jump it planned for, which is how the bot loses paths.
+            var requestedSprint = entity.InputState.Current.Sprint;
+            if (entity.IsSprinting && !requestedSprint && entity.SprintHoldTicks > 0)
+            {
+                entity.SprintHoldTicks--;
+                requestedSprint = true;
+            }
+            else if (requestedSprint)
+            {
+                entity.SprintHoldTicks = SprintHoldTicks;
+            }
+
+            entity.IsSprinting = requestedSprint;
 
             // Calculate movement based on travel method
             // Travel applies movement internally and updates velocity for next tick
@@ -970,6 +1119,12 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
             }
         }
 
+        // DELIBERATE DEVIATION — do NOT "fix" this to vanilla's exact `delta.y != movement.y`.
+        // It has been tried: porting the exact comparison here took max offset 0.05 -> 0.85 and wedged the
+        // bot earlier. That means some other part of our collision resolution is not bit-identical where
+        // vanilla's is, and this loose epsilon masks it. The masking is load-bearing until that is found.
+        // (The horizontal pair above is a different story and IS at vanilla's Mth.equal 1e-5.)
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:794-795
         bool yCollision = Math.Abs(delta.Y - movement.Y) > 1.0E-7;
         bool verticalCollisionBelow = yCollision && delta.Y < 0.0;
         bool wasOnGround = entity.IsOnGround;
@@ -1143,10 +1298,39 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         var resolvedMovement = CollideWithShapes(movement, aabb, collidingShapes);
 
         // Check for collisions
-        bool xCollision = Math.Abs(movement.X - resolvedMovement.X) > 1.0E-7;
-        bool yCollision = Math.Abs(movement.Y - resolvedMovement.Y) > 1.0E-7;
-        bool zCollision = Math.Abs(movement.Z - resolvedMovement.Z) > 1.0E-7;
+        // Exact inequality, NOT an epsilon compare. Vanilla is `movement.y != movementStep.y`, and the
+        // difference is load-bearing: a sub-epsilon downward clip is a real landing to vanilla but read as
+        // "no collision" here, which drops onGroundAfterCollision and with it the step-up guard. That is the
+        // on/off-ground flapping seen on the spawn stairs, where the bot oscillated 71.8432 <-> 71.9216
+        // (one gravity tick) against a step edge until Grim setback-looped it.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1157-1160
+        bool xCollision = movement.X != resolvedMovement.X;
+        bool yCollision = movement.Y != resolvedMovement.Y;
+        bool zCollision = movement.Z != resolvedMovement.Z;
         bool onGroundAfterCollision = yCollision && movement.Y < 0.0;
+
+        // MCPROTO_STUCK_DIAG=1: why did this tick not move us?
+        //
+        // The bot wedges at a bottom-slab step going UP the SkyBlock spawn stairs and never recovers: 195
+        // setbacks at one coordinate over 42 seconds, descent unaffected. The suspicion is that step-up never
+        // runs because its own guard (onGroundAfterCollision || IsOnGround) is false while we hover above our
+        // idea of the floor -- but that is a guess, and this prints the actual values instead.
+        if (StuckDiagEnabled && movement.X * movement.X + movement.Z * movement.Z > 1.0E-8)
+        {
+            var movedSqr = resolvedMovement.X * resolvedMovement.X + resolvedMovement.Z * resolvedMovement.Z;
+            if (movedSqr < 1.0E-8)
+            {
+                logger.LogWarning(
+                    "[StuckDiag] wanted=({WX:F5},{WY:F5},{WZ:F5}) resolved=({RX:F5},{RY:F5},{RZ:F5}) " +
+                    "onGround={OnGround} onGroundAfterCollision={OGAC} xCol={XC} zCol={ZC} " +
+                    "pos=({PX:F3},{PY:F5},{PZ:F3}) boxMinY={MinY:F5} stepWillRun={StepRuns}",
+                    movement.X, movement.Y, movement.Z,
+                    resolvedMovement.X, resolvedMovement.Y, resolvedMovement.Z,
+                    entity.IsOnGround, onGroundAfterCollision, xCollision, zCollision,
+                    entity.Position.X, entity.Position.Y, entity.Position.Z, aabb.MinY,
+                    (onGroundAfterCollision || entity.IsOnGround) && (xCollision || zCollision));
+            }
+        }
 
         // Step-up logic
         double stepHeight = PhysicsConstants.DefaultStepHeight;
@@ -1175,10 +1359,34 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
                 if (horizontalDistSqr > resolvedDistSqr)
                 {
                     double distanceToGround = aabb.MinY - groundedAABB.MinY;
-                    return new Vector3<double>(
+                    var stepped = new Vector3<double>(
                         stepFromGround.X,
                         stepFromGround.Y - distanceToGround,
                         stepFromGround.Z);
+
+                    // MCPROTO_STUCK_DIAG=1: did this step-up land us on anything?
+                    //
+                    // The spawn-stairs wedge begins with a +0.5 step to y=72 taken while the whole bounding box
+                    // is still over a column whose highest solid face is a slab top at 71.5. We float, fall, and
+                    // are then setback-looped for the rest of the run. This prints whether a collider actually
+                    // supports the post-step box, which distinguishes "vanilla-legal step, bad luck" from
+                    // "we stepped onto air".
+                    if (StuckDiagEnabled)
+                    {
+                        var landed = aabb.Move(stepped.X, stepped.Y, stepped.Z);
+                        var probe = new AABB(landed.MinX, landed.MinY - 0.001, landed.MinZ,
+                                             landed.MaxX, landed.MinY, landed.MaxZ);
+                        bool supported = level.GetCollidingShapes(probe).Any();
+                        logger.LogWarning(
+                            "[StepDiag] candidate={Cand:F4} from=({FX:F3},{FY:F4},{FZ:F3}) to=({TX:F3},{TY:F4},{TZ:F3}) " +
+                            "supported={Supported} onGroundAfterCollision={OGAC} wasOnGround={WOG}",
+                            candidateHeight,
+                            entity.Position.X, entity.Position.Y, entity.Position.Z,
+                            entity.Position.X + stepped.X, entity.Position.Y + stepped.Y, entity.Position.Z + stepped.Z,
+                            supported, onGroundAfterCollision, entity.IsOnGround);
+                    }
+
+                    return stepped;
                 }
             }
         }
@@ -1249,6 +1457,48 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
     }
 
     /// <summary>
+    /// Settles this tick's rotation into the single value that BOTH our physics and the server will use.
+    ///
+    /// Runs after the pre-physics callback (where Baritone aims) and before any movement is computed, which is
+    /// vanilla's order: turn() applies mouse deltas, then the tick moves using the yaw it just set, then the
+    /// move packet carries that same yaw.
+    ///
+    /// Three transforms, all of which must land on the entity rather than on the outgoing packet:
+    ///
+    /// - JITTER. Human mouse input is imprecise, and the humaniser models that. A real player's aim really is
+    ///   jittery, so their movement direction is jittery too -- jittering only the packet claimed a heading we
+    ///   did not actually walk along.
+    /// - QUANTISATION to <see cref="RotationQuantum"/>. Vanilla never computes a rotation, it accumulates
+    ///   integer mouse deltas: f = sensitivity*0.6 + 0.2; yaw += deltaX * (f*f*f*8) * 0.15. At the default
+    ///   sensitivity of 0.5 that factor is exactly 1.0, so every rotation a real client sends is a multiple of
+    ///   0.15. We aim with atan2, which is arithmetically impossible for a mouse and identifies us on rotation
+    ///   alone, regardless of how correct the movement is.
+    /// - WRAP/CLAMP. Nothing in our aim path wrapped: the idle fidget does `yaw = YawPitch.X + (rand*120-60)`
+    ///   and Baritone's aim adds turn deltas, so the value accumulated without bound and we sent yaw of 400,
+    ///   700, -900 degrees. Vanilla's yaw is wrapped, so those cannot occur on a real client. Pitch is clamped,
+    ///   not wrapped, because vanilla cannot look past straight up or down.
+    ///
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java turn()
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java setRot / Mth.wrapDegrees
+    /// </summary>
+    private void CommitTickRotation(Entity entity)
+    {
+        var (yawJitter, pitchJitter) = humanizer.GetRotationJitter();
+        var yaw = entity.YawPitch.X + yawJitter;
+        var pitch = entity.YawPitch.Y + pitchJitter;
+
+        if (RotationQuantum > 0.0f)
+        {
+            yaw = MathF.Round(yaw / RotationQuantum) * RotationQuantum;
+            pitch = MathF.Round(pitch / RotationQuantum) * RotationQuantum;
+        }
+
+        entity.YawPitch = new Vector2<float>(
+            WrapDegrees(yaw),
+            Math.Clamp(pitch, -90.0f, 90.0f));
+    }
+
+    /// <summary>
     /// Collects candidate step-up heights from colliding shapes.
     /// Reference: minecraft-26.1-REFERENCE-ONLY/net/minecraft/world/entity/Entity.java:1120-1143
     /// </summary>
@@ -1313,6 +1563,21 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         // back. That is the same failure as suppressing the sprint multiplier, which measured 102 setbacks.
         // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:293-301
         bool currentlySprinting = entity.IsSprinting;
+        // Debounce the sprint toggle before it reaches the wire.
+        //
+        // Measured 2026-08-09, phase-normalised per 100 outgoing movement packets so walking-vs-standing
+        // cannot distort it:
+        //     vanilla  0.12   (FOUR Player Commands in a thirty-minute session)
+        //     us       4.94   (four in a four-second approach) -- 41x
+        // Baritone re-decides sprint every tick and we forward each decision, so brushing geometry makes the
+        // state chatter. No mouse or keyboard can produce that pattern.
+        //
+        // Deliberately NOT vanilla's LocalPlayer gate (canStartSprinting / shouldStopRunSprinting): that was
+        // tried here before and measured WORSE -- it cancelled sprint on every minor collision, Baritone
+        // immediately re-requested it, and the state flapped 268 times in one walk with 254 setbacks. The
+        // problem is not which decision we take, it is how often we are willing to TELL the server. Holding a
+        // change until it has survived a few ticks keeps Baritone's behaviour intact while making the packet
+        // stream look like something a person could produce.
         if (currentlySprinting != entity.WasSprinting)
         {
             logger.LogInformation("[Sprint] State change: {Old} -> {New}, sending {Action}",
@@ -1348,11 +1613,11 @@ public class PhysicsService(ILogger<PhysicsService> logger, IHumanizer humanizer
         if (entity.IsOnGround) flags |= MovementFlags.OnGround;
         if (entity.HorizontalCollision) flags |= MovementFlags.HorizontalCollision;
 
-        // Apply micro-jitter to outgoing rotation values only (not stored on entity).
-        // This simulates the natural imprecision of human mouse input.
-        var (yawJitter, pitchJitter) = humanizer.GetRotationJitter();
-        var packetYaw = entity.YawPitch.X + yawJitter;
-        var packetPitch = entity.YawPitch.Y + pitchJitter;
+        // Rotation was already jittered, quantised, wrapped and clamped by CommitTickRotation() at the top of
+        // the tick, so physics and the server agree on one value. Send it verbatim -- applying jitter here
+        // would reintroduce exactly the desync that was just removed.
+        var packetYaw = entity.YawPitch.X;
+        var packetPitch = entity.YawPitch.Y;
 
         if (move && rot)
         {

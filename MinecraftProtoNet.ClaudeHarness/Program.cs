@@ -349,6 +349,171 @@ if (GetArg("--menu") is { } menuName)
     return menuOk ? 0 : 1;
 }
 
+// --walk-loop: pace between two points for N minutes, with an anti-cheat watching.
+//
+// The physics rig. Standing still exercises almost nothing -- an idle bot's velocity is a constant
+// (0, -0.0784, 0) and identical with or without any of the fixes -- so a stationary test cannot tell two
+// physics builds apart. Walking laps produces the accelerate/decelerate cycles where the divergences
+// actually live: friction decay, the sub-3mm velocity clamp, step-ups, and the turn at each end.
+//
+// Deliberately two goals rather than a teleport-and-return: a teleport hands the server our position, which
+// hides exactly the disagreement being measured. Every metre here is walked and therefore predicted.
+if (Array.IndexOf(args, "--walk-loop") >= 0)
+{
+    var wServer = GetArg("--server") ?? "127.0.0.1";
+    var wPort = int.TryParse(GetArg("--port"), out var wp) ? wp : 25565;
+    var wMinutes = int.TryParse(GetArg("--minutes"), out var wm) ? wm : 10;
+    var wTimeout = int.TryParse(GetArg("--leg-timeout"), out var wt) ? wt : 60;
+
+    static (int X, int Y, int Z)? ParsePoint(string? raw)
+    {
+        if (raw is null) return null;
+        var parts = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 3) return null;
+        if (!int.TryParse(parts[0], out var x) || !int.TryParse(parts[1], out var y) || !int.TryParse(parts[2], out var z))
+            return null;
+        return (x, y, z);
+    }
+
+    var pointA = ParsePoint(GetArg("--a")) ?? (20, 71, -29);
+    var pointB = ParsePoint(GetArg("--b")) ?? (32, 71, -29);
+
+    void WLog(string message) => Console.WriteLine($"[walk {DateTime.Now:HH:mm:ss}] {message}");
+
+    var wSession = new BazaarSession(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        WLog);
+
+    if (!await client.AuthenticateAsync()) { Console.Error.WriteLine("[walk] AUTH FAILED"); return 2; }
+    if (!await wSession.ConnectAndSpawnAsync(wServer, wPort)) { Console.Error.WriteLine("[walk] no spawn"); return 2; }
+
+    wSession.Subscribe();
+    WLog($"connected; pacing ({pointA.X},{pointA.Y},{pointA.Z}) <-> ({pointB.X},{pointB.Y},{pointB.Z}) " +
+         $"for {wMinutes} min" +
+         (Environment.GetEnvironmentVariable("MCPROTO_NO_MIN_MOVE") == "1"
+             ? "  [ARM: min-move clamp DISABLED]"
+             : "  [ARM: min-move clamp ON]"));
+
+    // Settle window BEFORE the first goal is set.
+    //
+    // The harness rig teleports the bot onto the route at startup, and a teleport that lands after a goal is
+    // already being pathed is not setup -- it is an interruption mid-leg, which both corrupts the measurement
+    // and looks to the server exactly like the desync being measured. Sleeping here means the teleport
+    // completes while no goal exists at all.
+    var wSettle = int.TryParse(GetArg("--settle"), out var ws) ? ws : 8;
+    if (wSettle > 0)
+    {
+        WLog($"settling {wSettle}s before the first leg (window for external setup/teleport)");
+        await Task.Delay(TimeSpan.FromSeconds(wSettle));
+    }
+
+    var wDeadline = DateTime.UtcNow.AddMinutes(wMinutes);
+    var legs = 0;
+    var arrived = 0;
+    var toB = true;
+
+    while (DateTime.UtcNow < wDeadline && client.IsConnected)
+    {
+        var target = toB ? pointB : pointA;
+        legs++;
+        if (await wSession.WalkToAsync(target, wTimeout)) arrived++;
+        else WLog($"leg {legs} did not arrive");
+        toB = !toB;
+
+        // A short pause at each end so the deceleration completes and is measured, rather than being
+        // immediately overwritten by the next leg's acceleration.
+        wSession.StopMoving();
+        await Task.Delay(1500);
+    }
+
+    WLog($"DONE {arrived}/{legs} legs arrived");
+    wSession.Unsubscribe();
+    await client.DisconnectAsync();
+    return 0;
+}
+
+// --sign-loop: edit a sign, repeatedly, with an anti-cheat watching.
+//
+// Sign Update is the one packet in our stream with NO vanilla precedent: zero occurrences across four
+// Hypixel captures and both 30-minute vanilla control runs, while the trading loop emits one every ~40s
+// because it searches the Bazaar by typing into the search sign. This isolates that packet completely --
+// no NPC, no container, no trading, just open the sign editor and submit text on a loop.
+if (Array.IndexOf(args, "--sign-loop") >= 0)
+{
+    var sServer = GetArg("--server") ?? "127.0.0.1";
+    var sPort = int.TryParse(GetArg("--port"), out var sp2) ? sp2 : 25565;
+    var sGap = int.TryParse(GetArg("--gap"), out var sg2) ? sg2 : 20;
+    var sMinutes = int.TryParse(GetArg("--minutes"), out var sm2) ? sm2 : 30;
+    var sx = int.TryParse(GetArg("--x"), out var sxv) ? sxv : 21;
+    var sy = int.TryParse(GetArg("--y"), out var syv) ? syv : 71;
+    var sz = int.TryParse(GetArg("--z"), out var szv) ? szv : -30;
+
+    void SLog(string message) => Console.WriteLine($"[sign {DateTime.Now:HH:mm:ss}] {message}");
+
+    var sSession = new BazaarSession(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        SLog);
+
+    if (!await client.AuthenticateAsync()) { Console.Error.WriteLine("[sign] AUTH FAILED"); return 2; }
+    if (!await sSession.ConnectAndSpawnAsync(sServer, sPort)) { Console.Error.WriteLine("[sign] no spawn"); return 2; }
+
+    sSession.Subscribe();
+    SLog($"connected; editing the sign at ({sx},{sy},{sz}) every {sGap}s for {sMinutes} min");
+
+    var sDeadline = DateTime.UtcNow.AddMinutes(sMinutes);
+    var edits = 0;
+    var sFails = 0;
+    var interactions = host.Services.GetRequiredService<MinecraftProtoNet.Core.Actions.IInteractionManager>();
+
+    while (DateTime.UtcNow < sDeadline)
+    {
+        // Right-clicking an unwaxed sign opens its editor; the server answers with Open Sign Editor and the
+        // client replies with Sign Update -- the exact exchange the Bazaar search performs.
+        //
+        // UseItemOnBlockAsync, not PlaceBlockAtAsync: the latter needs an item in hand and clicks the block
+        // ADJACENT to the target in order to place into it, so against an empty-handed bot it returned false
+        // every time without ever touching the sign. This one aims at the sign and clicks the sign.
+        if (await interactions.UseItemOnBlockAsync(sx, sy, sz))
+        {
+            await Task.Delay(600);
+            if (await sSession.SignAsync($"edit {edits + 1}", expectMenu: false))
+            {
+                edits++;
+                SLog($"edit {edits} sent");
+                sFails = 0;
+            }
+            else
+            {
+                sFails++;
+                SLog($"edit {edits + 1}: sign editor never opened (failure {sFails})");
+            }
+        }
+        else
+        {
+            sFails++;
+            SLog($"could not right-click the sign (failure {sFails})");
+        }
+
+        if (sFails >= 5) { SLog("giving up after five consecutive failures"); break; }
+        await Task.Delay(TimeSpan.FromSeconds(sGap));
+    }
+
+    SLog($"DONE {edits} sign edit(s)");
+    sSession.Unsubscribe();
+    await client.DisconnectAsync();
+    return 0;
+}
+
 // --villager-loop: the vanilla open/close experiment, run against a plain villager on a local server.
 //
 // The Hypixel arm proved menus are necessary and sufficient for the ejection, but Hypixel will not tell us

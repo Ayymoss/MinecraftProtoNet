@@ -8,6 +8,13 @@ namespace MinecraftProtoNet.Core.Core;
 public interface IMinecraftClient : IPacketSender
 {
     ProtocolState ProtocolState { get; set; }
+
+    /// <summary>
+    /// Set when the server sends a Transfer packet: the host/port it wants us to reconnect to.
+    /// Null when there is no outstanding transfer. The session owner is responsible for acting on it — the
+    /// reconnect re-runs authentication and the join sequence, which a packet handler must not do.
+    /// </summary>
+    (string Host, int Port)? PendingTransfer { get; set; }
     ClientState State { get; }
     int ProtocolVersion { get; set; }
     AuthResult? AuthResult { get; set; }

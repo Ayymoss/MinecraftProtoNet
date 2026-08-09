@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using MinecraftProtoNet.Bazaar.Trading;
 using MinecraftProtoNet.Core.Utilities;
 
@@ -91,7 +92,12 @@ public sealed class Position(string productKey, string name, int quantity, doubl
     /// having vanished, which the recovery logic treats as a settled leg.
     /// </summary>
     public string Name { get; set; } = name;
-    public int Quantity { get; } = quantity;
+    /// <summary>
+    /// Units this leg is working. Settable so duplicate orders for the same product can be merged into one —
+    /// the Bazaar allows only a limited number of open orders, so two half-sized orders for one product waste
+    /// a slot that another flip could use.
+    /// </summary>
+    public int Quantity { get; set; } = quantity;
     public double EntryMarginPerUnit { get; } = entryMarginPerUnit;
 
     public PositionSide Side { get; set; } = PositionSide.Buying;
@@ -111,6 +117,14 @@ public sealed class Position(string productKey, string name, int quantity, doubl
     /// because a made-up close time would silently distort the realised-P&amp;L timeline.
     /// </summary>
     public DateTime? ClosedAt { get; set; }
+
+    /// <summary>
+    /// When a unit last actually filled. Null until the first one does.
+    ///
+    /// Needed to tell a buy that is slowly working from one that has stalled part-filled — the two look
+    /// identical from `UnitsBought` alone, and only the second should be given up on.
+    /// </summary>
+    public DateTime? LastFillUtc { get; set; }
     public int Steps { get; set; }
     public int PollsBeaten { get; set; }
 
@@ -119,6 +133,12 @@ public sealed class Position(string productKey, string name, int quantity, doubl
 
     /// <summary>Consecutive polls the order row was missing — one absence is a mid-refresh read, not a fact.</summary>
     public int MissingReads { get; set; }
+
+    /// <summary>
+    /// Consecutive cycles the ledger claimed stock that the inventory does not contain. One reading is not
+    /// evidence — an inventory can be empty for a moment after a rejoin — so this has to persist.
+    /// </summary>
+    public int MissingStockReads { get; set; }
 
     public int UnitsBought { get; set; }
     public double CoinsSpent { get; set; }
@@ -136,11 +156,23 @@ public sealed class Position(string productKey, string name, int quantity, doubl
     public double Profit => CoinsReceived - CoinsSpent;
     public string OrderName => Side == PositionSide.Buying ? $"BUY {Name}" : $"SELL {Name}";
 
-    /// <summary>Coins tied up: escrowed on an open buy, or the cost of goods held on the sell side.</summary>
+    /// <summary>
+    /// Coins tied up right now: escrowed on an open buy, or the cost basis of the goods STILL HELD.
+    ///
+    /// The sell side used to report <see cref="CoinsSpent"/>, which is the LIFETIME spend on the position and
+    /// never falls as units sell. So capital that had already come back still counted against the cap.
+    /// Measured 2026-08-09: Dung bought 974 for 980,428, sold 849 and received 844,989 back, held 125 worth
+    /// ~125,825 -- and reported the full 980,428. Across the book that was 2,508,068 reported against
+    /// 1,594,041 actually tied up, which pinned the bot over a 1,000,000 cap and stopped it buying at all.
+    ///
+    /// Cost basis of what is left is the honest figure: unsold units times the average price paid.
+    /// </summary>
     public double Committed => Side switch
     {
         PositionSide.Buying => Quantity * OrderPrice,
-        PositionSide.Selling => CoinsSpent,
+        PositionSide.Selling => UnitsBought > 0
+            ? Math.Max(0, UnitsBought - UnitsSold) * CostPerUnit
+            : CoinsSpent,
         _ => 0
     };
 }
@@ -258,6 +290,11 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     /// <summary>Logs to the console and to the status page, so the page needs no separate instrumentation.</summary>
     private void Say(string message)
     {
+        // Every line the bot says is proof it is still doing something, so this is the liveness signal the
+        // freeze watchdog watches. Using it means "stuck" is defined as SILENCE rather than as elapsed time,
+        // which is the distinction a duration-based timeout could not make: a cycle that opens positions
+        // legitimately takes many minutes, because the menu rate gate holds clicks for up to 15s each.
+        _lastProgressUtc = DateTime.UtcNow;
         log(message);
         status?.Note(message);
     }
@@ -292,6 +329,47 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     private string _hub = "unknown";
     private string _hubServer = "";
 
+    /// <summary>
+    /// Last time the cycle loop made a full turn. Read by the freeze watchdog; see the comment at its start
+    /// for why a liveness signal separate from "is the process alive" is needed at all.
+    /// </summary>
+    private DateTime _lastProgressUtc = DateTime.UtcNow;
+
+    /// <summary>
+    /// How long the bot may stay SILENT before the process exits for the supervisor to restart.
+    ///
+    /// Silence, not elapsed time: <see cref="Say"/> refreshes the clock, and the bot narrates constantly while
+    /// it works. A duration-based cycle timeout was tried first and had to be removed — at 4 minutes it killed
+    /// a healthy cycle that was opening positions, because the menu rate gate holds each click for up to 15s.
+    /// Eight minutes without a single line is not slowness, it is a hang.
+    /// </summary>
+    private static readonly TimeSpan FreezeTimeout = TimeSpan.FromMinutes(8);
+
+    /// <summary>Distinct exit code so the supervisor log shows a freeze apart from a crash or an ejection.</summary>
+    private const int FrozenExitCode = 3;
+
+    /// <summary>
+    /// Dimensions that are a staging area, never a destination. Sitting in one means a transfer did not
+    /// complete. `hypixel:dimension_switch` is the one actually observed stranding us; limbo is included
+    /// because it is where an ejection lands and it is equally untradeable.
+    /// </summary>
+    private static readonly string[] TransitDimensions = ["dimension_switch", "limbo"];
+
+    /// <summary>
+    /// How long a transit dimension is tolerated before it counts as stranded. A legitimate hub transfer
+    /// passes through in a second or two; this is long enough not to fire on one of those.
+    /// </summary>
+    private static readonly TimeSpan LimboGrace = TimeSpan.FromSeconds(25);
+
+    /// <summary>When the current unbroken stay in a transit dimension began, or null if we are not in one.</summary>
+    private DateTime? _inTransitSinceUtc;
+
+    /// <summary>When we last warped trying to get back into SkyBlock. Bounds transfer churn.</summary>
+    private DateTime _lastSkyBlockWarpUtc = DateTime.MinValue;
+
+    /// <summary>Minimum gap between SkyBlock warp attempts. Each warp is a backend transfer.</summary>
+    private static readonly TimeSpan SkyBlockWarpCooldown = TimeSpan.FromMinutes(2);
+
     public async Task<bool> RunAsync(PortfolioOptions options)
     {
         _options = options;
@@ -300,6 +378,18 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
         try
         {
+            // History is loaded for REPORTING only. The pre-join penalty that used to be served here is gone
+            // with the rest of the back-off (user's call, 2026-08-09) -- see the note at the ejection handler
+            // for why the evidence behind it did not hold up.
+            LoadEjectionHistory();
+
+            if (_recentEjections.Count > 0)
+            {
+                var sinceLast = DateTime.UtcNow - _recentEjections[^1];
+                Say($"carrying {_recentEjections.Count} ejection(s) from the last 30 min, most recent " +
+                    $"{sinceLast.TotalMinutes:F1} min ago — joining anyway");
+            }
+
             if (!await JoinAndSettleAsync(options)) return false;
 
             if (!string.IsNullOrWhiteSpace(options.StartupCommands))
@@ -324,12 +414,83 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             var hardStop = tradingUntil.AddMinutes(options.WindDownMinutes);
             var cycle = 0;
 
+            // ===== FREEZE WATCHDOG =====
+            //
+            // The supervisor only notices a bot that EXITS. The failure that actually kills a session is the
+            // bot that stays alive and connected but stops making progress: JeffMaxxing spent an hour wedged
+            // in mid-air at (-39.50, 88.56, -38.42), falling one gravity tick and being teleported back every
+            // tick, with the activity feed frozen. Nothing detected it because the process was healthy and the
+            // socket was open.
+            //
+            // Two layers. The soft one bounds a single cycle so a hung GUI wait is closed and retried in place.
+            // The hard one below watches the LOOP itself, so any freeze we have not thought of -- pathing that
+            // can never arrive, an await that never returns -- ends the process and lets the supervisor start a
+            // clean one. Exiting is the recovery: reconnecting in-process is what dug the hole before.
+            _lastProgressUtc = DateTime.UtcNow;
+            using var watchdogCts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                while (!watchdogCts.IsCancellationRequested)
+                {
+                    // 10s, not 30: the limbo check below has a 25s grace, and a 30s poll would round that up
+                    // to somewhere between 30 and 60 seconds.
+                    try { await Task.Delay(TimeSpan.FromSeconds(10), watchdogCts.Token); }
+                    catch (OperationCanceledException) { return; }
+
+                    // Limbo / transfer-void detection, checked before the generic stall timer because it is
+                    // both unambiguous and fast.
+                    //
+                    // Observed 2026-08-09 20:15:34: the "cannot reach the NPC" recovery sent /hub, Hypixel put
+                    // us in `hypixel:dimension_switch`, and the transfer never completed. The bot then fell
+                    // through that void indefinitely with X and Z pinned at -52.5 / 0.5, perfectly healthy and
+                    // making no progress. There is nothing to trade there and no path out, so waiting the full
+                    // FreezeTimeout just wastes minutes -- a transit dimension we are still sitting in after
+                    // LimboGrace is conclusive.
+                    var dimension = session.Client.State.Level.DimensionType?.Name ?? "";
+                    var inTransit = TransitDimensions.Any(d =>
+                        dimension.Contains(d, StringComparison.OrdinalIgnoreCase));
+
+                    if (!inTransit)
+                    {
+                        _inTransitSinceUtc = null;
+                    }
+                    else
+                    {
+                        _inTransitSinceUtc ??= DateTime.UtcNow;
+                        var stuckFor = DateTime.UtcNow - _inTransitSinceUtc.Value;
+                        if (stuckFor > LimboGrace)
+                        {
+                            Say($"LIMBO — still in '{dimension}' after {stuckFor.TotalSeconds:F0}s. " +
+                                "The transfer never completed. Exiting for a clean session.");
+                            Console.Out.Flush();
+                            Environment.Exit(FrozenExitCode);
+                        }
+                    }
+
+                    var stalled = DateTime.UtcNow - _lastProgressUtc;
+                    if (stalled > FreezeTimeout)
+                    {
+                        Say($"FROZEN — no cycle progress for {stalled.TotalMinutes:F1} min. " +
+                            "Exiting so the supervisor starts a clean session.");
+                        Console.Out.Flush();
+                        Environment.Exit(FrozenExitCode);
+                    }
+                }
+            }, watchdogCts.Token);
+
             while (DateTime.UtcNow < hardStop)
             {
                 cycle++;
+                _lastProgressUtc = DateTime.UtcNow;
                 if (session.Intercepted)
                 {
                     Say("intercept detected — stopping the session");
+                    break;
+                }
+
+                if (_stopRequested)
+                {
+                    Say("stopping the session — see the reason logged above");
                     break;
                 }
 
@@ -337,11 +498,33 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                 {
                     // One failure must not end an hour-long session: a cycle that throws is logged and
                     // retried next time round, because almost every failure here is a transient GUI race.
+                    //
+                    // NOT wrapped in a duration timeout. One was tried and it was a regression: a 4-minute
+                    // bound killed a perfectly healthy cycle at 21:40 that was busy opening positions, simply
+                    // because the menu rate gate holds each click for up to 15s and a cycle that opens new
+                    // positions legitimately runs for many minutes. Liveness is silence-based instead -- see
+                    // Say() and the freeze watchdog -- which distinguishes "slow" from "stuck". A hung cycle
+                    // stops talking, and the watchdog ends the process then.
                     await RunCycleAsync(cycle, DateTime.UtcNow < tradingUntil);
                 }
                 catch (Exception ex)
                 {
-                    Say($"cycle {cycle} failed ({ex.GetType().Name}: {ex.Message}) — continuing");
+                    // An ejection mid-cycle is expected, not a bug: the connection drops, LocalPlayer goes
+                    // null, and whatever the cycle touches next throws. Saying "failed" for that is noise that
+                    // reads like a crash -- both NullReferenceExceptions in the 2026-08-09 proof run landed in
+                    // the second immediately after "EJECTED TO LOBBY".
+                    if (!session.Client.IsConnected)
+                    {
+                        Say($"cycle {cycle} stopped because the connection dropped (likely the ejection above) — continuing");
+                    }
+                    else
+                    {
+                        // Stack trace included deliberately. Logging only the type and message made these
+                        // unattributable: "NullReferenceException: Object reference not set to an instance of
+                        // an object" names neither the file nor the line, so there was nothing to act on.
+                        Say($"cycle {cycle} failed ({ex.GetType().Name}: {ex.Message}) — continuing\n{ex.StackTrace}");
+                    }
+
                     try { await session.CloseAsync(); } catch { /* best-effort */ }
                 }
 
@@ -523,10 +706,9 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
         // reconnecting every few minutes turned that into a steady churn of server switches no real player
         // produces. The sidebar already says where we are, so read it instead of guessing.
         var sidebar = await session.WaitForSidebarAsync(TimeSpan.FromSeconds(8));
-        if (sidebar.Count > 0) Say($"  sidebar on join: {string.Join(" | ", sidebar.Take(6))}");
+        if (sidebar.Count > 0) Say($"  sidebar on join: {string.Join(" | ", sidebar)}");
 
-        var inSkyBlock = sidebar.Any(l => l.Contains("SKYBLOCK", StringComparison.OrdinalIgnoreCase)
-                                          || l.Contains("⏣", StringComparison.Ordinal));
+        var inSkyBlock = IsSkyBlockSidebar(sidebar);
         var inHub = sidebar.Any(l => l.Contains("Hub", StringComparison.OrdinalIgnoreCase));
 
         if (!inSkyBlock)
@@ -978,6 +1160,92 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     private static readonly string[] AuctionSearches = ["Drill", "Potion", "Sword", "Talisman", "Boots"];
 
     private int _auctionPasses;
+    /// <summary>
+    /// Read-only isolation mode: open the order menu each cycle, read it, close it. No slot clicks, no sign
+    /// updates, no trading. Exists to test whether in-menu interaction is what gets us ejected.
+    /// </summary>
+    private static readonly bool NoSearchDiagnostic =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_SEARCH") == "1";
+
+    /// <summary>
+    /// Stricter isolation than <see cref="NoSearchDiagnostic"/>: open the Bazaar NPC menu, hold it, close it.
+    /// Not one container click.
+    ///
+    /// NO_SEARCH did not stop the ejections (two in thirteen minutes, at 5.2 and 4.3 minutes, with zero sign
+    /// updates), so in-menu typing is exonerated. What NO_SEARCH still did was click slot 50 to open "Manage
+    /// Orders" — a click that makes the server swap one container for another. The vanilla 30-minute control
+    /// never did that: it opened an NPC menu and closed it, 80 times, and was never ejected. So the one
+    /// remaining difference between the surviving workload and ours is that sub-menu click, and this mode
+    /// removes it, leaving a loop that is packet-for-packet what the vanilla control ran.
+    /// DIAGNOSTIC only: it cannot read orders, so it cannot trade.
+    /// </summary>
+    private static readonly bool NoClickDiagnostic =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_CLICK") == "1";
+
+    /// <summary>
+    /// Where the recent-ejection timestamps live BETWEEN processes.
+    ///
+    /// The back-off is driven by how many ejections happened in the last 30 minutes, and that list used to be
+    /// in-process only — so every supervisor restart wiped it and the bot rejoined instantly no matter what
+    /// had just happened. Measured 2026-08-09: a process restarted 3 minutes after a session that took four
+    /// ejections was ejected again in 5.7 min, where a join with no recent ejections lasted 16.3. The penalty
+    /// clearly outlives our process, so the memory of it has to as well.
+    /// </summary>
+    private static string EjectionHistoryPath =>
+        Path.Combine(Path.GetDirectoryName(PositionStore.FilePath) ?? ".", "recent-ejections.txt");
+
+    private void SaveEjectionHistory()
+    {
+        try
+        {
+            File.WriteAllLines(EjectionHistoryPath,
+                _recentEjections.Select(t => t.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        catch (Exception ex)
+        {
+            Say($"  could not persist the ejection history ({ex.Message}) — back-off will reset on restart");
+        }
+    }
+
+    private void LoadEjectionHistory()
+    {
+        try
+        {
+            if (!File.Exists(EjectionHistoryPath)) return;
+            var now = DateTime.UtcNow;
+            _recentEjections.Clear();
+            foreach (var line in File.ReadAllLines(EjectionHistoryPath))
+            {
+                if (DateTime.TryParse(line, System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind, out var t)
+                    && now - t <= TimeSpan.FromMinutes(30))
+                {
+                    _recentEjections.Add(t);
+                }
+            }
+
+            if (_recentEjections.Count > 0)
+            {
+                var last = _recentEjections[^1];
+                Say($"carrying {_recentEjections.Count} ejection(s) from the last 30 min " +
+                    $"(most recent {(DateTime.UtcNow - last).TotalMinutes:F1} min ago) — back-off stays armed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Say($"  could not read the ejection history ({ex.Message})");
+        }
+    }
+
+    /// <summary>Consecutive failed reconnects; reset by any successful join.</summary>
+    private int _reconnectFailures;
+
+    /// <summary>How many consecutive failed reconnects before handing back to the supervisor's backoff.</summary>
+    private const int MaxReconnectFailures = 3;
+
+    /// <summary>Set when the run should end cleanly rather than keep cycling.</summary>
+    private bool _stopRequested;
+
     private DateTime _stressStarted = DateTime.UtcNow;
     private readonly Random _jitterGap = new();
 
@@ -1370,14 +1638,230 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
     // ===== The cycle =====
 
+    /// <summary>
+    /// A read-only snapshot of what the bot is carrying, for the status page.
+    ///
+    /// Names come from the same helper the trading code uses, so what is shown here is exactly what the
+    /// inventory reconciliation sees — if the page and the ledger disagree, that disagreement IS the bug.
+    /// Each entry also says whether an open position accounts for it, which is the usual question.
+    /// </summary>
+    /// <summary>How many consecutive empty-inventory readings before the ledger is overruled.</summary>
+    private const int MissingStockReadsBeforeClose = 3;
+
+    /// <summary>
+    /// How many of a product the bot is actually carrying, by the same name the trading code uses.
+    ///
+    /// Returns 0 when the inventory has none — which is a real answer, not an error. The caller treats it as
+    /// evidence only after several consecutive readings, because an empty inventory can also mean "the server
+    /// has not sent it yet".
+    /// </summary>
+    private int HeldInInventory(string productName)
+    {
+        var entity = session.Client.State.LocalPlayer?.Entity;
+        if (entity is null) return 0;
+
+        var wanted = ItemTextHelper.StripFormattingCodes(productName).Trim();
+        var total = 0;
+
+        foreach (var (index, slot) in entity.Inventory.Items)
+        {
+            if (index < 9 || index > 45 || slot.IsEmpty) continue;
+
+            var raw = ItemTextHelper.GetDisplayName(slot) ?? ItemTextHelper.GetItemName(slot);
+            var name = ItemTextHelper.StripFormattingCodes(raw ?? "").Trim();
+            if (string.Equals(name, wanted, StringComparison.OrdinalIgnoreCase))
+                total += Math.Max(slot.ItemCount, 1);
+        }
+
+        return total;
+    }
+
+    private object[] BuildInventoryView()
+    {
+        var entity = session.Client.State.LocalPlayer?.Entity;
+        if (entity is null) return [];
+
+        // Names of everything the book currently expects to be holding, so unaccounted stock stands out.
+        var covered = new HashSet<string>(
+            _open.Select(p => ItemTextHelper.StripFormattingCodes(p.Name).Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var rows = new List<object>();
+
+        foreach (var (index, slot) in entity.Inventory.Items.OrderBy(kv => kv.Key))
+        {
+            // 9-44 main + hotbar, 45 offhand. Armour and the crafting grid cannot hold anything we trade.
+            if ((index < 9 || index > 45) || slot.IsEmpty) continue;
+
+            var raw = ItemTextHelper.GetDisplayName(slot) ?? ItemTextHelper.GetItemName(slot);
+            var name = ItemTextHelper.StripFormattingCodes(raw ?? "").Trim();
+            if (name.Length == 0) name = slot.ItemId is { } id ? $"item:{id}" : "?";
+
+            rows.Add(new
+            {
+                slot = index,
+                where = index >= 36 && index <= 44 ? "hotbar" : index == 45 ? "offhand" : "main",
+                name,
+                count = Math.Max(slot.ItemCount, 1),
+                accountedFor = covered.Contains(name)
+            });
+        }
+
+        return rows.ToArray();
+    }
+
+    /// <summary>
+    /// The "am I where I think I am" check, run at the top of every cycle.
+    ///
+    /// Reads the sidebar (local state, no packets) and warps back into SkyBlock if we are not there. Returns
+    /// false when it could not get us back, so the caller abandons this cycle rather than doing Bazaar work in
+    /// a lobby.
+    /// </summary>
+    private async Task<bool> EnsureInSkyBlockAsync(int cycle)
+    {
+        var sidebar = session.SidebarLines();
+        if (sidebar.Count == 0)
+        {
+            sidebar = await session.WaitForSidebarAsync(TimeSpan.FromSeconds(5));
+        }
+
+        if (IsSkyBlockSidebar(sidebar)) return true;
+
+        // Cooldown, because every warp is a backend transfer and a detector that is wrong turns this into a
+        // transfer every cycle. Observed exactly that at 21:19-21:21 when the detector could not see a
+        // SkyBlock sidebar it was looking straight at. Even with the detector fixed, this bounds the damage
+        // if it is ever wrong again.
+        var sinceLastWarp = DateTime.UtcNow - _lastSkyBlockWarpUtc;
+        if (sinceLastWarp < SkyBlockWarpCooldown)
+        {
+            Say($"cycle {cycle}: sidebar still does not look like SkyBlock, but the last warp was only " +
+                $"{sinceLastWarp.TotalSeconds:F0}s ago — waiting rather than warping again");
+            return false;
+        }
+
+        _lastSkyBlockWarpUtc = DateTime.UtcNow;
+
+        // FULL sidebar, not Take(n). Truncating it hid the cause of two wrong diagnoses in a row: the line
+        // that actually decided the match was past the cut in both cases.
+        Say($"cycle {cycle}: NOT IN SKYBLOCK (sidebar: {string.Join(" | ", sidebar)}) — warping in");
+
+        // Close anything open first: a menu left up while we warp is a container the server still thinks we
+        // are holding.
+        try { await session.CloseAsync(); } catch { /* best-effort */ }
+
+        // /lobby BEFORE /skyblock, always. An ejection does not leave us somewhere /skyblock works from —
+        // it lands us in the Prototype Lobby, and Hypixel answers /skyblock there with, verbatim:
+        //     "You cannot join SkyBlock from here!"
+        //     "Use /lobby first!"
+        // Sending /lobby first is harmless when we are already in a main lobby, and is the only thing that
+        // works when we are not.
+        await session.SendCommandAsync("lobby");
+        await Task.Delay(TimeSpan.FromSeconds(6));
+
+        await session.SendCommandAsync("skyblock");
+        await Task.Delay(TimeSpan.FromSeconds(9));
+
+        sidebar = await session.WaitForSidebarAsync(TimeSpan.FromSeconds(8));
+        if (!IsSkyBlockSidebar(sidebar))
+        {
+            Say($"  still not in SkyBlock after /skyblock (sidebar: {string.Join(" | ", sidebar.Take(3))}) " +
+                "— abandoning this cycle, the next one will try again");
+            return false;
+        }
+
+        // /skyblock can drop us on the private island, which has no Bazaar. One /hub puts us somewhere that
+        // does, and it is a teleport so it works from anywhere.
+        if (!sidebar.Any(l => l.Contains("Hub", StringComparison.OrdinalIgnoreCase)))
+        {
+            Say("  in SkyBlock but not in a hub — warping to one");
+            await session.SendCommandAsync("hub");
+            await Task.Delay(TimeSpan.FromSeconds(6));
+        }
+
+        Say("  back in SkyBlock — resuming");
+        return true;
+    }
+
+    /// <summary>
+    /// SkyBlock's calendar line, e.g. "Summer 4th", "Late Winter 12th".
+    ///
+    /// Matched as season + ORDINAL DAY, not as a bare season word. A bare "Summer" also appears in the main
+    /// lobby whenever Hypixel is running a summer event, which made the lobby test positive for SkyBlock and
+    /// sent the bot happily on to look for a Bazaar that was not there.
+    /// </summary>
+    private static readonly Regex SkyBlockDateLine = new(
+        @"\b(?:Early |Late )?(?:Spring|Summer|Autumn|Winter)\s+\d{1,2}(?:st|nd|rd|th)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Whether the sidebar we are looking at belongs to SkyBlock.
+    ///
+    /// Matching "SKYBLOCK" or "⏣" was wrong and caused a warp LOOP: the word SKYBLOCK lives in the scoreboard
+    /// TITLE, which `Sidebar.Lines()` does not return, and "⏣" only appears on the location line, which is not
+    /// always present. So a perfectly good SkyBlock sidebar
+    ///     "08/09/26 m22BN | Summer 4th | 7:20am ☀"
+    /// read as "not in SkyBlock", and the bot warped, arrived, failed to recognise that it had arrived, and
+    /// warped again -- every cycle, each one a backend transfer.
+    ///
+    /// Detection is POSITIVE: a SkyBlock sidebar has to prove itself. Trying the other way round -- assume
+    /// SkyBlock unless the sidebar looks like a main lobby -- failed immediately on the PROTOTYPE lobby, whose
+    /// sidebar reads "Games in this lobby are | under heavy development!" and carries neither SkyBlock's
+    /// fields nor the main lobby's, so it sailed through as "already in SkyBlock". There are more lobbies than
+    /// there are SkyBlocks; enumerate the one, not the many.
+    ///
+    /// Churn is bounded by <see cref="SkyBlockWarpCooldown"/> instead, which is the right place for it.
+    /// </summary>
+    private static bool IsSkyBlockSidebar(List<string> sidebar) =>
+        sidebar.Any(l =>
+            l.Contains('⏣', StringComparison.Ordinal)
+            || l.Contains("Purse:", StringComparison.OrdinalIgnoreCase)
+            || l.Contains("Bits:", StringComparison.OrdinalIgnoreCase)
+            || SkyBlockDateLine.IsMatch(l));
+
     private async Task RunCycleAsync(int cycle, bool mayOpenNew)
     {
         if (!session.Client.IsConnected)
         {
             Say($"cycle {cycle}: disconnected — reconnecting");
-            if (!await JoinAndSettleAsync(_options)) Say("reconnect failed; will try again next cycle");
+            if (await JoinAndSettleAsync(_options))
+            {
+                _reconnectFailures = 0;
+                return;
+            }
+
+            // Retrying in-process for ever is worse than dying.
+            //
+            // Reconnect pressure is NOT free on Hypixel: ejection intervals were measured collapsing from
+            // 7.8 to 1.7 minutes under repeated rejoins, recovering only after ~28 minutes off. A loop that
+            // reconnects every cycle regardless therefore digs the hole it is trying to climb out of —
+            // observed here at 16:59-17:02, three failed joins in as many minutes, each answered with "You
+            // have disconnected!". Handing back to the supervisor gets us its backoff instead, which is the
+            // whole reason it exists.
+            _reconnectFailures++;
+            Say($"reconnect failed ({_reconnectFailures}/{MaxReconnectFailures})");
+
+            if (_reconnectFailures >= MaxReconnectFailures)
+            {
+                Say("repeated reconnect failures — exiting so the supervisor can back off properly");
+                _stopRequested = true;
+            }
+
             return;
         }
+
+        // ===== ARE WE EVEN IN SKYBLOCK? =====
+        //
+        // An ejection does NOT drop the TCP connection. It transfers us to the lobby on the SAME socket, so
+        // `IsConnected` above stays true, the reconnect branch never runs, and `EstablishAsync` -- the only
+        // code that ever sends /skyblock -- keeps its join-time result for the rest of the session.
+        //
+        // Observed 2026-08-09: ejected at 20:36:46, then 25 minutes of cycles hunting for a Bazaar in the
+        // main Hypixel lobby at (-52.5, 97, 0.5). Every cycle "recovered" with a bare /hub, which only moves
+        // between lobbies, so it could never come back. The status page reported healthy the whole time
+        // because cycles were still counting -- they were just all failing.
+        //
+        // So establish location per cycle instead of once per connection, cheaply: the sidebar is local state.
+        if (!await EnsureInSkyBlockAsync(cycle)) return;
 
         // Set before any of the work, not after: this used to be assigned only once the order menu had been
         // read, so a run whose cycles were failing to reach the NPC reported "cycle 1" indefinitely — the one
@@ -1438,8 +1922,35 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
         _orderManagerFailures = 0;
 
+        // Isolation mode (MCPROTO_NO_SEARCH=1): read the order menu and nothing else.
+        //
+        // Measured against the vanilla 30-minute control, the trading loop's deviation is not menu opens
+        // (2x) but what it does INSIDE the menu: container clicks 75x vanilla, and Sign Updates, which
+        // vanilla has never sent once across six captures. Both come from searching the Bazaar by typing a
+        // product name into the search sign, repeatedly, for products we already hold.
+        //
+        // This keeps the opens and drops the clicks and signs, so if the ejections stop, the cause is in-menu
+        // interaction rather than opening menus at all. It does not trade: DIAGNOSTIC only.
+        if (NoClickDiagnostic)
+        {
+            Say($"cycle {cycle}: NO-CLICK isolation — opened and closed the Bazaar menu, no clicks at all");
+            PositionStore.Save(_open, _closed, Say);
+            return;
+        }
+
+        if (NoSearchDiagnostic)
+        {
+            Say($"cycle {cycle}: NO-SEARCH isolation — read {orders.Count} order row(s), no clicks, no signs");
+            await session.CloseAsync();
+            PositionStore.Save(_open, _closed, Say);
+            return;
+        }
+
         Say($"cycle {cycle}: {_open.Count} open position(s), {orders.Count} order row(s), " +
             $"{Committed():N0}/{_options.Capital:N0} coins committed, realised {RealisedProfit():N1}");
+
+        // Before servicing anything: one product, one order per side. See the method for why.
+        await ConsolidateDuplicateOrdersAsync();
 
         foreach (var position in _open.ToList())
         {
@@ -1464,6 +1975,15 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     private async Task<List<MenuSlot>?> ReadOrdersAsync()
     {
         if (!await session.OpenNpcMenuAsync("Bazaar")) return null;
+
+        // Vanilla-shaped isolation: open, hold, close. See NoClickDiagnostic.
+        if (NoClickDiagnostic)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await session.CloseAsync();
+            return [];
+        }
+
         if (!await session.ClickAsync("Manage Orders")) return null;
         await session.WaitForMenuContentAsync(TimeSpan.FromSeconds(5));
 
@@ -1515,6 +2035,16 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     private static readonly TimeSpan AbandonUnfilledBuyAfter = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// How long a PARTIALLY filled buy may go without another unit filling before the remainder is cancelled
+    /// and the position advances to selling what it already holds.
+    ///
+    /// Shorter than <see cref="AbandonUnfilledBuyAfter"/> because this case is more expensive: the coins are
+    /// already spent and the goods are already ours, they are simply not on the market. Waiting an hour to
+    /// start selling stock we own is worse than waiting an hour for an order that may yet fill.
+    /// </summary>
+    private static readonly TimeSpan StalledPartialBuyAfter = TimeSpan.FromMinutes(20);
+
+    /// <summary>
     /// Cancels a buy order that has done nothing at all for an hour, freeing its escrow for a product that is
     /// actually moving. An order sitting unfilled is not harmless: its coins are locked, and with a capital
     /// cap that directly costs the trades that would otherwise have been opened.
@@ -1522,7 +2052,36 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     private async Task<bool> AbandonIfGoingNowhereAsync(Position position)
     {
         if (position.Side != PositionSide.Buying) return false;
-        if (position.UnitsBought > 0) return false; // it has moved; that is not "nothing happened"
+        // A buy that filled PART of its order and then stopped is the worst case, not an excused one: the
+        // stock is bought and sitting in the inventory, but the leg is still Buying so nothing ever lists it
+        // for sale, and repricing refuses to chase the book up because that would make the flip unprofitable.
+        // It deadlocks and survives restarts.
+        //
+        // Observed 2026-08-09: Salmon Shard 81/265 filled, 239,889 coins and 81 shards locked, reappearing in
+        // the inventory after every restart, with the reprice logic correctly answering "Hold" every poll.
+        //
+        // Cancelling the remainder and advancing to the sell leg realises what we actually own. That is
+        // strictly better than holding a buy that will not fill at a price that would still make money.
+        if (position.UnitsBought > 0)
+        {
+            if (position.UnitsBought >= position.Quantity) return false; // fully filled; not stalled
+
+            var sinceFill = DateTime.UtcNow - (position.LastFillUtc ?? position.LegStarted);
+            if (sinceFill < StalledPartialBuyAfter) return false;
+
+            Say($"  {position.OrderName}: {position.UnitsBought}/{position.Quantity} filled and nothing new " +
+                $"in {sinceFill.TotalMinutes:N0} min — cancelling the rest and selling what we hold");
+
+            if (!await CancelAsync(position))
+            {
+                Say($"  {position.OrderName}: cancel failed; will try again next cycle");
+                return true;
+            }
+
+            // AdvanceAsync flips Buying -> Selling and lists the units we actually bought.
+            await AdvanceAsync(position);
+            return true;
+        }
 
         var age = DateTime.UtcNow - position.Opened;
         if (age < AbandonUnfilledBuyAfter) return false;
@@ -1545,6 +2104,71 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
         _scorecard.RecordOutcome(position.ProductKey, position.Name, 0, age, DateTime.UtcNow);
         _scorecard.Save(Say);
         return true;
+    }
+
+    /// <summary>
+    /// One product, one order per side. Merges duplicate positions and re-posts a single combined order.
+    ///
+    /// The Bazaar caps how many orders may be open at once, so two half-sized orders for the same product are
+    /// not merely untidy — they burn a slot another flip could have used, and they fragment the position so
+    /// each half competes for the same place in the book. Observed 2026-08-09: Hideyho Shard held TWO Selling
+    /// positions of 95 (3 filled each), which also double-counted its committed capital.
+    ///
+    /// Merging is arithmetic on the ledger — units and coins add up — so the combined position keeps a correct
+    /// cost basis. The oldest position survives so the flip keeps its true age for scoring; the price is
+    /// deliberately left to <see cref="PlaceBuyAsync"/>/<see cref="PlaceSellAsync"/> to recompute from the live
+    /// book rather than inheriting whichever half happened to survive.
+    /// </summary>
+    private async Task ConsolidateDuplicateOrdersAsync()
+    {
+        var groups = _open
+            .GroupBy(p => (p.ProductKey, p.Side))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        foreach (var group in groups)
+        {
+            var members = group.OrderBy(p => p.Opened).ToList();
+            var keep = members[0];
+            var rest = members.Skip(1).ToList();
+
+            Say($"  consolidating {members.Count} {group.Key.Side} orders for {keep.Name} into one " +
+                $"({string.Join(" + ", members.Select(m => m.Quantity))} units)");
+
+            // Cancel every live order in the group, including the survivor's: the combined order replaces all
+            // of them, and a leftover live order would be counted twice on the next read.
+            foreach (var member in members.Where(m => m.OrderLive))
+            {
+                if (await CancelAsync(member)) continue;
+                Say($"  {member.OrderName}: cancel failed — leaving consolidation for the next cycle");
+                return;
+            }
+
+            foreach (var member in rest)
+            {
+                keep.Quantity += member.Quantity;
+                keep.UnitsBought += member.UnitsBought;
+                keep.CoinsSpent += member.CoinsSpent;
+                keep.UnitsSold += member.UnitsSold;
+                keep.CoinsReceived += member.CoinsReceived;
+                keep.Steps += member.Steps;
+                if (member.LastFillUtc > keep.LastFillUtc) keep.LastFillUtc = member.LastFillUtc;
+                _open.Remove(member);
+            }
+
+            keep.OrderLive = false;
+            keep.MissingReads = 0;
+            keep.PollsBeaten = 0;
+
+            var placed = keep.Side == PositionSide.Buying
+                ? await PlaceBuyAsync(keep, null)
+                : await PlaceSellAsync(keep, null);
+
+            if (!placed)
+                Say($"  {keep.Name}: consolidated but could not re-post yet — the next cycle will place it");
+
+            PositionStore.Save(_open, _closed, Say);
+        }
     }
 
     /// <summary>
@@ -1640,12 +2264,49 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             // benched a profitable product on the strength of it.
             if (position.UnitsSold < position.UnitsBought)
             {
-                Say($"  {position.Name}: no sell offer on the book but {position.UnitsBought - position.UnitsSold} " +
-                    "still held — re-listing rather than closing");
+                // Believe the INVENTORY, not just the ledger arithmetic.
+                //
+                // `UnitsSold < UnitsBought` says stock is owed to us; it does not say we have it. When the two
+                // disagree the ledger is the one that is wrong, and the cost is an infinite loop: every cycle
+                // walks to the NPC, searches the product, clicks Create Sell Offer, and Hypixel bounces
+                // straight back to the product page because there is nothing to sell — so "Custom Price" is
+                // never found, the placement aborts, and the same thing happens next cycle forever.
+                //
+                // Observed 2026-08-09: Dung claimed 125 held and Enchanted Raw Cod 1, with NEITHER item
+                // anywhere in the inventory, looping for the best part of an hour and reporting 125,825 of
+                // committed capital that did not exist.
+                var actuallyHeld = HeldInInventory(position.Name);
+                if (actuallyHeld <= 0)
+                {
+                    // Three consecutive readings, because an inventory read straight after a rejoin can be
+                    // empty before the server has sent it, and closing a real position on that would book a
+                    // phantom loss — the exact mistake this branch was originally written to prevent.
+                    position.MissingStockReads++;
+                    if (position.MissingStockReads < MissingStockReadsBeforeClose)
+                    {
+                        Say($"  {position.Name}: ledger says {position.UnitsBought - position.UnitsSold} held but " +
+                            $"the inventory has none ({position.MissingStockReads}/{MissingStockReadsBeforeClose}) — " +
+                            "not re-listing this cycle");
+                        return;
+                    }
 
-                position.LegStarted = DateTime.UtcNow;
-                if (!await PlaceSellAsync(position)) position.OrderLive = false;
-                return;
+                    Say($"  {position.Name}: ledger says {position.UnitsBought - position.UnitsSold} held, the " +
+                        "inventory has none on three consecutive reads — the goods are gone, closing rather " +
+                        "than looping on a sell that cannot be placed");
+
+                    position.UnitsSold = position.UnitsBought; // what we no longer hold, we no longer own
+                }
+                else
+                {
+                    position.MissingStockReads = 0;
+
+                    Say($"  {position.Name}: no sell offer on the book but {position.UnitsBought - position.UnitsSold} " +
+                        "still held — re-listing rather than closing");
+
+                    position.LegStarted = DateTime.UtcNow;
+                    if (!await PlaceSellAsync(position)) position.OrderLive = false;
+                    return;
+                }
             }
 
             position.Side = PositionSide.Closed;
@@ -1940,6 +2601,35 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             return false;
         }
 
+        // ===== CAP CHECK, HERE AND NOT ONLY AT OPEN =====
+        //
+        // The capital cap used to be tested once, when a position was first proposed. Nothing re-tested it
+        // afterwards, and committed capital drifts upward on its own two ways: repricing a buy raises
+        // Quantity * OrderPrice with no new position opened, and a flip that is part-filled holds a Buying leg
+        // (escrow) AND a Selling leg (cost of goods) at the same time. Measured 2026-08-09 with a 1,000,000
+        // cap: 2,068,384 committed, of which 1,513,418 was really spent.
+        //
+        // So test it where the coins actually leave: at the point of placing the order. The order is skipped
+        // whole rather than trimmed, because Quantity is init-only and resizing a position mid-flight would
+        // desync the escrow accounting from what is actually on the book. Skipping leaves the position idle
+        // until a fill or a cancellation frees room, which is the "stop buying until we are back under"
+        // behaviour the cap is meant to have.
+        var committedElsewhere = _open.Where(p => !ReferenceEquals(p, position)).Sum(p => p.Committed);
+        var headroom = _options.Capital - committedElsewhere;
+        var wanted = position.Quantity * buyPrice;
+
+        if (wanted > headroom)
+        {
+            Say($"  {position.Name}: buy of {wanted:N0} would take committed past the {_options.Capital:N0} " +
+                $"cap ({committedElsewhere:N0} committed elsewhere, {headroom:N0} headroom) — skipping");
+            await session.CloseAsync();
+            return false;
+        }
+
+        // From here to the confirmation is one indivisible sequence: click, quantity sign, price sign, confirm.
+        // The anti-AFK nudge must not close the menu part-way through it.
+        using var critical = session.CriticalTransaction();
+
         if (!await session.ClickAsync("Create Buy Order")) return false;
         if (!await session.ClickAsync("Custom Amount")) return false;
         if (!await session.SignAsync(position.Quantity.ToString())) return false;
@@ -1990,6 +2680,9 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                 sellPrice = floor;
             }
         }
+
+        // Indivisible, same as the buy path — see the note there.
+        using var critical = session.CriticalTransaction();
 
         if (!await session.ClickAsync("Create Sell Offer")) return false;
         if (!await session.ClickAsync("Custom Price")) return false;
@@ -2169,25 +2862,56 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
         // collapse two candidates onto the same string.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var distinctive = words.Where(w => !GenericProductWords.Contains(w)).ToArray();
+
         IEnumerable<string> Candidates()
         {
+            // Distinctive words FIRST, because the sign clips by pixel width and the family label is usually
+            // the leading word. "Enchanted Glowstone Dust" trimmed to fit becomes "Enchanted" -- a term shared
+            // by hundreds of products, which searched and found nothing. Leading with "Glowstone Dust" gives
+            // the trimmer something worth keeping.
+            if (distinctive.Length > 0 && distinctive.Length < words.Length)
+                yield return string.Join(' ', distinctive);
+
             yield return name;
 
-            var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (words.Length < 2) yield break;
 
             yield return string.Join(' ', words.Skip(1).Append(words[0]));
 
-            // The longest word is the one least likely to be a family label like "Shard" or a numeral.
-            yield return words.OrderByDescending(w => w.Length).First();
+            // The longest DISTINCTIVE word, so this fallback cannot land on a family label either.
+            yield return (distinctive.Length > 0 ? distinctive : words)
+                .OrderByDescending(w => w.Length).First();
         }
 
         foreach (var candidate in Candidates())
         {
             var term = FitToSign(candidate);
-            if (term.Length > 0 && seen.Add(term)) yield return term;
+
+            // Never search a bare family label. It either finds nothing, or -- worse, and this has happened --
+            // finds the wrong product: a search for Enchanted Titanium once fell back to "Enchanted" and bought
+            // six Enchanted Acacia Log. A term with no distinctive word in it cannot identify anything.
+            if (term.Length == 0 || !seen.Add(term)) continue;
+            if (term.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .All(GenericProductWords.Contains)) continue;
+
+            yield return term;
         }
     }
+
+    /// <summary>
+    /// Words that name a FAMILY rather than a product, and so cannot identify anything on their own.
+    ///
+    /// These are the words the Bazaar reuses across hundreds of entries — every "Enchanted ..." item, every
+    /// "... Shard", the whole gem quality ladder. They are still searched as PART of a term; they are only
+    /// barred from being the entire term.
+    /// </summary>
+    private static readonly HashSet<string> GenericProductWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Enchanted", "Shard", "Block", "Raw", "Essence", "Gem", "Powder", "Dust", "Log",
+        "Rough", "Flawed", "Fine", "Flawless", "Perfect", "Refined", "Superior"
+    };
 
     /// <summary>
     /// Picks the search result that IS this product, or null rather than a guess.
@@ -2244,6 +2968,7 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             var unit = Num(items.Groups[2].Value);
             position.UnitsBought += qty;
             position.CoinsSpent += qty * unit;
+            position.LastFillUtc = DateTime.UtcNow;
             Say($"  ledger {position.Name}: +{qty} @ {unit} (held {position.UnitsBought}, spent {position.CoinsSpent:N1})");
             return;
         }
@@ -2310,6 +3035,41 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             // than zero, because zero would read as "broke" when it means "not yet seen".
             purse = session.Client.State.Level.Sidebar.ReadPurse(session.Client.State.Level.Teams),
             committed = open.Sum(p => p.Committed),
+
+            // ===== WHERE THE MONEY ACTUALLY IS =====
+            //
+            // One "committed" total was unreadable: it could not distinguish coins escrowed on buy orders from
+            // the cost of goods sitting in the inventory waiting to sell, and (before the Committed fix) it
+            // also counted stock that had already been sold and paid for. Splitting it means the page shows
+            // the flow rather than a single number nobody can reconcile.
+            //
+            //   buyEscrow  - coins Hypixel is holding against our open BUY orders. Comes back if cancelled.
+            //   sellCost   - what we PAID for goods we still hold and are trying to sell. Recovered by selling.
+            //   unitsHeld  - how many items those goods are.
+            //   sellValue  - what those goods are currently listed FOR (the gross we expect back).
+            //   expectedGain - sellValue - sellCost, i.e. the profit still in flight, before tax.
+            buyEscrow = open.Where(p => p.Side == PositionSide.Buying).Sum(p => p.Committed),
+            sellCost = open.Where(p => p.Side == PositionSide.Selling).Sum(p => p.Committed),
+            unitsHeld = open.Where(p => p.Side == PositionSide.Selling)
+                            .Sum(p => Math.Max(0, p.UnitsBought - p.UnitsSold)),
+            unitsOnOrder = open.Where(p => p.Side == PositionSide.Buying)
+                               .Sum(p => Math.Max(0, p.Quantity - p.UnitsBought)),
+            sellValue = open.Where(p => p.Side == PositionSide.Selling)
+                            .Sum(p => Math.Max(0, p.UnitsBought - p.UnitsSold) * p.OrderPrice),
+            expectedGain = open.Where(p => p.Side == PositionSide.Selling)
+                               .Sum(p => Math.Max(0, p.UnitsBought - p.UnitsSold) * (p.OrderPrice - p.CostPerUnit)),
+
+            // ===== READ-ONLY INVENTORY =====
+            //
+            // Purely for looking at. Several of the awkward bugs this session were "why will it not sell that?"
+            // questions that could only be answered by reading the log, and the answer is usually visible in
+            // the inventory: stock held that no position covers, a stack in a slot the sell path never looks
+            // at, or an item whose name does not match what the ledger thinks it is.
+            //
+            // Slots 9-44 are the main inventory and hotbar; 45 is the offhand. Armour and the crafting grid
+            // are skipped because nothing we trade can be there.
+            inventory = BuildInventoryView(),
+
             realisedProfit = closed.Where(p => p.BasisKnown).Sum(p => p.Profit),
 
             // Earning RATE, measured over the span the profit was actually earned in — from the oldest closed
@@ -2337,6 +3097,11 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                 price = p.OrderPrice,
                 unitsBought = p.UnitsBought,
                 spent = p.CoinsSpent,
+
+                // What is still ours and what it is currently worth on the book, per line, so the summary
+                // cards can be reconciled against the rows rather than taken on trust.
+                held = Math.Max(0, p.UnitsBought - p.UnitsSold),
+                committed = p.Committed,
                 ageMinutes = (DateTime.UtcNow - p.LegStarted).TotalMinutes,
                 steps = p.Steps
             }).ToList(),
@@ -2463,26 +3228,26 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             var now = DateTime.UtcNow;
             _recentEjections.Add(now);
             _recentEjections.RemoveAll(t => now - t > TimeSpan.FromMinutes(30));
+            SaveEjectionHistory();
 
             // Bank the clean stay that just ended. Time-since-last-ejection is the number the whole ejection
             // investigation is judged on, so it has to be visible rather than inferred from the log.
             status?.NoteEjection();
 
-            var backoff = TimeSpan.FromSeconds(10);
-            if (_recentEjections.Count >= 2)
-            {
-                var gap = _recentEjections[^1] - _recentEjections[^2];
-                if (gap < TimeSpan.FromMinutes(3))
-                {
-                    // Escalate with how many ejections are stacked up, capped so the bot never parks for ever.
-                    var minutes = Math.Min(10, 2 * (_recentEjections.Count - 1));
-                    backoff = TimeSpan.FromMinutes(minutes);
-                    Say($"  ejections are accelerating ({gap.TotalMinutes:F1} min since the last, " +
-                        $"{_recentEjections.Count} in the past 30) — backing off {minutes} min before rejoining");
-                }
-            }
-
-            await Task.Delay(backoff);
+            // FIXED 10s. The escalating back-off is REMOVED (user's call, 2026-08-09) because it was never
+            // shown to buy anything.
+            //
+            // What it rested on: one session on 2026-08-08 whose intervals collapsed 7.8 -> 5.0 -> 2.1 -> 1.8
+            // -> 1.8 -> 1.7 min under instant rejoins, and recovered to 10 min after ~28 minutes off. That is
+            // a single session, and the "leaky bucket" it implies was never reproduced. The 2026-08-09 data
+            // does not show the collapse at all: 16.3 -> 6.6 -> 6.0 -> 5.4 min, all with a 10-second rejoin.
+            //
+            // Meanwhile the cost was certain: parking the bot for up to 15 minutes after an ejection it takes
+            // every 5-7 minutes meant it spent most of its life waiting rather than trading.
+            //
+            // The ejection history is still tracked and saved -- it is the headline telemetry for the whole
+            // investigation -- it simply no longer gates the rejoin.
+            await Task.Delay(TimeSpan.FromSeconds(10));
 
             await session.SendCommandAsync("skyblock");
             await Task.Delay(TimeSpan.FromSeconds(9));
