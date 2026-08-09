@@ -1180,6 +1180,23 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
         return true;
     }
 
+    /// <summary>
+    /// Hubs we have had to flee, and when. Without this the bot can hop straight back into the hub whose
+    /// Bazaar the server just switched off — it is usually the busiest one, which is exactly why it is
+    /// struggling, so "pick the busiest" walks right back into it.
+    /// </summary>
+    private readonly Dictionary<string, DateTime> _badHubs = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly TimeSpan BadHubCooldown = TimeSpan.FromMinutes(20);
+
+    /// <summary>
+    /// Set when we had to accept a hub below <see cref="PortfolioOptions.MinHubPlayers"/> because nothing
+    /// better was available. Null whenever we are somewhere that meets the threshold.
+    /// </summary>
+    private DateTime? _settledForQuietHubAt;
+
+    private static readonly TimeSpan QuietHubRecheckAfter = TimeSpan.FromMinutes(15);
+
     private async Task<bool> GoToBusyHubAsync(PortfolioOptions options, bool mustSwitch = false)
     {
         if (!await session.FindNpcAsync("Hub Selector", TimeSpan.FromSeconds(20))) return false;
@@ -1196,6 +1213,7 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
         {
             _hub = current?.Name ?? "current hub";
             _hubServer = current is null ? "" : ServerOf(current) ?? "";
+            _settledForQuietHubAt = null;
             Say($"current hub holds {occupancy.Players}/{occupancy.Capacity} — busy enough");
             await session.CloseAsync();
             return true;
@@ -1203,10 +1221,19 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
         if (mustSwitch) Say("  must leave this server — switching hubs regardless of how busy this one is");
 
+        // The hub we are being forced off is unusable for a while, not just right now: the Bazaar stays
+        // disabled until the server recovers. Remember it so the "pick the busiest" rule below cannot send us
+        // straight back — the broken hub is normally the busiest, which is why it is broken.
+        var now = DateTime.UtcNow;
+        if (mustSwitch && current?.Name is { } leaving) _badHubs[leaving] = now;
+        foreach (var stale in _badHubs.Where(kv => now - kv.Value > BadHubCooldown).Select(kv => kv.Key).ToList())
+            _badHubs.Remove(stale);
+
         // Every hub we could actually join: a full one cannot be entered however busy it looks.
         var joinable = session.MenuSlots()
             .Where(x => x.Name is not null && x.Name.Contains("SkyBlock Hub #", StringComparison.OrdinalIgnoreCase))
             .Where(x => current is null || x.Index != current.Index)
+            .Where(x => !_badHubs.ContainsKey(x.Name!))
             .Select(x => (Slot: x, Occupancy: OccupancyOf(x)))
             .Where(x => x.Occupancy is { } o && (o.Capacity == 0 || o.Players < o.Capacity))
             .ToList();
@@ -1246,13 +1273,28 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
             if (target.Slot is null)
             {
+                // Nowhere to go. When we are only here because this hub is nicer than the alternatives, that is
+                // fine. When we are being forced off it, it is not: reporting success leaves the caller trading
+                // against a Bazaar the server has switched off, which is the loop this whole path exists to
+                // break. Fail instead, so the caller backs off and tries again once the menu has changed.
+                if (mustSwitch)
+                {
+                    Say($"no joinable hub other than this one, and this one is unusable — giving up this attempt");
+                    await session.CloseAsync();
+                    return false;
+                }
+
                 Say($"no hub reaches {options.MinHubPlayers} players and none has room — staying put");
                 await session.CloseAsync();
                 return true;
             }
 
             var best = target.Occupancy!.Value;
-            if (here is { } mine && mine.Players >= best.Players)
+
+            // Staying put is only ever right when this hub still WORKS. Under mustSwitch it is the one place we
+            // cannot be, so a quieter hub beats the busy broken one — this is the case where the laggy hub is
+            // also the only one above the threshold, and the old comparison pinned us to it for ever.
+            if (!mustSwitch && here is { } mine && mine.Players >= best.Players)
             {
                 Say($"no hub reaches {options.MinHubPlayers}; the busiest joinable holds {best.Players} " +
                     $"and we already have {mine.Players} — staying put");
@@ -1260,7 +1302,18 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                 return true;
             }
 
-            Say($"no hub reaches {options.MinHubPlayers} — taking the busiest joinable one at {best.Players}/{best.Capacity}");
+            Say(mustSwitch
+                ? $"no hub reaches {options.MinHubPlayers} and this one is unusable — taking the busiest joinable " +
+                  $"at {best.Players}/{best.Capacity} and re-checking in {QuietHubRecheckAfter.TotalMinutes:F0} min"
+                : $"no hub reaches {options.MinHubPlayers} — taking the busiest joinable one at {best.Players}/{best.Capacity}");
+
+            // Settling for a quiet hub is a compromise, not a destination. Remember when, so the cycle can look
+            // for something better once the hub list has had time to change.
+            _settledForQuietHubAt = DateTime.UtcNow;
+        }
+        else
+        {
+            _settledForQuietHubAt = null;
         }
 
         Say($"moving to \"{target.Slot.Name}\" at {target.Occupancy!.Value.Players}/{target.Occupancy!.Value.Capacity} " +
@@ -2414,6 +2467,24 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             session.ClearRestartState();
             session.ClearOutage();
             return await GoToBusyHubAsync(_options, mustSwitch: true) && await WalkToBazaarAsync();
+        }
+
+        // Nothing is wrong — but we may be sitting on a hub we only accepted because everything better was
+        // full, broken, or on cooldown. Hub populations swing over tens of minutes, so look again periodically
+        // rather than serving out the session in a hub too quiet to blend into.
+        //
+        // The re-check itself opens the Hub Selector, and container opens are what get us ejected, so it is
+        // deliberately infrequent (~4/hour at the default) and only runs while the compromise is in force.
+        if (_settledForQuietHubAt is { } since && DateTime.UtcNow - since >= QuietHubRecheckAfter)
+        {
+            Say($"settled for a quiet hub {(DateTime.UtcNow - since).TotalMinutes:F0} min ago — checking for a better one");
+
+            // Cleared first so a re-check that finds nothing better restarts the clock instead of retrying every
+            // cycle. GoToBusyHubAsync sets it again if it has to compromise a second time.
+            _settledForQuietHubAt = null;
+
+            if (!await GoToBusyHubAsync(_options)) return false;
+            return await WalkToBazaarAsync();
         }
 
         return true;

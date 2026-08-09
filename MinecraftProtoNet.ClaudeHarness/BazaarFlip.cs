@@ -304,18 +304,34 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
             return await WalkToBazaarAsync();
         }
 
-        var target = session.MenuSlots()
+        // Every hub we could actually join, busiest first. The population threshold is applied AFTER this, not
+        // as a filter, because the two questions are different: "where would I rather be" versus "can I leave".
+        var joinable = session.MenuSlots()
             .Where(x => x.Name is not null && x.Name.Contains("SkyBlock Hub #", StringComparison.OrdinalIgnoreCase))
             .Where(x => current is null || x.Index != current.Index)
             .Select(x => (Slot: x, Occupancy: OccupancyOf(x)))
-            .Where(x => x.Occupancy is { } o && o.Players >= options.MinHubPlayers && (o.Capacity == 0 || o.Players < o.Capacity))
+            .Where(x => x.Occupancy is { } o && (o.Capacity == 0 || o.Players < o.Capacity))
             .OrderByDescending(x => x.Occupancy!.Value.Players)
-            .FirstOrDefault();
+            .ToList();
+
+        var target = joinable.FirstOrDefault(x => x.Occupancy!.Value.Players >= options.MinHubPlayers);
 
         if (target.Slot is null)
         {
-            log($"no other hub has {options.MinHubPlayers}+ players with room — cannot hop");
-            return false;
+            // A forced hop means THIS server is the problem — its Bazaar is off, or it is about to restart. The
+            // threshold was never worth more than leaving, and when the broken hub is also the only busy one
+            // (which is the common case, because busy is why it broke) insisting on it pinned the bot to the
+            // one hub it could not use. Take the busiest hub that will have us instead.
+            if (forceHop) target = joinable.FirstOrDefault();
+
+            if (target.Slot is null)
+            {
+                log($"no other hub has {options.MinHubPlayers}+ players with room — cannot hop");
+                return false;
+            }
+
+            log($"no other hub reaches {options.MinHubPlayers}, and this one is unusable — taking the busiest " +
+                $"joinable at {target.Occupancy!.Value.Players}/{target.Occupancy!.Value.Capacity}");
         }
 
         log($"hopping to \"{target.Slot.Name}\" at {target.Occupancy!.Value.Players}/{target.Occupancy!.Value.Capacity} " +
