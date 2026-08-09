@@ -12,6 +12,7 @@ using MinecraftProtoNet.Core.Packets.Play.Serverbound;
 using MinecraftProtoNet.Core.Services;
 using MinecraftProtoNet.Core.State;
 using MinecraftProtoNet.Core.State.Base;
+using MinecraftProtoNet.Bazaar.Services;
 using MinecraftProtoNet.Core.Utilities;
 
 namespace MinecraftProtoNet.ClaudeHarness;
@@ -452,6 +453,10 @@ public sealed class BazaarSession(
 
     private void NoteIfRestart(string line)
     {
+        // Same reasoning as NoteIfOutage: "restart soon" is also a thing players say to each other, and acting
+        // on it evacuates a hub that was never going to restart.
+        if (LooksLikePlayerChat(line)) return;
+
         if (line.Contains("restart soon", StringComparison.OrdinalIgnoreCase)
             || line.Contains("warp out", StringComparison.OrdinalIgnoreCase))
         {
@@ -733,9 +738,19 @@ public sealed class BazaarSession(
     /// being off, busy or postponed. Deliberately broad — a false positive costs one hub hop, a false negative
     /// costs a bot that keeps clicking a dead menu.
     /// </summary>
+    /// <summary>
+    /// True if the line was written by another player rather than by the server. Gates the notices that make
+    /// the bot ACT on what it reads; see <see cref="HypixelChat"/> for why the packet type cannot tell us.
+    ///
+    /// Deliberately not applied to <see cref="NoteIfIntercepted"/>: that one exists to notice a human taking an
+    /// interest in the bot, so player chat is exactly what it needs to hear.
+    /// </summary>
+    private static bool LooksLikePlayerChat(string line) => HypixelChat.IsPlayerChat(line);
+
     private void NoteIfOutage(string line)
     {
         if (OutageNotice is not null) return;
+        if (LooksLikePlayerChat(line)) return;
 
         var lower = line.ToLowerInvariant();
         var mentionsBazaar = lower.Contains("bazaar") || lower.Contains("buy order") || lower.Contains("sell offer")
@@ -748,12 +763,12 @@ public sealed class BazaarSession(
             "too busy", "high load", "server load", "overloaded", "maintenance", "not available", "failed",
             // "This server is too laggy to use the Bazaar, sorry!" -- observed 2026-08-09, and it matched
             // none of the words above, so the bot kept trying to trade on a hub that had switched the
-            // Bazaar off. Same class as the others: it is per-server, so the fix is to be on another server.
+            // Bazaar off (it fired 10+ times in one night). Same class as the others: it is per-server, so
+            // the fix is to be on another server.
             //
-            // Matched on the whole phrase rather than "laggy" alone because player chat reaches this handler
-            // too, and "laggy" on its own is common ("bruh server is to laggy", captured in the same logs).
-            // A player would have to type "too laggy to use" AND mention the Bazaar to trip it, and the worst
-            // case is one unnecessary hub hop.
+            // Still matched on the whole phrase rather than "laggy" alone. LooksLikePlayerChat above is the
+            // real defence against someone in lobby chat complaining, but the phrase costs nothing and keeps
+            // this working if the prefix rule ever misses a chat format.
             "too laggy to use"
         ];
 
