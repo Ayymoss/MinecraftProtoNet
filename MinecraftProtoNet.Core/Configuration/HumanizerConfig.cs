@@ -29,10 +29,19 @@ public sealed class HumanizerConfig
     public float RotationJitterMaxDegrees { get; set; } = 0.04f;
 
     // --- GUI interaction timing ---
+    //
+    // Raised from 100-350ms, for human-likeness rather than to fix anything: three of four ejections landed
+    // within seconds of a container click, which looked damning until the rates were aggregated across 19
+    // sessions — correlation between clicks/min and ejections/min is -0.12, and the two sessions with ZERO
+    // clicks had the HIGHEST ejection rates. Menu speed is not the cause, so this is not raised further; a
+    // slower bot would only trade less while being ejected just as often.
+    //
+    // The range stays wide on purpose: a constant gap is its own signature, arguably more distinctive than
+    // being fast.
     /// <summary>Min delay between GUI slot clicks (ms).</summary>
-    public int GuiClickMinMs { get; set; } = 100;
+    public int GuiClickMinMs { get; set; } = 250;
     /// <summary>Max delay between GUI slot clicks (ms).</summary>
-    public int GuiClickMaxMs { get; set; } = 350;
+    public int GuiClickMaxMs { get; set; } = 650;
 
     /// <summary>Min delay for GUI screen transitions — open, close, search (ms).</summary>
     public int GuiNavigationMinMs { get; set; } = 250;
@@ -58,6 +67,13 @@ public sealed class HumanizerConfig
     public int IdleMaxIntervalTicks { get; set; } = 400;
     /// <summary>Max distance to search for entities to look at during idle (blocks).</summary>
     public double IdleLookMaxDistance { get; set; } = 20.0;
+    /// <summary>
+    /// Minimum ticks an idle glance is spread over. A vanilla client emits a rotation packet on every tick a
+    /// turn is in progress, so a ±10° glance is ~10-20 small-delta packets, not one large-delta packet.
+    /// </summary>
+    public int IdleLookSlewMinTicks { get; set; } = 8;
+    /// <summary>Maximum ticks an idle glance is spread over.</summary>
+    public int IdleLookSlewMaxTicks { get; set; } = 18;
 
     // --- Chat safety on remote servers ---
     /// <summary>When true, non-slash messages are redirected to webcore on remote servers instead of being sent in-game.</summary>

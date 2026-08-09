@@ -119,6 +119,9 @@ public sealed class HumanizerService : IHumanizer
         return true;
     }
 
+    public int GetIdleLookSlewTicks() =>
+        RandomRange(_config.IdleLookSlewMinTicks, _config.IdleLookSlewMaxTicks);
+
     private static int RandomRange(int min, int max)
     {
         if (min >= max) return min;

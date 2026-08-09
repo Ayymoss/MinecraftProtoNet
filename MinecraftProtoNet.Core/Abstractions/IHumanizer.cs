@@ -45,4 +45,11 @@ public interface IHumanizer
     /// Call once per tick; internally tracks time since last idle action.
     /// </summary>
     bool ShouldPerformIdleAction();
+
+    /// <summary>
+    /// How many ticks an idle glance should be spread over. A real head turn emits a rotation packet on
+    /// every tick it is in progress; assigning the destination in one tick emits a single large-delta packet
+    /// that no mouse can produce.
+    /// </summary>
+    int GetIdleLookSlewTicks();
 }
