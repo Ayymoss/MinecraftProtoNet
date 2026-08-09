@@ -41,6 +41,12 @@ public class ScoreboardTeam(string name)
     /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/scores/PlayerTeam.java (getPlayers)
     /// </summary>
     public HashSet<string> Members { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Text drawn before a member's name; carries sidebar line content on SkyBlock.</summary>
+    public string Prefix { get; set; } = string.Empty;
+
+    /// <summary>Text drawn after a member's name; carries the rest of the sidebar line.</summary>
+    public string Suffix { get; set; } = string.Empty;
 }
 
 /// <summary>

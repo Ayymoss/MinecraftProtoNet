@@ -18,6 +18,9 @@ namespace MinecraftProtoNet.Core.Handlers.Play;
 /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:2058-2096
 /// </summary>
 [HandlesPacket(typeof(SetPlayerTeamPacket))]
+[HandlesPacket(typeof(SetScorePacket))]
+[HandlesPacket(typeof(SetObjectivePacket))]
+[HandlesPacket(typeof(SetDisplayObjectivePacket))]
 public class ScoreboardHandler(ILogger<ScoreboardHandler> logger) : IPacketHandler
 {
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
@@ -25,6 +28,29 @@ public class ScoreboardHandler(ILogger<ScoreboardHandler> logger) : IPacketHandl
 
     public Task HandleAsync(IClientboundPacket packet, IMinecraftClient client)
     {
+        var sidebar = client.State.Level.Sidebar;
+
+        switch (packet)
+        {
+            case SetDisplayObjectivePacket display:
+                sidebar.SetDisplayedObjective(display.Position, display.ObjectiveName);
+                return Task.CompletedTask;
+
+            case SetScorePacket score:
+                sidebar.SetScore(score.Owner, score.ObjectiveName, score.Value);
+                return Task.CompletedTask;
+
+            case SetObjectivePacket objective:
+                // Method 1 is "remove"; a removed objective takes its scores with it.
+                // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/network/protocol/game/ClientboundSetObjectivePacket.java
+                if (objective.Method == 1 &&
+                    string.Equals(objective.ObjectiveName, sidebar.ObjectiveName, StringComparison.Ordinal))
+                {
+                    sidebar.Clear();
+                }
+                return Task.CompletedTask;
+        }
+
         if (packet is not SetPlayerTeamPacket teamPacket) return Task.CompletedTask;
 
         var teams = client.State.Level.Teams;
@@ -36,6 +62,8 @@ public class ScoreboardHandler(ILogger<ScoreboardHandler> logger) : IPacketHandl
         {
             var team = teams.GetOrCreate(teamPacket.Name);
             team.CollisionRule = collisionRule;
+            team.Prefix = teamPacket.Prefix;
+            team.Suffix = teamPacket.Suffix;
             if (teamPacket.NameTagVisibility is { } visibility) team.NameTagVisibility = visibility;
 
             logger.LogDebug("Team {Team}: collisionRule={Rule}, nameTagVisibility={Visibility}",

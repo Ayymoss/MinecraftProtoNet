@@ -34,6 +34,12 @@ public class SetPlayerTeamPacket : IClientboundPacket
     /// <summary>Present only for <see cref="TeamMethod.Add"/>, <see cref="TeamMethod.Join"/>, <see cref="TeamMethod.Leave"/>.</summary>
     public string[] Members { get; private set; } = [];
 
+    /// <summary>Text shown before a member's name. Carries the sidebar line text on SkyBlock.</summary>
+    public string Prefix { get; private set; } = string.Empty;
+
+    /// <summary>Text shown after a member's name. Carries the rest of the sidebar line on SkyBlock.</summary>
+    public string Suffix { get; private set; } = string.Empty;
+
     public void Deserialize(ref PacketBufferReader buffer)
     {
         Name = buffer.ReadString();
@@ -48,8 +54,12 @@ public class SetPlayerTeamPacket : IClientboundPacket
             // visibility/collisionRule were strings.
             // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/network/protocol/game/ClientboundSetPlayerTeamPacket.java:143-152
             buffer.ReadChatComponent(); // displayName
-            buffer.ReadChatComponent(); // playerPrefix
-            buffer.ReadChatComponent(); // playerSuffix
+
+            // Kept, not skipped: SkyBlock renders its sidebar by giving each line an invisible score holder
+            // and putting the visible text in that holder's team prefix and suffix. Discarding these leaves
+            // the client unable to read anything on the scoreboard — the purse included.
+            Prefix = buffer.ReadChatComponent();
+            Suffix = buffer.ReadChatComponent();
 
             // Visibility / CollisionRule / TeamColor are all ByteBufCodecs.idMapper, i.e. VarInt.
             // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/network/codec/ByteBufCodecs.java:538-543
