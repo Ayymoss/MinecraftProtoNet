@@ -59,6 +59,46 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
         return $"({position.X:F2},{position.Y:F2},{position.Z:F2}) " + string.Join(" ", parts);
     }
 
+    /// <summary>
+    /// Renders every block column the player's bounding box overlaps, not just the one under its centre.
+    ///
+    /// A single centre column cannot explain a vertical correction. The box is 0.6 wide, so standing at
+    /// x=-36.87 it spans -37.17..-36.57 and rests on TWO columns; a slab in the neighbour supports the player
+    /// in vanilla while the centre column reads as plain deepslate with a 1.00 top. That is exactly the case
+    /// seen at the Bazaar, where the server repeatedly insisted on y=72.5 while both centre columns — ours and
+    /// the server's — reported air above a full block. Whatever the server is standing us on is in a column
+    /// this used to omit.
+    /// </summary>
+    private static string DescribeNeighbourhood(IMinecraftClient client, Models.Core.Vector3<double> position)
+    {
+        const double HalfWidth = 0.3; // vanilla player box is 0.6 wide
+
+        var minX = (int)Math.Floor(position.X - HalfWidth);
+        var maxX = (int)Math.Floor(position.X + HalfWidth);
+        var minZ = (int)Math.Floor(position.Z - HalfWidth);
+        var maxZ = (int)Math.Floor(position.Z + HalfWidth);
+        var feetY = (int)Math.Floor(position.Y);
+
+        var parts = new List<string>();
+        for (var x = minX; x <= maxX; x++)
+        for (var z = minZ; z <= maxZ; z++)
+        for (var y = feetY + 1; y >= feetY - 1; y--)
+        {
+            var state = client.State.Level.GetBlockAt(x, y, z);
+            if (state is null || state.IsAir) continue;
+
+            var shape = Physics.BlockShapeRegistry.Shared.GetShape(state);
+            if (shape.IsEmpty()) continue;
+
+            var props = state.Properties.Count == 0
+                ? ""
+                : "{" + string.Join(",", state.Properties.Select(p => $"{p.Key}={p.Value}")) + "}";
+            parts.Add($"[{x},{y},{z}]={state.Name}{props} top={y + shape.ToAABBs().Max(b => b.MaxY):F2}");
+        }
+
+        return parts.Count == 0 ? "(no colliding block under the box)" : string.Join(" ", parts);
+    }
+
     public IEnumerable<(ProtocolState State, int PacketId)> RegisteredPackets =>
         PacketRegistry.GetHandlerRegistrations(typeof(PlayHandler));
 
@@ -188,11 +228,20 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
 
                         // When the server puts us HIGHER than we are, it found a surface our collision did
                         // not. Dump the block column at both positions so that is a fact, not an inference.
-                        if (dy > 0.05)
+                        // 0.02, not 0.05: a sink-and-shove loop at the Bazaar repeated dy=+0.0410 thousands of
+                        // times and never dumped its geometry because it sat just under the old threshold.
+                        if (dy > 0.02)
                         {
                             logger.LogInformation(
                                 "[SetbackDiag]   ours: {OursCol} | server: {ServerCol}",
                                 DescribeColumn(client, priorPosition), DescribeColumn(client, entity.Position));
+
+                            // Every column the box touches, at both positions: the centre column alone cannot
+                            // account for a vertical correction the neighbour is responsible for.
+                            logger.LogInformation(
+                                "[SetbackDiag]   box-ours: {OursBox}\n[SetbackDiag]   box-server: {ServerBox}",
+                                DescribeNeighbourhood(client, priorPosition),
+                                DescribeNeighbourhood(client, entity.Position));
                         }
                     }
 
@@ -213,13 +262,24 @@ public class PlayHandler(ILogger<PlayHandler> logger, IGameLoop gameLoop) : IPac
                         Flags = Enums.MovementFlags.None // Java passes false, false (not on ground, no horizontal collision)
                     });
 
-                    // Sync "last sent" tracking to the teleported position so SendPositionAsync
-                    // doesn't re-send a duplicate or stale position on the next tick.
-                    entity.LastSentPosition = entity.Position;
-                    entity.LastSentYawPitch = entity.YawPitch;
-                    entity.LastSentOnGround = entity.IsOnGround;
-                    entity.LastSentHorizontalCollision = false;
-                    entity.PositionReminder = 0;
+                    // Deliberately NOT syncing LastSent*/PositionReminder here.
+                    // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:752-762
+                    // handleMovePlayer does exactly three things — setValuesFromPositionPacket, AcceptTeleportation,
+                    // PosRot — and then onTeleport() on the prediction handler. It never touches xLast/yLast/zLast,
+                    // yRotLast/xRotLast, lastOnGround or positionReminder.
+                    //
+                    // Syncing them was wrong in two server-visible ways:
+                    //  1. positionReminder is what makes an idle vanilla client emit Move Player Pos at exactly
+                    //     20/20 = 1.0/s (measured against a real client: 1.04/s). Hypixel echoes our position back
+                    //     every 5 ticks, so resetting on each echo meant the counter could never reach 20 and our
+                    //     idle position rate collapsed to ~0/s. A client that goes minutes without a position
+                    //     packet while still sending ClientTickEnd is not something vanilla can produce.
+                    //  2. Vanilla's xLast keeps the PRE-teleport value, so the next tick sees a large delta,
+                    //     move==true, and sends a second PosRot. We suppressed that packet entirely.
+                    //
+                    // LastSentOnGround was also being set to the live IsOnGround (usually true) while the packet
+                    // we just sent declared onGround=false, so our record of the server's belief was wrong and the
+                    // StatusOnly branch in SendPositionAsync mis-fired relative to vanilla.
 
                     // No "pending teleport" flag: vanilla resumes normal physics on the very next tick.
                     // See the note in PhysicsService.PhysicsTickAsync.

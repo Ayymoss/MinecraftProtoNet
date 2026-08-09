@@ -324,23 +324,16 @@ public class InteractionManager : IInteractionManager
 
                 // Calculate yaw and pitch to look at target
                 var deltaX = faceCenterX - entity.Position.X;
-                var deltaY = faceCenterY - (entity.Position.Y + 1.6); // Head position
+                var deltaY = faceCenterY - (entity.Position.Y + 1.62); // Head position (vanilla eye height is 1.62)
                 var deltaZ = faceCenterZ - entity.Position.Z;
                 
                 var yaw = (float)(Math.Atan2(-deltaX, deltaZ) * (180.0 / Math.PI));
                 var horizontalDist = Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
                 var pitch = (float)(-Math.Atan2(deltaY, horizontalDist) * (180.0 / Math.PI));
 
-                // Update entity rotation
-                entity.YawPitch = new Vector2<float>(yaw, pitch);
-
-                // Send rotation packet
-                await _client.SendPacketAsync(new MovePlayerRotationPacket
-                {
-                    Yaw = yaw,
-                    Pitch = pitch,
-                    Flags = MovementFlags.None
-                });
+                // Update entity rotation and send it, keeping LastSent* in step so the next physics tick does
+                // not resend the identical rotation as a second packet.
+                await SendAimRotationAsync(entity, new Vector2<float>(yaw, pitch));
 
                 // Calculate cursor position (within the adjacent block we're placing against)
                 // This is typically the center of the face we're clicking on
@@ -382,6 +375,113 @@ public class InteractionManager : IInteractionManager
         return false;
     }
 
+    /// <summary>
+    /// Where the aim ray enters the target's hitbox, expressed relative to the target's position — the value
+    /// vanilla puts in the Interact packet.
+    ///
+    /// Uses the yaw/pitch we just told the server we are looking at, not the entity's stored rotation, so the
+    /// location agrees with the rotation packet that precedes it. Falls back to the box centre if the ray
+    /// misses (the caller already established the entity is in front of us, so a miss means the expanded-box
+    /// test and this slab test disagreed at the margin).
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:429
+    /// </summary>
+    /// <summary>
+    /// Overload for world entities (NPCs), which are tracked separately from players and carry no bounding
+    /// box — one is built from the position and the given dimensions.
+    /// </summary>
+    public static Vector3<double> ComputeHitLocation(
+        Entity self, Vector3<double> targetPos, double width, double height, Vector2<float> yawPitch)
+    {
+        var half = width / 2.0;
+        var box = new Physics.Shapes.AABB(
+            targetPos.X - half, targetPos.Y, targetPos.Z - half,
+            targetPos.X + half, targetPos.Y + height, targetPos.Z + half);
+        return ComputeHitLocation(self, box, targetPos, yawPitch);
+    }
+
+    public static Vector3<double> ComputeHitLocation(Entity self, Entity target, Vector2<float> yawPitch)
+        => ComputeHitLocation(self, target.GetBoundingBox(), target.Position, yawPitch);
+
+    private static Vector3<double> ComputeHitLocation(
+        Entity self, Physics.Shapes.AABB box, Vector3<double> targetPos, Vector2<float> yawPitch)
+    {
+        var yaw = yawPitch.X * Math.PI / 180.0;
+        var pitch = yawPitch.Y * Math.PI / 180.0;
+        var dir = new Vector3<double>(
+            -Math.Cos(pitch) * Math.Sin(yaw),
+            -Math.Sin(pitch),
+            Math.Cos(pitch) * Math.Cos(yaw));
+
+        var start = self.EyePosition;
+
+        // Slab method: the entry point is the largest per-axis near intersection.
+        var tMin = 0.0;
+        var tMax = double.MaxValue;
+        Span<double> s = [start.X, start.Y, start.Z];
+        Span<double> d = [dir.X, dir.Y, dir.Z];
+        Span<double> lo = [box.MinX, box.MinY, box.MinZ];
+        Span<double> hi = [box.MaxX, box.MaxY, box.MaxZ];
+
+        for (var i = 0; i < 3; i++)
+        {
+            if (Math.Abs(d[i]) < 1e-9)
+            {
+                if (s[i] < lo[i] || s[i] > hi[i]) { tMin = double.NaN; break; }
+                continue;
+            }
+
+            var t1 = (lo[i] - s[i]) / d[i];
+            var t2 = (hi[i] - s[i]) / d[i];
+            if (t1 > t2) (t1, t2) = (t2, t1);
+            tMin = Math.Max(tMin, t1);
+            tMax = Math.Min(tMax, t2);
+            if (tMin > tMax) { tMin = double.NaN; break; }
+        }
+
+        if (double.IsNaN(tMin))
+        {
+            var centre = (box.Min + box.Max) * 0.5;
+            return centre - targetPos;
+        }
+
+        return start + dir * tMin - targetPos;
+    }
+
+    /// <summary>
+    /// Sends an out-of-band aim rotation the way vanilla's own rotation sends do, and keeps our record of
+    /// what the server believes in step.
+    ///
+    /// Three things were wrong when these packets were built inline:
+    ///  - Flags = None serialises onGround=false. These fire while the bot is standing on the floor, and the
+    ///    very next physics tick sends onGround=true, so the server saw the on-ground bit flap false→true
+    ///    around every single interaction. Vanilla's sendPosition always passes the real onGround()
+    ///    (Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/player/LocalPlayer.java:264-272).
+    ///  - The aim was sent to the server but never assigned to entity.YawPitch, so the server's copy of our
+    ///    yaw and ours diverged permanently — and because the per-tick `rot` test compares against our
+    ///    (unchanged) local value, no correction was ever sent.
+    ///  - LastSentYawPitch was not updated, so the next tick saw rot==true and sent a SECOND packet carrying
+    ///    the same rotation. Two packets where vanilla sends one.
+    /// </summary>
+    private async Task SendAimRotationAsync(Entity entity, Vector2<float> yawPitch)
+    {
+        entity.YawPitch = yawPitch;
+
+        var flags = MovementFlags.None;
+        if (entity.IsOnGround) flags |= MovementFlags.OnGround;
+        if (entity.HorizontalCollision) flags |= MovementFlags.HorizontalCollision;
+
+        await _client.SendPacketAsync(new MovePlayerRotationPacket
+        {
+            Yaw = yawPitch.X,
+            Pitch = yawPitch.Y,
+            Flags = flags
+        });
+
+        entity.LastSentYawPitch = yawPitch;
+        entity.LastSentOnGround = entity.IsOnGround;
+        entity.LastSentHorizontalCollision = entity.HorizontalCollision;
+    }
+
     public async Task<bool> InteractAsync(Hand hand = Hand.MainHand)
     {
         if (!_client.State.LocalPlayer.HasEntity) return false;
@@ -414,25 +514,33 @@ public class InteractionManager : IInteractionManager
             
             // Look at target (optional, but helpful for server validation)
             var yawPitch = entity.GetYawPitchToTarget(entity, targetEntity);
-            await _client.SendPacketAsync(new MovePlayerRotationPacket
-            {
-                Yaw = yawPitch.X,
-                Pitch = yawPitch.Y,
-                Flags = MovementFlags.None
-            });
+            await SendAimRotationAsync(entity, yawPitch);
 
-            // The hit location is relative to the target's position, as vanilla sends it. We do not keep the
-            // exact ray hit here, so the aim point used for the look above — mid-height on the entity — stands
-            // in for it; that is inside the hitbox, which is what the server validates.
+            // The hit location is the ray/hitbox intersection, relative to the target's position.
+            //
+            // This used to be the constant (0, 1, 0). Measured against a real client through a proxy, vanilla
+            // sends the actual cursor hit point — e.g. (0.299945, 1.46213, -0.0311298) — which varies with
+            // every click because a human never aims at exactly the same pixel twice. A fixed vector on every
+            // interaction the account ever makes is not something a mouse can produce, and Interact is sent
+            // every time the bot opens the Bazaar.
             // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:429
+            //   interactAt -> vec3.subtract(entity.position())
+            var hitLocation = ComputeHitLocation(entity, targetEntity, yawPitch);
+
             await _client.SendPacketAsync(new InteractPacket
             {
                 EntityId = targetEntity.EntityId,
                 Hand = hand,
-                Location = new Vector3<double>(0, 1.0, 0),
+                Location = hitLocation,
                 SneakKeyPressed = entity.IsSneaking
             });
-            await _client.SendPacketAsync(new SwingPacket { Hand = hand });
+
+            // Deliberately NO swing here.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java:1667-1673 — vanilla
+            // swings only when the result is InteractionResult.Success with swingSource() == CLIENT. Hypixel's
+            // NPCs are player entities, and Player.interactOn (Player.java:787-798) returns PASS for those, so
+            // a real client sends no swing at all on an NPC right-click. We were sending one every time, on the
+            // single interaction the bot performs most often.
             return true;
         }
 
@@ -491,12 +599,7 @@ public class InteractionManager : IInteractionManager
         var entity = _client.State.LocalPlayer.Entity;
         
         var yawPitch = entity.GetYawPitchToTarget(entity, target);
-        await _client.SendPacketAsync(new MovePlayerRotationPacket
-        {
-            Yaw = yawPitch.X,
-            Pitch = yawPitch.Y,
-            Flags = MovementFlags.None
-        });
+        await SendAimRotationAsync(entity, yawPitch);
 
         // Attacking is its own packet in 26.x and carries only the target id.
         // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:414
@@ -592,12 +695,21 @@ public class InteractionManager : IInteractionManager
 
         _logger.LogDebug("Stopping block breaking at {Position}", position);
 
+        // Vanilla hardcodes BOTH of these on an abort — face is literally Direction.DOWN and the 3-arg
+        // ServerboundPlayerActionPacket constructor leaves sequence at 0.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:214
+        //   new ServerboundPlayerActionPacket(ABORT_DESTROY_BLOCK, this.destroyBlockPos, Direction.DOWN)
+        //   and ServerboundPlayerActionPacket.java:24-26 (sequence = 0)
+        //
+        // We were sending the real face and a freshly incremented sequence, i.e. we varied two fields a real
+        // client never varies. This fires on every mining stop (MinecraftClient calls it on every tick where
+        // ClickLeft is false), so it is the fingerprint inverted — more entropy than vanilla, not less.
         await _client.SendPacketAsync(new PlayerActionPacket
         {
             Status = PlayerActionPacket.StatusType.CancelledDigging,
             Position = new Vector3<double>(position.X, position.Y, position.Z),
-            Face = face,
-            Sequence = entity.IncrementSequence()
+            Face = BlockFace.Bottom,
+            Sequence = 0
         });
 
         _breakingBlockPosition = null;

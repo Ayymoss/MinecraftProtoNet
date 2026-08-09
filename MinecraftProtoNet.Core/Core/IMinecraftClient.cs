@@ -30,6 +30,15 @@ public interface IMinecraftClient : IPacketSender
     Task<bool> AuthenticateAsync();
     void EnableEncryption(byte[] sharedSecret);
     void EnableCompression(int threshold);
+
+    /// <summary>
+    /// Per-second outbound packet counts and composition for the recent past, for explaining a connection the
+    /// server ended on its own terms. The window is rolling, so read it as soon as something goes wrong.
+    /// </summary>
+    string DumpRecentOutbound(int seconds = 45);
+
+    /// <summary>The last packets seen in each direction, interleaved by time. Finer than the per-second view.</summary>
+    string DumpRecentPackets();
     Task ConnectAsync(string host, int port, bool isSnapshot = false);
     Task DisconnectAsync();
 

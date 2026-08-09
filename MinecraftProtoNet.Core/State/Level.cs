@@ -38,6 +38,12 @@ public class Level(ITickManager tickManager, IPlayerRegistry playerRegistry, ICh
     /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/ClientPacketListener.java:412
     /// </summary>
     public TeamRegistry Teams { get; } = new();
+
+    /// <summary>
+    /// The scoreboard sidebar. Kept alongside the teams because a sidebar line is only readable by joining
+    /// the two — the score supplies the ordering, the team supplies the text.
+    /// </summary>
+    public Sidebar Sidebar { get; } = new();
     
     public event Action? OnPlayersChanged
     {

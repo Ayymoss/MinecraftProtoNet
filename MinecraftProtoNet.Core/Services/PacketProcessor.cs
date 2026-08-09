@@ -49,7 +49,25 @@ public class PacketProcessor(ILogger<PacketProcessor> logger) : IPacketProcessor
         }
 
         _queue.Enqueue(new QueuedPacket(packet, handler, client));
+
+        // The queue is the gap between how fast the server talks and how fast we listen. Hypixel bursts over
+        // 1,500 packets in a second on join and sustains 1,000+ in a crowded hub, and a backlog here means we
+        // are not draining the socket — which is a plausible reason for a server to hang up on us. Reported
+        // once per escalating threshold rather than per packet, so the diagnostic cannot itself be the stall.
+        var depth = _queue.Count;
+        if (depth >= _nextDepthWarning)
+        {
+            _nextDepthWarning = depth * 2;
+            logger.LogWarning("PacketProcessor: {Depth} packets queued for the game thread — falling behind", depth);
+        }
+        else if (depth < 64)
+        {
+            _nextDepthWarning = 512;
+        }
     }
+
+    /// <summary>Next queue depth worth reporting; doubles each time so a sustained backlog does not spam.</summary>
+    private int _nextDepthWarning = 512;
 
     /// <inheritdoc />
     public async Task ProcessQueuedPacketsAsync()

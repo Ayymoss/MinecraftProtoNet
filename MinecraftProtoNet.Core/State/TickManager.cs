@@ -9,7 +9,27 @@ namespace MinecraftProtoNet.Core.State;
 /// </summary>
 public class TickManager : ITickManager
 {
-    public double TickInterval { get; private set; } = 50d;
+    /// <summary>Vanilla's fixed client tick target: 1000/20. Reference: Minecraft.java:284 Timer(20.0F, ...).</summary>
+    public const double DefaultTickIntervalMs = 50d;
+
+    /// <summary>
+    /// The interval the client loop should use, mirroring vanilla's getTickTargetMillis + runsNormally():
+    /// the server's rate applies only while running normally, is never faster than 50 ms, and is ignored
+    /// entirely while frozen.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java:2854
+    /// </summary>
+    public double TickInterval => IsFrozen
+        ? DefaultTickIntervalMs
+        : Math.Max(DefaultTickIntervalMs, _serverTickInterval);
+
+    /// <summary>Interval implied by the server's ticking-state packet. Default = vanilla's 20 TPS.</summary>
+    private double _serverTickInterval = DefaultTickIntervalMs;
+
+    /// <summary>
+    /// The server's real tick pace as measured from time packets. Diagnostic only: it says how laggy the
+    /// server is, which is worth knowing but must not change our own rate.
+    /// </summary>
+    public double ObservedServerTickInterval { get; private set; } = 50d;
     public long ClientTickCounter { get; private set; }
     public long WorldAge { get; private set; }
     public long TimeOfDay { get; private set; }
@@ -38,10 +58,24 @@ public class TickManager : ITickManager
 
                     if (realTimeElapsed > 0)
                     {
+                        // OBSERVED only — this must not drive our own tick rate.
+                        //
+                        // It used to feed straight into TickInterval, so the client loop tracked whatever rate
+                        // the server was actually managing. On a busy Hypixel hub that runs below 20 TPS, we
+                        // slowed down with it: measured mean tick 51.1-51.6 ms (19.4-19.6 TPS) against a real
+                        // client's exactly 50.0 ms in two independent captures.
+                        //
+                        // A vanilla client never does this. Its loop is a fixed 50 ms and only changes when the
+                        // server explicitly says so via the ticking-state packet (TickRateManager / SetTickRate
+                        // below). Server lag changes how fast the WORLD advances, not how fast the client ticks
+                        // — so following it made us send measurably fewer packets per second than any real
+                        // player on the same laggy server.
+                        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/TickRateManager.java
                         var calculatedTickInterval = (double)realTimeElapsed / serverTicksPassed;
                         const double smoothingFactor = 0.25;
-                        TickInterval = TickInterval * (1 - smoothingFactor) + calculatedTickInterval * smoothingFactor;
-                        TickInterval = Math.Clamp(TickInterval, 5.0, 1000.0);
+                        ObservedServerTickInterval = Math.Clamp(
+                            ObservedServerTickInterval * (1 - smoothingFactor) + calculatedTickInterval * smoothingFactor,
+                            5.0, 1000.0);
                     }
                 }
                 else
@@ -54,7 +88,19 @@ public class TickManager : ITickManager
                 TimeSinceLastTimePacket.Restart();
             }
 
-            ClientTickCounter = serverWorldAge;
+            // ClientTickCounter is deliberately NOT assigned here.
+            //
+            // It used to be `ClientTickCounter = serverWorldAge`, which made the "client tick counter" a
+            // resampled copy of the server's world age. Vanilla keeps the two completely separate:
+            //   Minecraft.java:373  private long clientTickCount;   <- written ONLY by ++ in tick() (:1722)
+            //   ClientPacketListener.java:1036  level.setTimeFromServer(gameTime)  <- server time lives on Level
+            // and ClientLevel advances its own copy locally each tick (ClientLevel.java:401-405).
+            //
+            // Resampling made our counter non-monotonic: a proxy backend switch (routine on Hypixel) moves the
+            // world age by an arbitrary amount in EITHER direction. Everything that differenced tick numbers
+            // broke across that discontinuity — block-break progress, right-click delay, per-tick caches, and
+            // every "is the loop alive?" probe, which a SetTimePacket alone could satisfy while the game loop
+            // was wedged.
         }
     }
 
@@ -91,10 +137,17 @@ public class TickManager : ITickManager
         }
     }
 
+    /// <summary>
+    /// The SERVER's measured tick rate, from time packets — not our own loop rate.
+    ///
+    /// This used to divide by TickInterval, which was the same number back when our loop chased the server.
+    /// Now that the loop is pinned at 50 ms it would have reported a flat 20 TPS however badly the server was
+    /// lagging, which is exactly backwards for a diagnostic whose whole purpose is to reveal server lag.
+    /// </summary>
     public double GetCurrentServerTps()
     {
         const double epsilon = 1e-9;
-        return TickInterval > epsilon ? 1000.0 / TickInterval : 0.0;
+        return ObservedServerTickInterval > epsilon ? 1000.0 / ObservedServerTickInterval : 0.0;
     }
 
     public bool IsFrozen { get; private set; }
@@ -104,7 +157,14 @@ public class TickManager : ITickManager
         lock (_tickLock)
         {
             tickRate = Math.Max(tickRate, 1.0f);
-            TickInterval = 1000.0 / tickRate;
+
+            // max(50 ms, server rate) — vanilla can be slowed by the server but NEVER sped up past 20 TPS.
+            // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java:2854
+            //   getTickTargetMillis -> Math.max(defaultTickTargetMillis, manager.millisecondsPerTick())
+            // with default 50 ms from `new DeltaTracker.Timer(20.0F, ...)`.
+            // Without the clamp a server advertising >20 TPS would make us tick faster than any real client,
+            // and ticking fast is the direction that previously produced 800+ setbacks here.
+            _serverTickInterval = 1000.0 / tickRate;
         }
     }
 

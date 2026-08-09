@@ -127,6 +127,16 @@ public class MinecraftClient : IMinecraftClient
         return true;
     }
 
+    /// <summary>
+    /// The recent outbound packet rate, for diagnosing a connection the server ended on its own terms.
+    /// </summary>
+    public string DumpRecentOutbound(int seconds = 45) =>
+        _connection is Connection conn ? conn.DumpRecentOutbound(seconds) : "(no connection)";
+
+    /// <inheritdoc />
+    public string DumpRecentPackets() =>
+        _connection is Connection traced ? traced.DumpRecentPackets() : "(no connection)";
+
     public void EnableEncryption(byte[] sharedSecret)
     {
         if (_connection is Connection conn)
@@ -315,12 +325,19 @@ public class MinecraftClient : IMinecraftClient
                     _logger.LogWarning("[->CLIENT] Unknown packet for state {ProtocolState} and ID {PacketId} (0x{PacketIdHex:X2})",
                         ProtocolState, packetId, packetId);
                 }
-                else if (!packet.GetPacketAttributeValue(p => p.Silent))
+                // The IsEnabled guard is load-bearing, not tidiness. GetPropertiesAsString reflects over every
+                // property of the packet and builds a string, and as a method ARGUMENT it ran for every
+                // inbound packet whether or not debug logging was switched on. Hypixel's join burst is over
+                // 1,500 packets in a second and a crowded hub sustains 1,000+, so that cost sat directly on
+                // the read loop — and a reader that falls behind stops draining the socket.
+                else if (!packet.GetPacketAttributeValue(p => p.Silent) && _logger.IsEnabled(LogLevel.Debug))
                 {
                     _logger.LogDebug("[->CLIENT] {PacketType} {Properties}",
                         packet.GetType().FullName?.NamespaceToPrettyString(packetId),
                         packet.GetPropertiesAsString());
                 }
+
+                if (_connection is Connection metered) metered.RecordInbound(packet);
 
                 // Reference: minecraft-26.1.1-REFERENCE-ONLY/net/minecraft/network/protocol/PacketUtils.java
                 // Vanilla queues Play-state packets for the game thread via PacketProcessor.
@@ -446,8 +463,26 @@ public class MinecraftClient : IMinecraftClient
     }
 
 
+    /// <summary>
+    /// Suppresses the signed-chat session entirely (MCPROTO_NO_CHAT_SESSION=1).
+    ///
+    /// Vanilla only advertises a chat session when it actually has a profile key — a client with chat signing
+    /// unavailable simply never sends this packet, so omitting it is a state a real client can be in, not a
+    /// protocol violation. Exists as a switch because this packet is the last thing our client sends before
+    /// the connection dies through a MITM proxy, and isolating it is the only way to tell whether it is the
+    /// cause or a coincidence of ordering.
+    /// </summary>
+    private static readonly bool ChatSessionDisabled =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_CHAT_SESSION") == "1";
+
     public async Task SendChatSessionUpdate()
     {
+        if (ChatSessionDisabled)
+        {
+            _logger.LogWarning("Skipping ChatSessionUpdate: disabled via MCPROTO_NO_CHAT_SESSION");
+            return;
+        }
+
         if (AuthResult?.ChatSession is null)
         {
             _logger.LogWarning("Skipping ChatSessionUpdate: AuthResult.ChatSession is null");

@@ -107,6 +107,7 @@ public sealed class DeterministicHumanizer : IHumanizer
     public int GetChatCommandDelayMs() => 0;
     public int GetPostActionDelayMs() => 0;
     public bool ShouldPerformIdleAction() => false;
+    public int GetIdleLookSlewTicks() => 1;
 
     public (float yaw, float pitch)? GetIdleLookTarget(
         Vector3<double> playerPosition,

@@ -465,9 +465,21 @@ public class Entity
         return closestEntity;
     }
 
+    /// <summary>
+    /// Aim at an arbitrary point. Used for world entities (NPCs), which are tracked outside the player
+    /// registry and so have no <see cref="Entity"/> instance to pass to the overload below.
+    /// </summary>
+    public Vector2<float> GetYawPitchToTargetPosition(Entity localPlayer, Vector3<double> targetPosition)
+        => YawPitchTowards(localPlayer, targetPosition + new Vector3<double>(0, 0.9, 0));
+
     public Vector2<float> GetYawPitchToTarget(Entity localPlayer, Entity targetEntity)
     {
         var targetCenter = (targetEntity.GetBoundingBox().Min + targetEntity.GetBoundingBox().Max) * 0.5;
+        return YawPitchTowards(localPlayer, targetCenter);
+    }
+
+    private static Vector2<float> YawPitchTowards(Entity localPlayer, Vector3<double> targetCenter)
+    {
         var eyePos = localPlayer.EyePosition;
         var toTarget = targetCenter - eyePos;
         var yaw = (float)(Math.Atan2(-toTarget.X, toTarget.Z) * (180.0 / Math.PI));
