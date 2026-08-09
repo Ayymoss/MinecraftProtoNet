@@ -202,6 +202,21 @@ public sealed class RunController(
             }
             Log($"inventory normalised ({inventory.Count} item stack(s)); course {(clearCourse ? "RESET" : "NOT reset — deltas left in place")}");
 
+            // Restore food, health and saturation — part of arranging the run, exactly like /tp and /clear.
+            //
+            // Baritone will not sprint below a food level of 7 (CalculationContext: Hunger > 6, which mirrors
+            // vanilla's Player.getFoodData().getFoodLevel() > 6.0F), and without sprinting it cannot make a
+            // 4-block parkour jump at all — it re-plans to place extra blocks and hop shorter gaps instead.
+            //
+            // Food carries over between runs on a persistent test world, so back-to-back parkour runs quietly
+            // starve the bot and start exercising a DIFFERENT movement set than the first run did. That made
+            // results depend on how many runs had happened beforehand: a fresh session sprinted ~212 ticks and
+            // finished in ~510, a starved one sprinted 0 and took ~640. Normalise it so a run means the same
+            // thing every time.
+            await SendCommandAsync("effect give @s minecraft:saturation 2 255 true");
+            await SendCommandAsync("effect give @s minecraft:instant_health 1 255 true");
+            Log("food/health restored (Baritone needs food > 6 to sprint, and sprint to parkour)");
+
             if (!await WaitAtStartAsync(scenario))
             {
                 Log("FAILED to settle at start within timeout");

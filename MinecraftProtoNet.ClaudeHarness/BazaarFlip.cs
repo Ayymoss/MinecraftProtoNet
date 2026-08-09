@@ -218,13 +218,12 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
         }
 
         var chatMark = session.ChatCount;
-        session.ExpectRelocation = true;
+        session.ExpectRelocationFor(TimeSpan.FromSeconds(30));
         await session.ClickAsync(wanted);
 
         // The switch is a full server change: Start Configuration, a new Login, then a fresh spawn.
         log("waiting for the hub switch to land");
         await Task.Delay(TimeSpan.FromSeconds(12));
-        session.ExpectRelocation = false;
         await session.SelectEmptyHotbarSlotAsync();
         foreach (var line in session.ChatSince(chatMark).Where(l => l.Contains("Hub", StringComparison.OrdinalIgnoreCase)))
         {
@@ -321,10 +320,9 @@ public sealed class BazaarFlipTask(BazaarSession session, HttpClient api, Action
 
         log($"hopping to \"{target.Slot.Name}\" at {target.Occupancy!.Value.Players}/{target.Occupancy!.Value.Capacity} " +
             $"({ServerOf(target.Slot) ?? "server unknown"})");
-        session.ExpectRelocation = true;
+        session.ExpectRelocationFor(TimeSpan.FromSeconds(30));
         await session.ClickAsync(target.Slot.Name!);
         await Task.Delay(TimeSpan.FromSeconds(12));
-        session.ExpectRelocation = false;
         await session.SelectEmptyHotbarSlotAsync();
 
         session.ClearOutage();

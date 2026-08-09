@@ -35,7 +35,14 @@ public sealed record MenuProfile(
     string NpcName,
     (int X, int Y, int Z)? GoalPos,
     int GoalTimeoutSec,
-    string OutputSubdir)
+    string OutputSubdir,
+    /// <summary>
+    /// Substring the opened menu's title must contain. Defaults to the NPC's name, which is right for NPCs
+    /// whose menu is titled after them (Hub Selector, Bazaar) and wrong for the ones where it is not — the
+    /// Museum curator opens a menu called "Your Museum", so matching on the NPC name rejected a menu that had
+    /// in fact opened correctly.
+    /// </summary>
+    string? ExpectedTitle = null)
 {
     public static readonly IReadOnlyDictionary<string, MenuProfile> All = new Dictionary<string, MenuProfile>
     {
@@ -62,7 +69,25 @@ public sealed record MenuProfile(
             NpcName: "Bazaar",
             GoalPos: (-36, 72, -28),
             GoalTimeoutSec: 90,
-            OutputSubdir: "bazaar")
+            OutputSubdir: "bazaar"),
+
+        // The Auction House, via the Auction Agent. The A/B partner for the ejection work.
+        //
+        // The trading account is kicked within seconds of a Bazaar menu action while an idle account is never
+        // touched — but "any menu driven at this cadence" and "the Bazaar specifically" cannot be told apart
+        // while only one account can open the Bazaar at all (SkyBlock level 7+). The Auction House has no
+        // level requirement, a comparably deep menu tree, and the same sign-backed search, so a low-level
+        // account can reproduce the interaction pattern without touching the Bazaar.
+        ["auction"] = new(
+            Name: "auction",
+            Server: "mc.hypixel.net",
+            Port: 25565,
+            Steps: [new ReconStep("skyblock", 8), new ReconStep("hub", 5)],
+            NpcName: "Auction",
+            GoalPos: (-39, 73, -12),
+            GoalTimeoutSec: 90,
+            OutputSubdir: "auction",
+            ExpectedTitle: "Auction")
     };
 }
 
@@ -204,7 +229,7 @@ public sealed class MenuReconTask(
             // NPC's real position is known.
             await ApproachNpcAsync(npc);
 
-            if (!await OpenNpcMenuAsync(npc, profile.NpcName)) { Log("no menu opened after interacting"); return false; }
+            if (!await OpenNpcMenuAsync(npc, profile.ExpectedTitle ?? profile.NpcName)) { Log("no menu opened after interacting"); return false; }
 
             // The open event fires on the OpenScreen packet, which carries only the title — the items arrive
             // afterwards in Set Container Content. Capturing on the event alone records an empty menu.
@@ -530,7 +555,7 @@ public sealed class MenuReconTask(
         }
 
         var containerSlots = container.Type.GetContainerSlotCount();
-        var match = container.Slots
+        var match = container.SnapshotSlots()
             .Where(kv => kv.Key < containerSlots && !kv.Value.IsEmpty)
             .Select(kv => (Index: kv.Key, Name: CleanName(kv.Value), Slot: kv.Value))
             .Where(x => x.Name is not null && x.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase))
@@ -540,7 +565,7 @@ public sealed class MenuReconTask(
         if (match.Name is null)
         {
             Log($"no slot named like \"{wanted}\" in \"{CleanTitle(container)}\". Slots present:");
-            foreach (var kv in container.Slots.Where(kv => kv.Key < containerSlots && !kv.Value.IsEmpty).OrderBy(kv => kv.Key))
+            foreach (var kv in container.SnapshotSlots().Where(kv => kv.Key < containerSlots && !kv.Value.IsEmpty).OrderBy(kv => kv.Key))
             {
                 Log($"  [{kv.Key,2}] {CleanName(kv.Value)}");
             }
@@ -678,7 +703,7 @@ public sealed class MenuReconTask(
             if (current is { IsOpen: true })
             {
                 var containerSlots = current.Type.GetContainerSlotCount();
-                var filled = current.Slots.Count(kv => kv.Key < containerSlots && !kv.Value.IsEmpty);
+                var filled = current.SnapshotSlots().Count(kv => kv.Key < containerSlots && !kv.Value.IsEmpty);
                 if (filled > 0)
                 {
                     var signature = SignatureOf(current);
@@ -702,7 +727,7 @@ public sealed class MenuReconTask(
     }
 
     private static string SignatureOf(ContainerState c) =>
-        $"{c.ContainerId}|{c.Title}|" + string.Join(",", c.Slots
+        $"{c.ContainerId}|{c.Title}|" + string.Join(",", c.SnapshotSlots()
             .Where(kv => !kv.Value.IsEmpty)
             .OrderBy(kv => kv.Key)
             .Select(kv => $"{kv.Key}:{kv.Value.ItemId}:{kv.Value.ItemCount}:{CleanName(kv.Value)}"));
@@ -720,7 +745,7 @@ public sealed class MenuReconTask(
 
         var containerSlots = container.Type.GetContainerSlotCount();
         var slots = new List<MenuSlot>();
-        foreach (var (index, slot) in container.Slots.OrderBy(kv => kv.Key))
+        foreach (var (index, slot) in container.SnapshotSlots().OrderBy(kv => kv.Key))
         {
             if (slot.IsEmpty) continue;
             slots.Add(new MenuSlot

@@ -130,6 +130,24 @@ MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().RandomLooking.Value = 0
 MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().RandomLooking113.Value = 0;
 Console.WriteLine("[harness] anti-cheat aim jitter disabled (RandomLooking + RandomLooking113 = 0)");
 
+// --smooth-look: average the yaw across the last N ticks instead of snapping to each new target.
+//
+// Worth understanding what this does HERE as opposed to in Java. Baritone's smoothLook is a RENDER setting:
+// it averages the client-sided yaw so the player model looks less robotic, while the server still receives the
+// snapped rotation captured in onSendPacket. We have no render/server split — the entity's yaw is the single
+// source of truth and is what the outgoing movement packet carries — so in this port the averaging can reach
+// the wire, which is the interesting part for anticheat, not just cosmetics.
+if (Array.IndexOf(args, "--smooth-look") >= 0)
+{
+    MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().SmoothLook.Value = true;
+    if (GetArg("--smooth-look-ticks") is { } stStr && int.TryParse(stStr, out var st) && st > 0)
+    {
+        MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().SmoothLookTicks.Value = st;
+    }
+    Console.WriteLine("[harness] smoothLook ENABLED (SmoothLookTicks=" +
+        MinecraftProtoNet.Baritone.Api.BaritoneAPI.GetSettings().SmoothLookTicks.Value + ")");
+}
+
 // --no-sprint: walk instead of sprint. Halves the per-packet distance, which isolates "is the server
 // rejecting on a per-packet distance threshold" from every other movement hypothesis.
 if (Array.IndexOf(args, "--no-sprint") >= 0)
@@ -159,6 +177,50 @@ var baritoneProvider = host.Services.GetRequiredService<IBaritoneProvider>();
         {
             Console.WriteLine($"[harness] account {(a.IsActive ? "*" : " ")} {a.Username}  ({a.HomeAccountId})");
         }
+        return 0;
+    }
+
+    // --add-account: device-code login for an account the cache does not have yet.
+    //
+    // Prints the Microsoft URL and code and then waits, so a human can complete the sign-in in a browser
+    // while this runs headless. Nothing else in the harness can add an account; without this a new account
+    // can only reach the bot by way of the web app.
+    if (Array.IndexOf(args, "--add-account") >= 0)
+    {
+        var before = await accountManager.ListAccountsAsync();
+        var previouslyActive = before.FirstOrDefault(a => a.IsActive);
+
+        Console.WriteLine("[harness] starting device-code sign-in — complete it in a browser, this will wait.");
+        var added = await accountManager.AddAccountAsync(code =>
+        {
+            Console.WriteLine();
+            Console.WriteLine("==========================================================");
+            Console.WriteLine($"  OPEN:  {code.VerificationUrl}");
+            Console.WriteLine($"  CODE:  {code.UserCode}");
+            Console.WriteLine("==========================================================");
+            Console.WriteLine();
+            return Task.CompletedTask;
+        });
+
+        if (added is null)
+        {
+            Console.Error.WriteLine("[harness] sign-in did not complete.");
+            return 1;
+        }
+
+        Console.WriteLine($"[harness] added account: {added.Username}");
+
+        // AddAccountAsync marks the new account active. Put the previous one back, because every long-running
+        // arm is started with an explicit --account and a silently changed default is exactly the kind of
+        // thing that starts the wrong bot on the wrong account hours later.
+        if (previouslyActive is not null)
+        {
+            await accountManager.SetActiveAccountAsync(previouslyActive.HomeAccountId);
+            Console.WriteLine($"[harness] active account restored to {previouslyActive.Username}");
+        }
+
+        foreach (var a in await accountManager.ListAccountsAsync())
+            Console.WriteLine($"[harness] account {(a.IsActive ? "*" : " ")} {a.Username}");
         return 0;
     }
 
@@ -323,7 +385,11 @@ if (Array.IndexOf(args, "--portfolio") >= 0)
     var portfolioOptions = new PortfolioOptions(
         Server: GetArg("--server") ?? "mc.hypixel.net",
         Port: int.TryParse(GetArg("--port"), out var pPort) ? pPort : 25565,
-        HubNumber: int.TryParse(GetArg("--hub"), out var pHub) ? pHub : 1,
+        // 0 means "not specified", so the control arm can tell an explicit --hub from a default and fall
+        // through to the same busy-hub selection the trading arm uses. It used to default to 1, which made
+        // the HubNumber branch always win and silently pinned every control run to Hub #1 — a different hub
+        // population from the arm it is being compared against.
+        HubNumber: int.TryParse(GetArg("--hub"), out var pHub) ? pHub : 0,
         MinHubPlayers: int.TryParse(GetArg("--min-hub-players"), out var pPlayers) ? pPlayers : 20,
         Capital: double.TryParse(GetArg("--capital"), out var pCapital) ? pCapital : 200_000,
         MaxPositions: int.TryParse(GetArg("--max-positions"), out var pMax) ? pMax : 4,
@@ -332,7 +398,14 @@ if (Array.IndexOf(args, "--portfolio") >= 0)
         // The companion API refreshes about once a minute; polling faster only re-reads the same numbers.
         PollSeconds: Math.Max(60, int.TryParse(GetArg("--poll-sec"), out var pPoll) ? pPoll : 60),
         MaxUnitPrice: double.TryParse(GetArg("--max-price"), out var pPrice) ? pPrice : 50_000,
-        MaxFillMinutes: int.TryParse(GetArg("--max-fill-min"), out var pFill) ? pFill : 45);
+        MaxFillMinutes: int.TryParse(GetArg("--max-fill-min"), out var pFill) ? pFill : 45,
+        ControlOnly: Array.IndexOf(args, "--control") >= 0,
+        StartupCommands: GetArg("--cmd"),
+        PreferEmptyHub: Array.IndexOf(args, "--empty-hub") >= 0,
+        IdleAt: GetArg("--idle-at"),
+        AuctionStress: Array.IndexOf(args, "--auction-stress") >= 0,
+        StressMode: GetArg("--stress-mode") ?? "full",
+        StressGapSeconds: int.TryParse(GetArg("--stress-gap"), out var sg) ? sg : 45);
 
     using var portfolioStatus = new StatusServer(
         int.TryParse(GetArg("--status-port"), out var statusPort) ? statusPort : 5099);

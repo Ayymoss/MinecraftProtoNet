@@ -43,6 +43,7 @@ public sealed class BazaarSession(
     private readonly List<string> _screenText = [];
     private readonly System.Collections.Concurrent.ConcurrentQueue<SignEditorEventArgs> _signPrompts = new();
     private WorldEntity? _npc;
+    private string _npcName = "";
     private bool _subscribed;
 
     private static readonly System.Text.RegularExpressions.Regex PriceLine =
@@ -84,6 +85,7 @@ public sealed class BazaarSession(
         signBus.OnSignEditorOpened += OnSign;
         _watchdog = new CancellationTokenSource();
         _ = WatchForUnexpectedTeleportsAsync(_watchdog.Token);
+        _ = KeepAwakeAsync(_watchdog.Token);
         _subscribed = true;
     }
 
@@ -114,6 +116,7 @@ public sealed class BazaarSession(
 
         NoteIfOutage(line);
         NoteIfRestart(line);
+        NoteIfEjected(line);
         NoteIfIntercepted(line);
     }
 
@@ -124,10 +127,30 @@ public sealed class BazaarSession(
     public bool Intercepted { get; private set; }
 
     /// <summary>
-    /// Set while a relocation is EXPECTED — clicking a hub, sending /hub, or being evacuated. Any large jump
-    /// outside one of those windows was not our doing.
+    /// When the current "a teleport is expected" window ends. A DEADLINE rather than a flag, because these
+    /// windows overlap: /hub arms one, and the hub-selector click that follows arms another before the first
+    /// has expired. With a boolean, the earlier window's timer switched the flag off a second after the later
+    /// one switched it on, and the hub switch was reported as an unexplained teleport. Windows may only ever
+    /// be extended.
     /// </summary>
-    public bool ExpectRelocation { get; set; }
+    private DateTime _relocationExpectedUntil = DateTime.MinValue;
+
+    public bool ExpectRelocation
+    {
+        get => DateTime.UtcNow < _relocationExpectedUntil;
+        set
+        {
+            if (value) ExpectRelocationFor(TimeSpan.FromSeconds(25));
+            else _relocationExpectedUntil = DateTime.MinValue;
+        }
+    }
+
+    /// <summary>Extends the expected-teleport window; never shortens it.</summary>
+    public void ExpectRelocationFor(TimeSpan window)
+    {
+        var until = DateTime.UtcNow + window;
+        if (until > _relocationExpectedUntil) _relocationExpectedUntil = until;
+    }
 
     private static readonly string[] InterceptPhrases =
     [
@@ -137,11 +160,29 @@ public sealed class BazaarSession(
         "temporarily banned", "punishment", "appeal"
     ];
 
+    /// <summary>
+    /// Lines that contain the alarming words but are broadcast to the entire server every few minutes.
+    ///
+    /// Hypixel announces its ban statistics to everyone ("Watchdog has banned 7,745 players in the last 7
+    /// days"), which trips the staff-language tripwire on a message that has nothing to do with us. Halting on
+    /// it is worse than useless: the latch is deliberately one-way and needs a human to clear, so a routine
+    /// broadcast ends an unattended session and leaves live orders unmanaged.
+    /// </summary>
+    private static readonly string[] GlobalBroadcasts =
+    [
+        "in the last 7 days", "in the last day", "staff have banned", "watchdog has banned",
+        "total bans", "players in the last"
+    ];
+
     private void NoteIfIntercepted(string line)
     {
         if (Intercepted) return;
 
         var lower = line.ToLowerInvariant();
+
+        // Checked first: a broadcast that merely mentions bans is not an intercept, however it is worded.
+        if (GlobalBroadcasts.Any(b => lower.Contains(b))) return;
+
         var phrase = InterceptPhrases.FirstOrDefault(p => lower.Contains(p));
         if (phrase is null) return;
 
@@ -164,6 +205,15 @@ public sealed class BazaarSession(
         log("!!!! disconnecting and halting; a human must acknowledge before the bot runs again");
 
         StopMoving();
+
+        // Disconnect here rather than letting the caller unwind to it. The previous version logged this line
+        // and then kept walking for 36 seconds while the trading flow finished what it was doing — which, had
+        // the intercept been a genuine staff freeze, is exactly the behaviour the tripwire exists to prevent.
+        _ = Task.Run(async () =>
+        {
+            try { await client.DisconnectAsync(); }
+            catch { /* the halt file is written either way */ }
+        });
 
         // Both streams go into the notice: what was said in chat, and what was painted on the screen.
         var context = new List<string>();
@@ -188,6 +238,7 @@ public sealed class BazaarSession(
     private async Task WatchForUnexpectedTeleportsAsync(CancellationToken ct)
     {
         Vector3<double>? last = null;
+        var lastEntityId = 0;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -202,8 +253,22 @@ public sealed class BazaarSession(
             if (Intercepted) return;
             if (!client.IsConnected) { last = null; continue; }
 
-            var pos = client.State.LocalPlayer?.Entity?.Position;
-            if (pos is null) { last = null; continue; }
+            var entity = client.State.LocalPlayer?.Entity;
+            var pos = entity?.Position;
+            if (pos is null || entity is null) { last = null; continue; }
+
+            // A join or a server transfer brings a fresh Login, and with it a new entity id. Every relocation
+            // that comes with one is the server moving us between worlds — joining, switching hub, being
+            // evacuated — none of which is an admin picking us up. The case worth catching is a teleport
+            // WITHIN a world, where the entity id is unchanged, so a changed id resets the baseline instead of
+            // raising the alarm. Three false positives (a hub switch, an expiring window, and the join
+            // teleport itself) all came from not making that distinction.
+            if (entity.EntityId != lastEntityId)
+            {
+                lastEntityId = entity.EntityId;
+                last = null;
+                continue;
+            }
 
             if (last is not null && !ExpectRelocation && !Evacuated && RestartWarningAt is null)
             {
@@ -240,6 +305,151 @@ public sealed class BazaarSession(
         Evacuated = false;
     }
 
+    /// <summary>
+    /// Set when Hypixel drops us off the SkyBlock backend and into the lobby ("A kick occurred in your
+    /// connection..."), which it does silently as far as the game state is concerned.
+    ///
+    /// This is the failure that ends sessions without announcing itself. The lobby is a DIFFERENT world, but
+    /// the entity ids we cached still resolve against stale data, so the bot keeps sending interacts at an NPC
+    /// that is not there, gets no menu, and retries forever while holding live orders. Nothing else in the
+    /// session detects it: there is no disconnect, no world-change packet we act on, and the position jump
+    /// looks like an ordinary teleport.
+    /// </summary>
+    public string? LobbyEjection { get; private set; }
+
+    public void ClearLobbyEjection() => LobbyEjection = null;
+
+    /// <summary>Whether the underlying client still has a live connection.</summary>
+    public bool IsConnected => client.IsConnected;
+
+    /// <summary>
+    /// Sustained ceiling on menu actions (container clicks, sign submits, NPC right-clicks, closes), in
+    /// actions per minute. Override with MCPROTO_MENU_RATE.
+    ///
+    /// Why a ceiling and not just per-click delays: the delays are per call site and say nothing about the
+    /// rate over a minute, so a burst of menu work stays under every individual delay and still runs far
+    /// hotter than a person. Across 20 ejections the menu packets are skewed toward the kick (mean relative
+    /// position 0.707, 16/20 above 0.5, sign test p=0.012), while a control account that never opens a
+    /// container has not been ejected at all — and packet rate and bytes are both BELOW a real client's, so
+    /// the global limiter cannot be what is firing.
+    /// </summary>
+    private static readonly double MenuActionsPerMinute =
+        double.TryParse(Environment.GetEnvironmentVariable("MCPROTO_MENU_RATE"), out var r) && r > 0 ? r : 12.0;
+
+    private readonly Queue<DateTime> _menuActions = new();
+
+    /// <summary>
+    /// Minimum gap between two NPC menu OPENS, in milliseconds. Override with MCPROTO_NPC_OPEN_GAP_MS.
+    ///
+    /// The per-minute ceiling above bounds the average and says nothing about bursts, which is what the kicks
+    /// actually follow: reading the order book and then repricing re-runs the whole chain (right-click the NPC,
+    /// open the Bazaar, open Manage Orders, close) twice within about four seconds, and the disconnect lands
+    /// ~2s after it — median lag from the last menu packet to the kick is 2s across 21 ejections. Spacing the
+    /// OPENS apart is the narrowest change that removes the burst without slowing the work inside a menu.
+    /// </summary>
+    private static readonly int NpcOpenGapMs =
+        int.TryParse(Environment.GetEnvironmentVariable("MCPROTO_NPC_OPEN_GAP_MS"), out var g) && g >= 0 ? g : 6000;
+
+    private DateTime _lastNpcOpen = DateTime.MinValue;
+
+    /// <summary>
+    /// Blocks until another menu action would sit inside the sustained budget, using a rolling one-minute
+    /// window. Bursts are still allowed — a person clicking through a menu does burst — but the average
+    /// cannot exceed the ceiling.
+    /// </summary>
+    private async Task MenuGateAsync(string what, CancellationToken ct = default)
+    {
+        while (true)
+        {
+            DateTime? waitUntil = null;
+            lock (_menuActions)
+            {
+                var now = DateTime.UtcNow;
+                while (_menuActions.Count > 0 && now - _menuActions.Peek() > TimeSpan.FromMinutes(1))
+                    _menuActions.Dequeue();
+
+                if (_menuActions.Count < MenuActionsPerMinute)
+                {
+                    _menuActions.Enqueue(now);
+                    return;
+                }
+
+                waitUntil = _menuActions.Peek() + TimeSpan.FromMinutes(1);
+            }
+
+            var delay = waitUntil.Value - DateTime.UtcNow;
+            if (delay > TimeSpan.Zero)
+            {
+                log($"  menu rate gate: holding {what} for {delay.TotalSeconds:F1}s " +
+                    $"(ceiling {MenuActionsPerMinute:F0}/min)");
+                await Task.Delay(delay, ct);
+            }
+        }
+    }
+
+    private void NoteIfEjected(string line)
+    {
+        if (LobbyEjection is not null) return;
+
+        var lower = line.ToLowerInvariant();
+        var ejected = lower.Contains("kick occurred in your connection")
+                      || (lower.Contains("you were put in the") && lower.Contains("lobby"))
+                      || lower.Contains("sending packets too fast");
+
+        if (!ejected) return;
+
+        LobbyEjection = line;
+        log($"!! EJECTED TO LOBBY: {line}");
+
+        // Captured here and not later: the rate history is a rolling window, so the seconds that caused the
+        // kick are gone within two minutes of it happening.
+        var traffic = client.DumpRecentOutbound() + "\n\nfinal packets, both directions:\n" + client.DumpRecentPackets();
+        log($"!! outbound traffic before the kick — {traffic}");
+        WriteEjectionReport(line, traffic);
+
+        // The cached NPC belongs to the world we just left. Keeping it is what turns one kick into a session
+        // that never recovers.
+        _npc = null;
+        StopMoving();
+    }
+
+    /// <summary>
+    /// Records a kick to a file, appended so that repeated kicks can be compared against each other — the
+    /// pattern across occurrences is what identifies the cause, not any single one.
+    /// </summary>
+    private void WriteEjectionReport(string line, string traffic)
+    {
+        try
+        {
+            // Pinned by environment when set, because two accounts now run at once and a path derived from the
+            // binary's own location sends a build that lives outside the usual bin/ tree to a different file.
+            // Both arms must land in ONE file: the comparison between them is the entire point.
+            var root = Environment.GetEnvironmentVariable("MCPROTO_REPORT_ROOT")
+                       ?? new DirectoryInfo(AppContext.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName
+                       ?? AppContext.BaseDirectory;
+
+            var path = Path.Combine(root, "_ServerReferences", "lobby-ejections.md");
+
+            var pos = client.State.LocalPlayer?.Entity?.Position;
+            var report =
+                $"\n## {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n" +
+                $"- account: `{client.AuthResult?.Username ?? "unknown"}`" +
+                $" ({Environment.GetEnvironmentVariable("MCPROTO_ARM") ?? "trading"} arm)\n" +
+                $"- message: `{line}`\n" +
+                $"- position: {(pos is null ? "unknown" : $"({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1})")}\n" +
+                $"- entity id: {client.State.LocalPlayer?.Entity?.EntityId}\n\n" +
+                $"```\n{traffic}\n```\n";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, report);
+            log($"!! kick report appended to {path}");
+        }
+        catch (Exception ex)
+        {
+            log($"!! could not write the kick report ({ex.Message})");
+        }
+    }
+
     private void NoteIfRestart(string line)
     {
         if (line.Contains("restart soon", StringComparison.OrdinalIgnoreCase)
@@ -266,6 +476,231 @@ public sealed class BazaarSession(
     /// its island somewhere it did not choose, and a pathfinder that starts walking there can walk it off the
     /// edge.
     /// </summary>
+    /// <summary>
+    /// Waits, the way a person waits — with the occasional jump or few steps rather than perfect stillness.
+    ///
+    /// The bot spends most of its life doing nothing: orders take minutes to fill and the loop polls once a
+    /// minute. A character standing at exactly one coordinate, facing exactly one direction, for six hours is
+    /// the single most obvious thing about it to anyone stood nearby, and none of the packet-level care
+    /// elsewhere in this class disguises it.
+    ///
+    /// Movement is leashed to where the wait began. Wandering off is not a theoretical risk here — a stale
+    /// pathing goal walked the bot 50 blocks from the Bazaar earlier and stranded a session — so each burst
+    /// is a fraction of a second and anything past a few blocks walks back rather than further out.
+    /// </summary>
+    /// <summary>
+    /// Stand PERFECTLY still while idling (MCPROTO_NO_FIDGET=1) — no fidget, no anchor walk, nothing.
+    ///
+    /// Purely a measurement mode. The vanilla control captures are a human standing still, so comparing them
+    /// against our normal idle (which fidgets every 12-35s by design) compares two different activities: it
+    /// inflates our Move Player Pos rate and manufactures position corrections that the stationary reference
+    /// could never produce. Anything derived from an "idle" diff is meaningless unless both sides are actually
+    /// idle.
+    /// </summary>
+    private static readonly bool FidgetDisabled =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_FIDGET") == "1";
+
+    public async Task IdleAsync(TimeSpan duration, CancellationToken ct = default)
+    {
+        if (FidgetDisabled)
+        {
+            StopMoving();
+            var stillUntil = DateTime.UtcNow + duration;
+            while (DateTime.UtcNow < stillUntil && client.IsConnected && !Intercepted && LobbyEjection is null)
+            {
+                await Task.Delay(250, ct);
+            }
+            return;
+        }
+
+        var deadline = DateTime.UtcNow + duration;
+        var anchor = client.State.LocalPlayer?.Entity?.Position;
+
+        while (DateTime.UtcNow < deadline && client.IsConnected && !Intercepted && LobbyEjection is null)
+        {
+            // Most of the wait is spent still; fidgeting constantly would be as unnatural as never moving.
+            var quiet = TimeSpan.FromSeconds(Random.Shared.Next(12, 35));
+            var until = DateTime.UtcNow + quiet;
+            if (until > deadline) until = deadline;
+
+            while (DateTime.UtcNow < until && client.IsConnected && !Intercepted)
+            {
+                await Task.Delay(250, ct);
+            }
+
+            if (DateTime.UtcNow >= deadline || !client.IsConnected || Intercepted || LobbyEjection is not null) break;
+            if (containers.IsContainerOpen) continue; // never fidget with a menu open
+
+            await FidgetAsync(anchor, ct);
+        }
+
+        StopMoving();
+    }
+
+    /// <summary>The scoreboard sidebar as text, top to bottom. Empty until the server sends one.</summary>
+    public List<string> SidebarLines() =>
+        client.State.Level.Sidebar.Lines(client.State.Level.Teams);
+
+    /// <summary>
+    /// Waits for the sidebar to arrive and returns its lines, so a caller can tell where it already is.
+    ///
+    /// Worth waiting for rather than assuming: every unnecessary warp is a backend transfer, and the bot
+    /// reconnects often enough for those to add up.
+    /// </summary>
+    public async Task<List<string>> WaitForSidebarAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline && client.IsConnected)
+        {
+            var lines = SidebarLines();
+            if (lines.Count > 0) return lines;
+            await Task.Delay(250);
+        }
+        return SidebarLines();
+    }
+
+    /// <summary>When the bot last actually moved. Hypixel's idle timer counts input, not position packets.</summary>
+    private DateTime _lastMovementUtc = DateTime.UtcNow;
+
+    /// <summary>
+    /// How long the bot may go without moving before it is nudged.
+    ///
+    /// Hypixel warns at about five minutes and then moves the player to the lobby, which is what was ending
+    /// these sessions. Ninety seconds leaves a wide margin, and the cost of an unnecessary nudge is a few
+    /// steps that look like a bored player — the same thing a bored player actually does.
+    /// </summary>
+    private static readonly TimeSpan AfkNudgeAfter = TimeSpan.FromSeconds(90);
+
+    /// <summary>
+    /// Moves a little, wherever the bot happens to be. Unlike <see cref="IdleAsync"/> this is not tied to the
+    /// polling wait, so it also covers the long stretches spent working menus or standing at an NPC — which
+    /// is where the idle timer was quietly running out.
+    /// </summary>
+    public async Task NudgeAsync(CancellationToken ct = default)
+    {
+        if (!client.IsConnected || Intercepted) return;
+
+        var anchor = client.State.LocalPlayer?.Entity?.Position;
+        await FidgetAsync(anchor, ct);
+        _lastMovementUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Watches the idle timer for the life of the session and nudges before Hypixel loses patience.
+    ///
+    /// A heartbeat rather than something the trading loop has to remember: the loop's shape changes, and any
+    /// path through it that forgets to move costs the whole session.
+    /// </summary>
+    private async Task KeepAwakeAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), ct);
+
+                if (!client.IsConnected || Intercepted || LobbyEjection is not null) continue;
+                if (DateTime.UtcNow - _lastMovementUtc < AfkNudgeAfter) continue;
+
+                // Never while a menu is open: vanilla cannot walk with a screen up, so doing it here would be
+                // a more obvious tell than the idling it is meant to disguise.
+                if (containers.IsContainerOpen) continue;
+
+                log("anti-AFK nudge");
+                await NudgeAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch
+            {
+                // A failed nudge is not worth ending the session over; the next tick tries again.
+            }
+        }
+    }
+
+    /// <summary>One short burst of movement: a jump, a few steps, or a look around.</summary>
+    /// <summary>
+    /// Idle like a human who is actually at their keyboard: fidget every 1-3s instead of every 12-35s.
+    ///
+    /// Exists because the biggest remaining behavioural gap between us and the vanilla open/close capture
+    /// is look input — the human produced 0.809 Move Player Rot/s and 0.295 Player Input/s while spamming
+    /// the NPC, where our stress arm manages 0.064 and 0.180. Every arm ejected so far has been close to
+    /// inert between opens. This lets one arm open menus while *moving like the human did*.
+    /// </summary>
+    public async Task BusyIdleAsync(TimeSpan duration, CancellationToken ct = default)
+    {
+        var deadline = DateTime.UtcNow + duration;
+        var anchor = client.State.LocalPlayer?.Entity?.Position;
+
+        while (DateTime.UtcNow < deadline && client.IsConnected && !Intercepted && LobbyEjection is null)
+        {
+            var quiet = TimeSpan.FromSeconds(Random.Shared.Next(1, 4));
+            var until = DateTime.UtcNow + quiet;
+            if (until > deadline) until = deadline;
+            while (DateTime.UtcNow < until && client.IsConnected && !Intercepted) await Task.Delay(200, ct);
+
+            if (DateTime.UtcNow >= deadline || !client.IsConnected || Intercepted || LobbyEjection is not null) break;
+            if (containers.IsContainerOpen) continue;
+            await FidgetAsync(anchor, ct);
+        }
+
+        StopMoving();
+    }
+
+    private async Task FidgetAsync(Vector3<double>? anchor, CancellationToken ct)
+    {
+        var entity = client.State.LocalPlayer?.Entity;
+        if (entity is null) return;
+
+        var pos = entity.Position;
+        var strayed = anchor is not null && pos is not null && Dist(pos, anchor) > 4.0;
+
+        // Turn to face the anchor before stepping when we have drifted, so the steps bring us back.
+        if (strayed && pos is not null && anchor is not null)
+        {
+            var yaw = (float)(Math.Atan2(anchor.Z - pos.Z, anchor.X - pos.X) * 180 / Math.PI) - 90f;
+            entity.YawPitch = new Vector2<float>(yaw, entity.YawPitch.Y);
+        }
+        else
+        {
+            // Idle glancing about, which is what a bored player does between checks.
+            var yaw = entity.YawPitch.X + (float)(Random.Shared.NextDouble() * 120 - 60);
+            var pitch = Math.Clamp(entity.YawPitch.Y + (float)(Random.Shared.NextDouble() * 30 - 15), -60f, 60f);
+            entity.YawPitch = new Vector2<float>(yaw, pitch);
+        }
+
+        var roll = Random.Shared.Next(100);
+        var input = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+
+        if (strayed || roll < 45)
+        {
+            input = input with { Forward = true };
+        }
+        else if (roll < 60)
+        {
+            input = input with { Left = true };
+        }
+        else if (roll < 75)
+        {
+            input = input with { Right = true };
+        }
+        else if (roll < 90)
+        {
+            input = input with { Jump = true };
+        }
+        else
+        {
+            return; // just the look, no movement
+        }
+
+        entity.InputState.Current = input;
+        await Task.Delay(Random.Shared.Next(180, 550), ct);
+        entity.InputState.Current = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+        _lastMovementUtc = DateTime.UtcNow;
+    }
+
     public void StopMoving()
     {
         try
@@ -335,6 +770,22 @@ public sealed class BazaarSession(
 
         log($"screen text {stamped}");
 
+        // "You are AFK / Move around to return to the lobby." is Hypixel's five-minute idle warning, and it
+        // is the actual mechanism behind the lobby ejections that cost this bot most of an evening — the
+        // "Sending packets too fast!" text that accompanied some of them was coincidental. Position packets
+        // are not input as far as Hypixel is concerned; only real movement resets the timer. Answering the
+        // warning the moment it appears is the cheapest possible fix, and it is exactly what the subtitle
+        // instructs a player to do.
+        if (text.Contains("AFK", StringComparison.OrdinalIgnoreCase))
+        {
+            log("!! AFK warning — moving to reset the idle timer");
+            _ = Task.Run(async () =>
+            {
+                try { await NudgeAsync(); }
+                catch { /* the next fidget will try again */ }
+            });
+        }
+
         // A book or a dialog is never something this bot asked for. We cannot answer a challenge we have not
         // seen before — and guessing at one would be worse than stopping — so the response is to keep the
         // evidence and hand it to a human.
@@ -369,6 +820,9 @@ public sealed class BazaarSession(
         {
             client.State.LastDisconnectTranslateKey = null;
             client.State.LastDisconnectReason = null;
+
+            // Joining lands us in a lobby and then moves us; none of that is worth flagging.
+            ExpectRelocationFor(TimeSpan.FromSeconds(60));
             await client.ConnectAsync(server, port, false);
 
             var deadline = DateTime.UtcNow.AddSeconds(30);
@@ -403,8 +857,7 @@ public sealed class BazaarSession(
             || command.StartsWith("skyblock", StringComparison.OrdinalIgnoreCase)
             || command.StartsWith("warp", StringComparison.OrdinalIgnoreCase))
         {
-            ExpectRelocation = true;
-            _ = Task.Delay(TimeSpan.FromSeconds(25)).ContinueWith(_ => ExpectRelocation = false);
+            ExpectRelocationFor(TimeSpan.FromSeconds(25));
         }
 
         IServerboundPacket packet = new ChatCommandPacket(command);
@@ -429,8 +882,27 @@ public sealed class BazaarSession(
 
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSec);
         var nextReport = DateTime.UtcNow.AddSeconds(5);
+        var bestDist = double.MaxValue;
+        var progressAt = DateTime.UtcNow;
         while (DateTime.UtcNow < deadline && client.IsConnected)
         {
+            // Checked every iteration, not at the end: an intercept mid-walk has to stop the walk, not finish it.
+            if (Intercepted)
+            {
+                baritone.GetPathingBehavior().CancelEverything();
+                log("walk abandoned — intercept");
+                return false;
+            }
+
+            // Likewise for a kick to the lobby. The destination is in a world we are no longer in, so without
+            // this the bot walks the lobby until the full timeout expires before anything notices.
+            if (LobbyEjection is not null)
+            {
+                baritone.GetPathingBehavior().CancelEverything();
+                log("walk abandoned — ejected to the lobby");
+                return false;
+            }
+
             var pos = client.State.LocalPlayer?.Entity?.Position;
             if (pos is not null)
             {
@@ -442,6 +914,34 @@ public sealed class BazaarSession(
                     await Task.Delay(1200);
                     return true;
                 }
+                // Wedged-in-geometry detector.
+                //
+                // The walk timeout alone is not enough: on 2026-08-08 the bot sank into the floor near the
+                // Bazaar at (-33.7, 66.2, -30.2) — six blocks BELOW the walkway — and sat there while the
+                // server shoved it up by dy=+0.0410 thousands of times. Baritone kept "pathing", the position
+                // never changed, and 45 minutes of trading were lost with no alarm, because every failure
+                // counter it has was happy. Bail out as soon as the position stops changing so the caller can
+                // re-establish rather than grind out the whole timeout.
+                // Measured on PROGRESS TOWARD THE GOAL, not on raw position.
+                //
+                // A position test misses the second failure mode: after falling off the walkway the bot sat in
+                // a pit at (-40.5, 67.x, -38.4) with Y oscillating 67.2<->67.7 while making no horizontal
+                // headway, so "has the position changed" kept resetting and the walk ran its full timeout.
+                // Distance-to-goal collapses both cases — wedged in geometry, or bouncing somewhere it cannot
+                // climb out of — into one check.
+                if (dist < bestDist - 0.5)
+                {
+                    bestDist = dist;
+                    progressAt = DateTime.UtcNow;
+                }
+                else if (DateTime.UtcNow - progressAt > TimeSpan.FromSeconds(25))
+                {
+                    baritone.GetPathingBehavior().CancelEverything();
+                    log($"walk abandoned — no progress for 25s at ({pos.X:F1},{pos.Y:F1},{pos.Z:F1}), " +
+                        $"still {dist:F1} from the goal (best {bestDist:F1})");
+                    return false;
+                }
+
                 if (DateTime.UtcNow >= nextReport)
                 {
                     nextReport = DateTime.UtcNow.AddSeconds(5);
@@ -473,18 +973,34 @@ public sealed class BazaarSession(
 
             foreach (var (label, _) in labels)
             {
+                // Nearest to the label wins, measured horizontally.
+                //
+                // This used to take the HIGHEST entity in a 2x2 column under the label, which in a crowded hub
+                // picks whoever happens to be standing beside the NPC — and the bot then faces a bystander,
+                // right-clicks them, and gets no menu. An NPC's label hangs directly over its own body, so
+                // horizontal distance separates the two cleanly; the box is tightened for the same reason.
                 var body = all
                     .Where(e => e.EntityId != label.EntityId
                                 && LabelTextOf(e) is null
-                                && Math.Abs(e.Position.X - label.Position.X) <= 1.0
-                                && Math.Abs(e.Position.Z - label.Position.Z) <= 1.0
+                                && Math.Abs(e.Position.X - label.Position.X) <= 0.7
+                                && Math.Abs(e.Position.Z - label.Position.Z) <= 0.7
                                 && label.Position.Y - e.Position.Y is >= -0.5 and <= 5.0)
-                    .OrderByDescending(e => e.Position.Y)
+                    .OrderBy(e => (e.Position.X - label.Position.X) * (e.Position.X - label.Position.X)
+                                  + (e.Position.Z - label.Position.Z) * (e.Position.Z - label.Position.Z))
+                    .ThenByDescending(e => e.Position.Y)
                     .FirstOrDefault();
                 if (body is not null)
                 {
                     _npc = body;
-                    log($"NPC \"{nameSubstring}\" is entity {body.EntityId} at ({body.Position.X:F1},{body.Position.Y:F1},{body.Position.Z:F1})");
+                    _npcName = nameSubstring;
+                    // The offset is logged because it is the tell for a mis-resolution: an NPC sits under its
+                    // own label at ~0.0, so anything approaching the box limit is probably a passer-by.
+                    var offset = Math.Sqrt(
+                        Math.Pow(body.Position.X - label.Position.X, 2) +
+                        Math.Pow(body.Position.Z - label.Position.Z, 2));
+
+                    log($"NPC \"{nameSubstring}\" is entity {body.EntityId} at " +
+                        $"({body.Position.X:F1},{body.Position.Y:F1},{body.Position.Z:F1}), {offset:F2} from its label");
                     return true;
                 }
             }
@@ -492,6 +1008,36 @@ public sealed class BazaarSession(
             await Task.Delay(250);
         }
         return false;
+    }
+
+    /// <summary>
+    /// Takes a couple of steps sideways and re-closes on the NPC, which is what a player does when someone is
+    /// stood in the way.
+    ///
+    /// Retrying an interact from the same spot cannot fix a blocked or mistaken target — it reproduces the
+    /// same geometry and therefore the same wrong result. Changing where the bot stands changes which entity
+    /// is nearest, which is the thing that was wrong.
+    /// </summary>
+    private async Task SidestepAsync(CancellationToken ct = default)
+    {
+        var entity = client.State.LocalPlayer?.Entity;
+        if (entity is null || !client.IsConnected || Intercepted) return;
+
+        log("stepping aside before retrying");
+
+        var left = Random.Shared.Next(2) == 0;
+        entity.InputState.Current = left
+            ? MinecraftProtoNet.Core.Models.Input.Input.Empty with { Left = true }
+            : MinecraftProtoNet.Core.Models.Input.Input.Empty with { Right = true };
+
+        await Task.Delay(Random.Shared.Next(350, 700), ct);
+        entity.InputState.Current = MinecraftProtoNet.Core.Models.Input.Input.Empty;
+        _lastMovementUtc = DateTime.UtcNow;
+
+        await Task.Delay(250, ct);
+
+        // Back within reach from the new angle; the sidestep may have taken us out of range.
+        await ApproachNpcAsync();
     }
 
     /// <summary>Closes the last few blocks — an interact beyond the server's reach check is simply ignored.</summary>
@@ -508,7 +1054,7 @@ public sealed class BazaarSession(
         baritone.GetCustomGoalProcess().SetGoalAndPath(new GoalNear(block.Item1, block.Item2, block.Item3, 2));
 
         var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline && client.IsConnected)
+        while (DateTime.UtcNow < deadline && client.IsConnected && !Intercepted)
         {
             var pos = client.State.LocalPlayer?.Entity?.Position;
             if (pos is not null && Dist(pos, _npc.Position) <= reach) break;
@@ -530,7 +1076,18 @@ public sealed class BazaarSession(
     /// </summary>
     public async Task<bool> OpenNpcMenuAsync(string? expectedTitle = null)
     {
-        if (_npc is null) return false;
+        if (_npc is null || Intercepted) return false;
+
+        var sinceLastOpen = DateTime.UtcNow - _lastNpcOpen;
+        if (sinceLastOpen < TimeSpan.FromMilliseconds(NpcOpenGapMs))
+        {
+            var wait = TimeSpan.FromMilliseconds(NpcOpenGapMs) - sinceLastOpen;
+            log($"  NPC open spacing: waiting {wait.TotalSeconds:F1}s before re-opening the menu");
+            await Task.Delay(wait);
+        }
+
+        await MenuGateAsync("open the NPC menu");
+        _lastNpcOpen = DateTime.UtcNow;
 
         for (var attempt = 1; attempt <= 3; attempt++)
         {
@@ -544,10 +1101,13 @@ public sealed class BazaarSession(
             await AimAtNpcAsync();
             await Task.Delay(400);
 
+            // null = let ContainerManager compute the real ray/hitbox intersection. Passing the constant
+            // (0, 1, 0) here overrode that and sent an identical hit vector on every NPC right-click the
+            // account ever made; a real client sends the actual cursor hit, which differs every time.
             var opened = await containers.InteractWithEntityAsync(
                 _npc.EntityId,
                 Hand.MainHand,
-                new Vector3<double>(0, 1.0, 0));
+                location: null);
 
             if ((opened || containers.IsContainerOpen) && await WaitForMenuContentAsync(TimeSpan.FromSeconds(6)))
             {
@@ -555,11 +1115,33 @@ public sealed class BazaarSession(
                 {
                     return true;
                 }
-                log($"opened \"{ContainerTitle}\" but wanted \"{expectedTitle}\" (attempt {attempt})");
+
+                // A menu opened, but not the one asked for. Since interacts are addressed by entity id, the
+                // usual explanation is that the NPC search resolved to a PLAYER standing by the NPC — Hypixel
+                // opens a player's inventory on right-click, which arrives as an ordinary container and would
+                // otherwise be clicked as though it were the Bazaar. Re-resolve and move before trying again;
+                // repeating the same interact from the same spot only reopens the same stranger's bag.
+                log($"opened \"{ContainerTitle}\" but wanted \"{expectedTitle}\" (attempt {attempt}) — " +
+                    "probably a player in the way");
+
+                await containers.CloseContainerAsync();
+                if (_npcName.Length > 0) await FindNpcAsync(_npcName, TimeSpan.FromSeconds(8));
+                await SidestepAsync();
             }
             else
             {
                 log($"no menu after interact (attempt {attempt})");
+
+                // Entity ids do not survive the server re-sending entities, which happens on its own schedule.
+                // A cached id then points at nothing and every interact silently does nothing — the failure
+                // that stranded a session with four live orders it could no longer manage. Re-resolve by name
+                // and try again rather than assuming the NPC we found at startup is still that entity.
+                if (attempt >= 2 && _npcName.Length > 0)
+                {
+                    log($"re-resolving \"{_npcName}\" in case the entity was replaced");
+                    if (await FindNpcAsync(_npcName, TimeSpan.FromSeconds(8))) await ApproachNpcAsync();
+                    await SidestepAsync();
+                }
             }
 
             await Task.Delay(1000);
@@ -576,6 +1158,16 @@ public sealed class BazaarSession(
     {
         var entity = client.State.LocalPlayer?.Entity;
         if (entity is null) return;
+
+        // Already holding an empty slot: send nothing.
+        //
+        // This is called on every cycle as well as on every join and recovery, and it used to re-send
+        // SetCarriedItem unconditionally. Measured against a real client through the same proxy, that put us
+        // at 1.34 Set Carried Item per minute against vanilla's 0.01 — 122x, and the single loudest
+        // non-human signature in our serverbound stream. A player changes hotbar slot when they want a
+        // different item, not once a minute forever.
+        var held = entity.Inventory.HeldSlot;
+        if (held is >= 0 and <= 8 && entity.Inventory.GetSlot((short)(held + 36)).IsEmpty) return;
 
         for (short hotbar = 0; hotbar <= 8; hotbar++)
         {
@@ -617,6 +1209,7 @@ public sealed class BazaarSession(
     /// </summary>
     public async Task<bool> ClickAsync(string wanted, bool waitForChange = true, sbyte button = 0)
     {
+        await MenuGateAsync($"click '{wanted}'");
         var container = containers.CurrentContainer;
         if (container is null || !container.IsOpen)
         {
@@ -625,7 +1218,7 @@ public sealed class BazaarSession(
         }
 
         var containerSlots = container.Type.GetContainerSlotCount();
-        var match = container.Slots
+        var match = container.SnapshotSlots()
             .Where(kv => kv.Key < containerSlots && !kv.Value.IsEmpty)
             .Select(kv => (Index: kv.Key, Name: CleanName(kv.Value)))
             .Where(x => x.Name is not null && x.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase))
@@ -635,7 +1228,7 @@ public sealed class BazaarSession(
         if (match.Name is null)
         {
             log($"no slot named like \"{wanted}\" in \"{ContainerTitle}\"; present: " +
-                string.Join(", ", container.Slots
+                string.Join(", ", container.SnapshotSlots()
                     .Where(kv => kv.Key < containerSlots && !kv.Value.IsEmpty && CleanName(kv.Value) is not null)
                     .OrderBy(kv => kv.Key)
                     .Select(kv => $"[{kv.Key}] {CleanName(kv.Value)}")));
@@ -663,6 +1256,7 @@ public sealed class BazaarSession(
     /// </summary>
     public async Task<bool> SignAsync(string value)
     {
+        await MenuGateAsync($"sign '{value}'");
         var deadline = DateTime.UtcNow.AddSeconds(8);
         SignEditorEventArgs? prompt = null;
         while (DateTime.UtcNow < deadline && !_signPrompts.TryDequeue(out prompt))
@@ -677,15 +1271,24 @@ public sealed class BazaarSession(
         }
 
         var existing = prompt.ExistingLines;
+
+        // Clamp OUR line to what the sign editor would have let a person type: the limit is rendered pixel
+        // width (90px), enforced per keystroke, so "Enchanted Spruce Log" (114px) is a line no human can
+        // produce — the client stops at "Enchanted Spruc" (86px). The prompt lines below are echoed exactly
+        // as the server sent them, which is also what vanilla does with lines it did not edit.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/gui/screens/inventory/AbstractSignEditScreen.java:58
+        var typed = MinecraftFont.TypedSignLine(value);
+        if (typed != value) log($"  sign text clipped to \"{typed}\" — {MinecraftFont.Width(value)}px exceeds the 90px line");
+
         string[] lines =
         [
-            value,
+            typed,
             existing.Length > 1 ? existing[1] ?? "" : "",
             existing.Length > 2 ? existing[2] ?? "" : "",
             existing.Length > 3 ? existing[3] ?? "" : ""
         ];
 
-        log($"sign <- \"{value}\"");
+        log($"sign <- \"{typed}\"");
         await client.SendPacketAsync(new SignUpdatePacket
         {
             Position = prompt.Position,
@@ -709,7 +1312,7 @@ public sealed class BazaarSession(
             if (current is { IsOpen: true })
             {
                 var containerSlots = current.Type.GetContainerSlotCount();
-                var filled = current.Slots.Count(kv => kv.Key < containerSlots && !kv.Value.IsEmpty);
+                var filled = current.SnapshotSlots().Count(kv => kv.Key < containerSlots && !kv.Value.IsEmpty);
                 if (filled > 0)
                 {
                     var signature = SignatureOf(current);
@@ -762,7 +1365,7 @@ public sealed class BazaarSession(
     public Task CloseAsync() => containers.IsContainerOpen ? containers.CloseContainerAsync() : Task.CompletedTask;
 
     private static string SignatureOf(ContainerState c) =>
-        $"{c.ContainerId}|{c.Title}|" + string.Join(",", c.Slots
+        $"{c.ContainerId}|{c.Title}|" + string.Join(",", c.SnapshotSlots()
             .Where(kv => !kv.Value.IsEmpty)
             .OrderBy(kv => kv.Key)
             .Select(kv => $"{kv.Key}:{kv.Value.ItemId}:{kv.Value.ItemCount}:{CleanName(kv.Value)}"));
@@ -777,7 +1380,7 @@ public sealed class BazaarSession(
 
         var containerSlots = container.Type.GetContainerSlotCount();
         var result = new List<MenuSlot>();
-        foreach (var (index, slot) in container.Slots.OrderBy(kv => kv.Key))
+        foreach (var (index, slot) in container.SnapshotSlots().OrderBy(kv => kv.Key))
         {
             if (slot.IsEmpty || index >= containerSlots) continue;
             result.Add(new MenuSlot
