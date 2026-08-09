@@ -265,6 +265,14 @@ public class GameLoop(ILogger<GameLoop> logger, IHumanizer humanizer, IPacketPro
                             preTickMs = MsSince(phase);
                         }
 
+                        // Vanilla's handleKeybinds() slot: interactions go out HERE, before the movement
+                        // packet this tick will send. Anything queued off-thread lands in the right place in
+                        // the stream instead of after the movement packet, which GrimAC flags as
+                        // "Post: interact entity".
+                        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java
+                        //   pick() -> handleKeybinds() -> player.tick() -> sendPosition()
+                        await client.DrainPreMovementActionsAsync();
+
                         phase = Stopwatch.GetTimestamp();
                         await client.PhysicsTickAsync(entity => PhysicsTick?.Invoke(entity));
                         physicsMs = MsSince(phase);

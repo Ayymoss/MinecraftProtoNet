@@ -349,6 +349,99 @@ if (GetArg("--menu") is { } menuName)
     return menuOk ? 0 : 1;
 }
 
+// --villager-loop: the vanilla open/close experiment, run against a plain villager on a local server.
+//
+// The Hypixel arm proved menus are necessary and sufficient for the ejection, but Hypixel will not tell us
+// WHY. This reproduces the same loop -- open the NPC, hold ~2s, close, wait ~20s, repeat -- somewhere the
+// server logic is readable and Grim is watching, so the client-side defect (AIM-MULTIWRITE: two rotation
+// writes per tick, up to 179.4 degrees flipped and restored inside one tick) can be observed while the loop
+// is actually running rather than while the bot merely stands there.
+//
+// Deliberately NOT the auction-stress path: that is welded to /skyblock, /hub and the Auction NPC, none of
+// which exist on a local server.
+if (Array.IndexOf(args, "--villager-loop") >= 0)
+{
+    var vServer = GetArg("--server") ?? "127.0.0.1";
+    var vPort = int.TryParse(GetArg("--port"), out var vp) ? vp : 25565;
+    var vNpc = GetArg("--npc") ?? "Jeff";
+    var vGap = int.TryParse(GetArg("--gap"), out var vg) ? vg : 20;
+    var vHold = double.TryParse(GetArg("--hold"), out var vh) ? vh : 2.0;
+    var vMinutes = int.TryParse(GetArg("--minutes"), out var vm) ? vm : 30;
+
+    void VLog(string message) => Console.WriteLine($"[villager {DateTime.Now:HH:mm:ss}] {message}");
+
+    var vSession = new BazaarSession(
+        client,
+        host.Services.GetRequiredService<IChatEventBus>(),
+        host.Services.GetRequiredService<ISignEventBus>(),
+        baritoneProvider,
+        host.Services.GetRequiredService<IContainerManager>(),
+        registryService,
+        VLog);
+
+    if (!await client.AuthenticateAsync())
+    {
+        Console.Error.WriteLine("[villager] AUTH FAILED");
+        return 2;
+    }
+
+    if (!await vSession.ConnectAndSpawnAsync(vServer, vPort))
+    {
+        Console.Error.WriteLine("[villager] could not connect/spawn");
+        return 2;
+    }
+
+    vSession.Subscribe();
+    VLog($"connected to {vServer}:{vPort}; looking for \"{vNpc}\", {vGap}s gap, {vHold}s hold, {vMinutes} min");
+
+    if (!await vSession.FindNpcAsync(vNpc, TimeSpan.FromSeconds(30)))
+    {
+        Console.Error.WriteLine($"[villager] NPC \"{vNpc}\" not found near spawn");
+        return 2;
+    }
+
+    await vSession.ApproachNpcAsync();
+
+    var vDeadline = DateTime.UtcNow.AddMinutes(vMinutes);
+    var opens = 0;
+    var failures = 0;
+    while (DateTime.UtcNow < vDeadline)
+    {
+        // Re-resolve every pass: the entity id can be replaced under us, and an interact against a stale id
+        // silently does nothing -- which is exactly how a run ends up looking healthy while measuring nothing.
+        if (!await vSession.FindNpcAsync(vNpc, TimeSpan.FromSeconds(10)))
+        {
+            failures++;
+            VLog($"pass {opens + 1}: lost \"{vNpc}\" (failure {failures})");
+            if (failures >= 5) { VLog("giving up: NPC unreachable five times running"); break; }
+            await Task.Delay(TimeSpan.FromSeconds(vGap));
+            continue;
+        }
+
+        if (await vSession.OpenNpcMenuAsync())
+        {
+            opens++;
+            failures = 0;
+            await Task.Delay(TimeSpan.FromSeconds(vHold));
+            await vSession.CloseAsync();
+            VLog($"pass {opens} done ({(DateTime.UtcNow - vDeadline.AddMinutes(-vMinutes)).TotalMinutes:F1} min elapsed)");
+        }
+        else
+        {
+            failures++;
+            VLog($"pass {opens + 1}: menu did not open (failure {failures})");
+            if (failures >= 5) { VLog("giving up: menu failed to open five times running"); break; }
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(vGap));
+    }
+
+    VLog($"DONE {opens} open(s) over {vMinutes} min");
+    vSession.Unsubscribe();
+    await client.DisconnectAsync();
+    return 0;
+}
+
 // --portfolio: an unattended trading session. Several flips in flight at once, because a leg spends nearly
 // all its life waiting and the order manager shows every order on one screen — so the waiting overlaps
 // instead of serialising. Spends real coins.

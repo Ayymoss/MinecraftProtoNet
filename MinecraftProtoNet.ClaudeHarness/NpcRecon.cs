@@ -160,7 +160,28 @@ public sealed record ReconProfile(
             CaptureRadius: 0,
             OutputSubdir: "local-sniff",
             GoalPos: (-36, 72, -28),
-            GoalTimeoutSec: 45)
+            GoalTimeoutSec: 45),
+
+        // Stays in the world for half an hour instead of dumping and leaving.
+        //
+        // Every other recon profile is a short read-only visit, which is useless for the ejection work: the
+        // AIM-MULTIWRITE flip (116/116 ticks, up to 179.4 degrees restored inside one tick) needs a long
+        // sample with Grim watching, and the trade loop needs the bot to still be there. Goal is the stair
+        // test area on the Paper SkyBlock spawn, where Jeff is parked.
+        ["paper-stay"] = new(
+            Name: "paper-stay",
+            Server: "127.0.0.1",
+            Port: 25565,
+            WaitAfterJoinSec: 3,
+            Steps:
+            [
+                new ReconStep("tp @s 20 71 -29", 2)
+            ],
+            CaptureRadius: 16,
+            OutputSubdir: "paper-stay",
+            GoalPos: (20, 71, -29),
+            GoalTimeoutSec: 60,
+            WaitAtGoalSec: 1800)
     };
 }
 

@@ -24,6 +24,30 @@ namespace MinecraftProtoNet.Core.Core;
 
 public class MinecraftClient : IMinecraftClient
 {
+    /// <summary>
+    /// Work waiting for the input phase of the next tick. See <see cref="EnqueuePreMovementAction"/>.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Func<Task>> _preMovementActions = new();
+
+    public void EnqueuePreMovementAction(Func<Task> action) => _preMovementActions.Enqueue(action);
+
+    public async Task DrainPreMovementActionsAsync()
+    {
+        while (_preMovementActions.TryDequeue(out var action))
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                // One bad action must not stop the tick: the movement packet still has to go out on time,
+                // and a dropped tick is a far louder anti-cheat signal than a failed interact.
+                _logger.LogWarning(ex, "Pre-movement action failed");
+            }
+        }
+    }
+
     private readonly IServiceProvider _serviceProvider;
     private readonly IPacketSender _connection;
     private readonly IPacketService _packetService;

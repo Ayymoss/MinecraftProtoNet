@@ -58,6 +58,22 @@ public interface IMinecraftClient : IPacketSender
     /// <param name="prePhysicsCallback">Optional callback for pathfinding or AI logic</param>
     Task PhysicsTickAsync(Action<State.Entity>? prePhysicsCallback = null);
 
+    /// <summary>
+    /// Queues work to run at the point in the tick where vanilla handles input, i.e. BEFORE the movement
+    /// packet for that tick is sent.
+    ///
+    /// Vanilla's order is pick() -> handleKeybinds() -> player.tick() -> sendPosition(), so an interact
+    /// always precedes that tick's movement packet. Ours were sent straight from async tasks and landed
+    /// wherever the scheduler put them — usually AFTER the movement packet, which GrimAC flags as
+    /// "Post: interact entity" on every single NPC interaction. Menu opens being the confirmed ejection
+    /// trigger, that ordering is the most likely reason opening a menu is what gets us thrown out.
+    /// Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java (tick order)
+    /// </summary>
+    void EnqueuePreMovementAction(Func<Task> action);
+
+    /// <summary>Runs everything queued by <see cref="EnqueuePreMovementAction"/>. Called by the game loop.</summary>
+    Task DrainPreMovementActionsAsync();
+
     Task SendChatSessionUpdate();
 
     /// <summary>

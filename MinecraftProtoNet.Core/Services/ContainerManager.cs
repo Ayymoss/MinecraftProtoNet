@@ -125,7 +125,51 @@ public class ContainerManager : IContainerManager
             SneakKeyPressed = self.IsSneaking
         };
 
-        await _client.SendPacketAsync(interactPacket);
+        // Both hands go out together in the tick's INPUT phase, before that tick's movement packet.
+        //
+        // Sending them straight from this async method put them wherever the scheduler landed — in practice
+        // after the movement packet, which GrimAC flags as "Post: interact entity" on every NPC interaction
+        // (18 flags in a two-minute local run, climbing with each pass). Vanilla cannot produce that order:
+        // handleKeybinds() runs before player.tick() sends the position. Queuing both packets as one action
+        // also keeps them adjacent, which is how a real double-hand right-click appears on the wire.
+        var interactDone = new TaskCompletionSource();
+        _client.EnqueuePreMovementAction(async () =>
+        {
+            try
+            {
+                await _client.SendPacketAsync(interactPacket);
+
+                if (hand == Hand.MainHand)
+                {
+                    await _client.SendPacketAsync(new InteractPacket
+                    {
+                        EntityId = interactPacket.EntityId,
+                        Hand = Hand.OffHand,
+                        Location = interactPacket.Location,
+                        SneakKeyPressed = interactPacket.SneakKeyPressed
+                    });
+                }
+
+                interactDone.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                interactDone.TrySetException(ex);
+            }
+        });
+
+        // Bounded: if the game loop is not running the interact would otherwise hang the caller for ever.
+        using (var interactCts = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+        {
+            var completed = await Task.WhenAny(interactDone.Task, Task.Delay(Timeout.Infinite, interactCts.Token));
+            if (completed != interactDone.Task)
+            {
+                _logger.LogWarning("Interact for entity {Id} was never drained by the game loop", entityId);
+                return false;
+            }
+
+            await interactDone.Task;
+        }
 
         // Vanilla sends TWO Interact packets per right-click — hand 0 then hand 1, same entity, same hit
         // location. Minecraft.startUseItem() loops over both hands and MultiPlayerGameMode.interactAt() sends
@@ -134,16 +178,7 @@ public class ContainerManager : IContainerManager
         // produced exactly two packets. We sent one, so our interactions were distinguishable from a human's
         // by packet count alone, regardless of their contents.
         // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java startUseItem
-        if (hand == Hand.MainHand)
-        {
-            await _client.SendPacketAsync(new InteractPacket
-            {
-                EntityId = interactPacket.EntityId,
-                Hand = Hand.OffHand,
-                Location = interactPacket.Location,
-                SneakKeyPressed = interactPacket.SneakKeyPressed
-            });
-        }
+        // (both hands are sent inside the queued action above, so they stay adjacent and correctly ordered)
 
         _logger.LogDebug("Sent interact packets for entity {Id} (main + off hand, as vanilla does)", entityId);
 

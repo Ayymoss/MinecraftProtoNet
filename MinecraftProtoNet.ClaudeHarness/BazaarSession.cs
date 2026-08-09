@@ -1336,6 +1336,13 @@ public sealed class BazaarSession(
             var current = containers.CurrentContainer;
             if (current is { IsOpen: true })
             {
+                // A merchant window is content-complete as soon as it is open: its trades arrive out of band
+                // in MerchantOffers, never as container slots, so the slot-fill test below can never pass for
+                // a villager. Observed on the Paper rig -- 15 genuine merchant opens, every one scored "no
+                // menu after interact", which tripped the caller's consecutive-failure cap and dropped the
+                // connection while the loop was in fact working perfectly.
+                if (current.Type == MenuType.Merchant) return true;
+
                 var containerSlots = current.Type.GetContainerSlotCount();
                 var filled = current.SnapshotSlots().Count(kv => kv.Key < containerSlots && !kv.Value.IsEmpty);
                 if (filled > 0)
