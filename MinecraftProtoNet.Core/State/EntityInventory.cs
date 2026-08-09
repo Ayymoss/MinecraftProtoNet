@@ -49,9 +49,12 @@ public class EntityInventory
     /// </summary>
     public int IncrementSequence()
     {
-        var currentSequence = _blockPlaceSequence;
-        Interlocked.Increment(ref _blockPlaceSequence);
-        return currentSequence;
+        // Increment FIRST, then return — so the first sequence we ever send is 1 and 0 is never sent.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/world/level/block/state/BlockStatePredictionHandler.java:47-50
+        //   public int startPredicting() { ++this.currentSequenceNr; return this.currentSequenceNr; }
+        // Returning the pre-increment value made every sequence off by one against a real client, starting
+        // with a leading 0 that vanilla can never emit.
+        return Interlocked.Increment(ref _blockPlaceSequence);
     }
 
     /// <summary>

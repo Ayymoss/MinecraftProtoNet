@@ -65,19 +65,87 @@ public class ContainerManager : IContainerManager
 
         _containerOpenWaiter = new TaskCompletionSource<ContainerState>();
 
-        // Location is the click point relative to the entity's position; 1 block up is inside the hitbox of
-        // anything player-shaped, which is what a server's reach check looks at.
+        // Location is the click point relative to the entity's position — the real ray/hitbox intersection,
+        // not a constant.
+        //
+        // This defaulted to (0, 1, 0). A capture of a real client right-clicking the same Bazaar NPC shows
+        // vanilla sending the actual cursor hit, e.g. (0.299945, 1.46213, -0.0311298), different on every
+        // click. An identical vector on every interaction an account ever makes cannot come from a mouse, and
+        // this is the path the bot uses each time it opens the Bazaar.
         // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/multiplayer/MultiPlayerGameMode.java:429
+        var self = _state.LocalPlayer.Entity;
+        var resolved = location;
+
+        // Players live in the Level registry; NPCs live in WorldEntities. The Bazaar/Hub Selector NPCs are
+        // the latter, so looking only in Level silently fell back to the constant.
+        if (resolved is null)
+        {
+            if (_state.Level.GetEntityOfId(entityId) is { } player)
+            {
+                resolved = Actions.InteractionManager.ComputeHitLocation(
+                    self, player, self.GetYawPitchToTarget(self, player));
+            }
+            else if (_state.WorldEntities.GetEntity(entityId) is { } npc)
+            {
+                // Player-shaped hitbox: Hypixel's NPCs are player entities wearing skins.
+                //
+                // Raycast along the rotation we are ACTUALLY holding, not a freshly computed ideal aim at the
+                // NPC's centre. The caller has already turned to face the target, and the real rotation
+                // carries the aim's own drift and jitter — so the hit point moves between clicks the way a
+                // mouse-aimed one does. Computing the ideal aim instead produced a bit-identical vector on
+                // every click made from the same standing spot, which is the same fingerprint as the constant
+                // it replaced, only subtler.
+                // Aim noise, so the hit point moves between clicks.
+                //
+                // Our stored rotation is exact, and the humanizer's jitter is applied to outgoing rotation
+                // packets rather than to the entity, so raycasting the stored value reproduced a
+                // bit-identical location on every click from the same spot. A hand on a mouse cannot hold a
+                // rotation to the bit. The magnitude matches the rotation jitter already sent on the wire
+                // (~0.04 degrees), which keeps the claimed hit point consistent with the rotation we report.
+                var aim = new Models.Core.Vector2<float>(
+                    self.YawPitch.X + (float)((Random.Shared.NextDouble() - 0.5) * 0.09),
+                    self.YawPitch.Y + (float)((Random.Shared.NextDouble() - 0.5) * 0.09));
+
+                var hit = Actions.InteractionManager.ComputeHitLocation(self, npc.Position, 0.6, 1.8, aim);
+
+                // If we are not actually looking at it (aim not yet applied), fall back to the ideal aim so
+                // the location still lands inside the hitbox rather than behind us.
+                resolved = hit.Length() > 3.0
+                    ? Actions.InteractionManager.ComputeHitLocation(
+                        self, npc.Position, 0.6, 1.8, self.GetYawPitchToTargetPosition(self, npc.Position))
+                    : hit;
+            }
+        }
+
         var interactPacket = new InteractPacket
         {
             EntityId = entityId,
             Hand = hand,
-            Location = location ?? new Models.Core.Vector3<double>(0, 1.0, 0),
-            SneakKeyPressed = _state.LocalPlayer.Entity.IsSneaking
+            Location = resolved ?? new Models.Core.Vector3<double>(0, 1.0, 0),
+            SneakKeyPressed = self.IsSneaking
         };
 
         await _client.SendPacketAsync(interactPacket);
-        _logger.LogDebug("Sent interact packet for entity {Id}", entityId);
+
+        // Vanilla sends TWO Interact packets per right-click — hand 0 then hand 1, same entity, same hit
+        // location. Minecraft.startUseItem() loops over both hands and MultiPlayerGameMode.interactAt() sends
+        // one packet per hand, because the client cannot predict whether the main hand consumed the action.
+        // Measured in a capture of a real client right-clicking this same Bazaar NPC: every right-click
+        // produced exactly two packets. We sent one, so our interactions were distinguishable from a human's
+        // by packet count alone, regardless of their contents.
+        // Reference: minecraft-26.2-REFERENCE-ONLY/net/minecraft/client/Minecraft.java startUseItem
+        if (hand == Hand.MainHand)
+        {
+            await _client.SendPacketAsync(new InteractPacket
+            {
+                EntityId = interactPacket.EntityId,
+                Hand = Hand.OffHand,
+                Location = interactPacket.Location,
+                SneakKeyPressed = interactPacket.SneakKeyPressed
+            });
+        }
+
+        _logger.LogDebug("Sent interact packets for entity {Id} (main + off hand, as vanilla does)", entityId);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
