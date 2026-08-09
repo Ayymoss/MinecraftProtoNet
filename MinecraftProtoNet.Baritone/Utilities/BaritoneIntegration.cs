@@ -20,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using MinecraftProtoNet.Baritone.Api;
 using MinecraftProtoNet.Baritone.Api.Event.Events;
 using MinecraftProtoNet.Baritone.Api.Event.Events.Type;
+using MinecraftProtoNet.Baritone.Settings;
 using MinecraftProtoNet.Core;
 using MinecraftProtoNet.Core.Core.Abstractions;
 
@@ -38,6 +39,30 @@ public static class BaritoneIntegration
     // Track whether we've subscribed to Level.BlockChanged to avoid duplicate subscriptions
     private static volatile bool _blockChangeHooked;
 
+    // The host whose profile is currently loaded, so the settings are only rewritten when it actually changes.
+    private static string? _profiledHost;
+
+    /// <summary>
+    /// Keeps Baritone's build permissions in step with the server it is connected to.
+    ///
+    /// Done here, on the tick, because permissions are a property of the SERVER and not of whichever code path
+    /// happened to call Connect — five call sites exist today and any new one would otherwise inherit vanilla
+    /// permissions on a server that forbids building. On Hypixel that meant Baritone costing routes through
+    /// glass panes it can never break, then swinging at them until the movement timed out.
+    /// </summary>
+    private static void ApplyServerProfile(string? host, ILogger? logger)
+    {
+        if (string.Equals(host, _profiledHost, StringComparison.OrdinalIgnoreCase)) return;
+
+        _profiledHost = host;
+        var profile = ServerProfiles.For(host);
+        ServerProfiles.Apply(profile);
+
+        logger?.LogInformation(
+            "Baritone server profile \"{Profile}\" applied for {Host}: allowBreak={Break}, allowPlace={Place}",
+            profile.Name, host ?? "(disconnected)", profile.AllowBreak, profile.AllowPlace);
+    }
+
     /// <summary>
     /// Hooks Baritone tick events to the game loop.
     /// Call this from the application layer (e.g., Bot.Webcore) after creating the GameLoop.
@@ -53,6 +78,8 @@ public static class BaritoneIntegration
         {
             try
             {
+                ApplyServerProfile(client.State.ConnectedServerHost, logger);
+
                 // Subscribe to Level.BlockChanged once to forward to Baritone's event system
                 if (!_blockChangeHooked)
                 {

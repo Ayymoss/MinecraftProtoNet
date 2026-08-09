@@ -119,6 +119,14 @@ public class CalculationContext
         }
         
         CanSprint = BaritoneSettings.Settings().AllowSprint.Value && (player as Entity)?.Hunger > 6;
+
+        if (Environment.GetEnvironmentVariable("MCPROTO_SPRINT_DIAG") == "1" && !forUseOnAnotherThread)
+        {
+            Console.Error.WriteLine(
+                $"[SprintDiag] canSprint={CanSprint} allowSprint={BaritoneSettings.Settings().AllowSprint.Value} " +
+                $"playerType={player?.GetType().Name ?? "null"} hunger={(player as Entity)?.Hunger.ToString() ?? "n/a"} " +
+                $"tick={currentTick} hasThrowaway={HasThrowaway}");
+        }
         PlaceBlockCost = BaritoneSettings.Settings().BlockPlacementPenalty.Value;
         AllowBreak = BaritoneSettings.Settings().AllowBreak.Value;
         AllowBreakAnyway = new List<object>(BaritoneSettings.Settings().AllowBreakAnyway.Value);
