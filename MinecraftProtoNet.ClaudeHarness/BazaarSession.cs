@@ -738,13 +738,23 @@ public sealed class BazaarSession(
         if (OutageNotice is not null) return;
 
         var lower = line.ToLowerInvariant();
-        var mentionsBazaar = lower.Contains("bazaar") || lower.Contains("buy order") || lower.Contains("sell offer");
+        var mentionsBazaar = lower.Contains("bazaar") || lower.Contains("buy order") || lower.Contains("sell offer")
+                             || lower.Contains("auction house");
         if (!mentionsBazaar) return;
 
         string[] outageWords =
         [
             "disabled", "unavailable", "temporarily", "currently closed", "is closed", "try again",
-            "too busy", "high load", "server load", "overloaded", "maintenance", "not available", "failed"
+            "too busy", "high load", "server load", "overloaded", "maintenance", "not available", "failed",
+            // "This server is too laggy to use the Bazaar, sorry!" -- observed 2026-08-09, and it matched
+            // none of the words above, so the bot kept trying to trade on a hub that had switched the
+            // Bazaar off. Same class as the others: it is per-server, so the fix is to be on another server.
+            //
+            // Matched on the whole phrase rather than "laggy" alone because player chat reaches this handler
+            // too, and "laggy" on its own is common ("bruh server is to laggy", captured in the same logs).
+            // A player would have to type "too laggy to use" AND mention the Bazaar to trip it, and the worst
+            // case is one unnecessary hub hop.
+            "too laggy to use"
         ];
 
         var hit = outageWords.FirstOrDefault(w => lower.Contains(w));
