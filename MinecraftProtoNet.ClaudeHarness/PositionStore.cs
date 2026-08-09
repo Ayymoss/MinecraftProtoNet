@@ -65,10 +65,39 @@ public static class PositionStore
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
-    public static string FilePath { get; } = Path.Combine(
-        new DirectoryInfo(AppContext.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName ?? AppContext.BaseDirectory,
-        "_ServerReferences",
-        "bazaar-open-positions.json");
+    public static string FilePath { get; } = ResolveFilePath();
+
+    /// <summary>
+    /// Finds the one ledger, from wherever the binary happens to live.
+    ///
+    /// This used to walk a FIXED four parents up from the binary, which silently made the path depend on how
+    /// deep the output directory was. Running from bin/Debug/net10.0 landed on the repository root, while the
+    /// per-arm copy in bin/tradebot landed one level higher — so the two builds kept SEPARATE ledgers and each
+    /// booted believing the other's closed flips had never happened. That is what made realised P&amp;L jump by
+    /// an order of magnitude depending on which build started, and it is not a number anyone can sanity-check
+    /// after the fact.
+    ///
+    /// Anchoring on the solution file instead means every build resolves to the same place no matter how it was
+    /// published or where it was copied.
+    /// </summary>
+    private static string ResolveFilePath()
+    {
+        const string fileName = "bazaar-open-positions.json";
+
+        // Explicit override first, so a test or a deliberately isolated arm can have its own book.
+        if (Environment.GetEnvironmentVariable("MCPROTO_STATE_DIR") is { Length: > 0 } overrideDir)
+            return Path.Combine(overrideDir, fileName);
+
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (dir.GetFiles("MinecraftProtoNet.slnx").Length > 0)
+                return Path.Combine(dir.FullName, "_ServerReferences", fileName);
+        }
+
+        // Published somewhere with no solution beside it. Keeping the book next to the binary is wrong in a
+        // different way, but it is at least predictable and cannot be confused with the repository's copy.
+        return Path.Combine(AppContext.BaseDirectory, "_ServerReferences", fileName);
+    }
 
     /// <summary>
     /// Saves the open book. Failure is swallowed: losing the file costs accuracy on a future restart, whereas
