@@ -147,7 +147,7 @@ public class BazaarCommand(
         await ctx.SendChatAsync($"[Bazaar] Container open: {container.Slots.Count} slots");
 
         var count = 0;
-        foreach (var (index, slot) in container.Slots)
+        foreach (var (index, slot) in container.SnapshotSlots())
         {
             if (slot.IsEmpty) continue;
 
