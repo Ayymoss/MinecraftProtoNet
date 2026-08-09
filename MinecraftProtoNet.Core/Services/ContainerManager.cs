@@ -553,6 +553,21 @@ public class ContainerManager : IContainerManager
         _logger.LogDebug("Quick-moved slot {Slot} in window {WindowId}", slot, windowId);
     }
 
+    /// <summary>
+    /// Whether to stop telling the server we closed a menu.
+    ///
+    /// Measured on Hypixel over 122 ejections (2026-08-09): sending nothing after the open raised median
+    /// time-to-ejection from 245s to 445s (n=27 vs n=21), the single largest effect found short of not opening
+    /// menus at all.
+    ///
+    /// OFF by default, because it is a DIVERGENCE from vanilla rather than a step towards it — a real client
+    /// always sends this packet when a menu closes, so this trades protocol fidelity for survival time, and it
+    /// treats a symptom we do not yet understand. Kept behind a switch so it can be turned on for a long
+    /// unattended trading run, and so the effect can be re-measured once the vanilla capture lands.
+    /// </summary>
+    private static readonly bool SuppressClose =
+        Environment.GetEnvironmentVariable("MCPROTO_NO_CONTAINER_CLOSE") == "1";
+
     public async Task CloseContainerAsync()
     {
         if (!IsContainerOpen)
@@ -563,12 +578,20 @@ public class ContainerManager : IContainerManager
 
         var containerId = CurrentContainer!.ContainerId;
 
-        var closePacket = new ContainerClosePacket
+        if (SuppressClose)
         {
-            ContainerId = containerId
-        };
+            _logger.LogDebug("Dropping container {Id} without telling the server (MCPROTO_NO_CONTAINER_CLOSE)",
+                containerId);
+        }
+        else
+        {
+            var closePacket = new ContainerClosePacket
+            {
+                ContainerId = containerId
+            };
 
-        await _client.SendPacketAsync(closePacket);
+            await _client.SendPacketAsync(closePacket);
+        }
 
         CurrentContainer.Close();
         _state.LocalPlayer.Entity!.CurrentContainer = null;
