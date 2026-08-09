@@ -113,11 +113,44 @@ public static class PositionStore
                 closed.Select(ToSnapshot).ToList());
 
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+
+            // Closed flips only ever accumulate. A save that would REDUCE the count means the in-memory
+            // ledger is not the one on disk -- a resume that silently failed, a second process, a rebuilt
+            // state -- and writing it destroys history no other source can rebuild. Keep a copy first.
+            //
+            // This is insurance, not a fix: the cause is always a save that outran its load. It exists
+            // because that bug is silent by nature (nothing throws, the file just gets smaller) and cost
+            // 203 flips on 2026-08-09 before anyone noticed.
+            if (File.Exists(FilePath) && CountClosedOnDisk() is { } onDisk && snapshot.Closed?.Count < onDisk)
+            {
+                var rescue = $"{FilePath}.shrink-{DateTime.UtcNow:yyyyMMdd-HHmmss}.bak";
+                File.Copy(FilePath, rescue, overwrite: true);
+                log?.Invoke($"  !! closed flips would drop {onDisk} -> {snapshot.Closed?.Count ?? 0}; " +
+                            $"kept a copy at {Path.GetFileName(rescue)}");
+            }
+
             File.WriteAllText(FilePath, JsonSerializer.Serialize(snapshot, Options));
         }
         catch (Exception ex)
         {
             log?.Invoke($"  could not save position state ({ex.Message})");
+        }
+    }
+
+    /// <summary>How many closed flips the file currently holds, or null if it cannot be read.</summary>
+    private static int? CountClosedOnDisk()
+    {
+        try
+        {
+            var file = JsonSerializer.Deserialize<PortfolioStateFile>(File.ReadAllText(FilePath), Options);
+            return file?.Closed?.Count;
+        }
+        catch
+        {
+            // Unreadable is not the same as empty. Returning null skips the guard rather than treating a
+            // parse failure as "the file had nothing in it", which would wave through the very write the
+            // guard exists to catch.
+            return null;
         }
     }
 

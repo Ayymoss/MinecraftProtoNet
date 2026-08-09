@@ -430,6 +430,17 @@ async function tick() {
     const ago = m => m == null ? '<span class="muted">&mdash;</span>'
       : m < 1 ? 'just now' : m < 60 ? `${m.toFixed(0)}m ago` : `${(m/60).toFixed(1)}h ago`;
 
+    // The Closed column, which used to be an em-dash on every historical row because ClosedAt post-dates
+    // most of the ledger. An exact close time is shown when we have one; otherwise the flip's own start is
+    // shown prefixed with ~ and explained on hover. Only a flip with neither is a dash.
+    const closedCell = p => {
+      if (p.closedAgoMinutes != null) return ago(p.closedAgoMinutes);
+      if (p.openedAgoMinutes != null)
+        return `<span title="closed before the exact time was recorded; this is when the flip opened">`
+             + `~${ago(p.openedAgoMinutes)}</span>`;
+      return '<span class="muted">&mdash;</span>';
+    };
+
     const top = Math.max(1, ...d.preferences.map(p => Math.abs(p.score)));
     document.querySelector('#prefs tbody').innerHTML = d.preferences.map(p => {
       const pct = Math.max(2, Math.round(Math.abs(p.score) / top * 100));
@@ -458,7 +469,7 @@ async function tick() {
       + `<td class="num">${p.unitsBought}</td><td class="num">${coins(p.spent)}</td>`
       + `<td class="num">${p.unitsSold}</td><td class="num">${coins(p.received)}</td>`
       + `<td class="num ${cls(p.profit)}">${coins(p.profit)}</td>`
-      + `<td class="num muted">${ago(p.closedAgoMinutes)}</td></tr>`).join('')
+      + `<td class="num muted">${closedCell(p)}</td></tr>`).join('')
       || '<tr><td colspan="7" class="muted">none yet</td></tr>';
 
     document.getElementById('closedsum').innerHTML = d.closed.length

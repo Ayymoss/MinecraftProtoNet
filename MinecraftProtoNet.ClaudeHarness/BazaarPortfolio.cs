@@ -627,13 +627,15 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     /// </summary>
     private async Task AdoptExistingOrdersAsync()
     {
-        var rows = await ReadOrdersAsync();
-        if (rows is null || rows.Count == 0) return;
-
-        // The saved file knows what things cost; the menu knows what is still live. Both are needed, and the
-        // menu wins on existence — an order that filled while the process was down must not come back.
+        // The ledger is read FIRST, and unconditionally.
+        //
+        // This used to sit below the "no rows" early return, which made loading history conditional on the
+        // order menu being readable while SAVING it stayed unconditional — every cycle calls
+        // PositionStore.Save(_open, _closed). One startup where the menu came back empty or null therefore
+        // left _closed empty and the next save wrote that emptiness over the whole file. Observed
+        // 2026-08-09: 203 closed flips replaced by 2, silently, with no error anywhere in the log because
+        // nothing had failed. Any load that a save can outrun will eventually destroy the data.
         var state = PositionStore.Load(Say);
-        var saved = state.Open;
 
         // Completed flips come back too, so the running profit shown on the monitor is the profit for the
         // whole run of the bot rather than for whatever fraction of it this process happened to see.
@@ -644,6 +646,17 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
 
         if (_closed.Count > 0)
             Say($"  carried forward {_closed.Count} closed position(s), realised {_closed.Where(p => p.BasisKnown).Sum(p => p.Profit):N1}");
+
+        var rows = await ReadOrdersAsync();
+        if (rows is null || rows.Count == 0)
+        {
+            Say("  no order rows to adopt — keeping the carried-forward history");
+            return;
+        }
+
+        // The saved file knows what things cost; the menu knows what is still live. Both are needed, and the
+        // menu wins on existence — an order that filled while the process was down must not come back.
+        var saved = state.Open;
 
         foreach (var row in rows)
         {
@@ -2334,10 +2347,18 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                     profit = p.Profit,
                     basisKnown = p.BasisKnown,
 
-                    // Null for positions closed before this was recorded — the page renders those as "—"
-                    // rather than showing an invented time.
                     closedAt = p.ClosedAt,
-                    closedAgoMinutes = p.ClosedAt is { } t ? (DateTime.UtcNow - t).TotalMinutes : (double?)null
+                    closedAgoMinutes = p.ClosedAt is { } t ? (DateTime.UtcNow - t).TotalMinutes : (double?)null,
+
+                    // ClosedAt post-dates most of the ledger, so the exact figure above is null for every
+                    // flip recorded before it existed — which rendered the whole column as em-dashes and
+                    // made it look broken. The flip's own start IS known for those, and "closed some time
+                    // after it opened" is true and useful, so it is offered as a clearly-marked fallback
+                    // (the page prefixes it with ~) rather than being silently passed off as the real time.
+                    openedAgoMinutes = p.ClosedAt is null && (p.Opened != default ? p.Opened : p.LegStarted) is var o
+                                       && o != default
+                        ? (DateTime.UtcNow - o).TotalMinutes
+                        : (double?)null
                 }).ToList(),
 
             lastCloseAgoMinutes = closed
