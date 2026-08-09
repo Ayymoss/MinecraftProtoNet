@@ -168,6 +168,14 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
     /// invented profit on the chart. Positions closed before ClosedAt was recorded are skipped rather than
     /// dumped into the oldest bucket.
     /// </summary>
+    /// <summary>
+    /// When a flip finished, as well as we can know it. The recorded close time when there is one, otherwise
+    /// when the flip opened — which is wrong but bounded (a flip cannot close before it opens) and is enough
+    /// to put rows in the right order. Callers that must not present an estimate as fact check ClosedAt.
+    /// </summary>
+    private static DateTime EffectiveCloseTime(Position p) =>
+        p.ClosedAt ?? (p.Opened != default ? p.Opened : p.LegStarted);
+
     private static List<object> BuildPnlSeries(IEnumerable<Position> closed)
     {
         const int bucketMinutes = 30;
@@ -1641,6 +1649,14 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
             }
 
             position.Side = PositionSide.Closed;
+
+            // Set here as well as on the other two close paths. This one forgot it, and because it is the
+            // path a normal sell-out takes, almost nothing in the ledger ever carried a close time — which
+            // silently broke everything downstream that keys on it: the Closed table sorted arbitrarily
+            // (every row tied at DateTime.MinValue), the "last close" header ignored the newest flips, and
+            // BuildPnlSeries skipped every row, so the P&L sparkline had never once drawn a bar.
+            position.ClosedAt = DateTime.UtcNow;
+
             _closed.Add(position);
             Say($"  {position.Name}: CLOSED — bought {position.UnitsBought} for {position.CoinsSpent:N1}, " +
                 $"sold {position.UnitsSold} for {position.CoinsReceived:N1}, profit {position.Profit:N1}");
@@ -2328,13 +2344,17 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                 // Most recent first: the interesting flip is the one that just happened, and the card only
                 // shows a handful without scrolling.
                 //
-                // The tie-break carries the weight. Positions closed before ClosedAt existed are rehydrated
-                // from the state file with a null forever, so ordering on the timestamp alone left all of
-                // them tied and a stable sort kept them in INSERTION order — oldest at the top, newest buried
-                // at the bottom, which is the exact complaint the sort was added to fix. _closed is append-
-                // ordered, so falling back to a descending index restores newest-first for the unstamped ones.
+                // Ordered on an EFFECTIVE close time, not on ClosedAt.
+                //
+                // Keying on ClosedAt alone collapsed: flips recorded before that field existed have a null
+                // forever, so they all tied at DateTime.MinValue and the tie-break decided the whole table.
+                // With 204 of 205 rows tied the result was effectively arbitrary — after a state rebuild it
+                // came out alphabetical — and a row displaying "30m ago" could sit below one from yesterday.
+                // A flip always knows when it OPENED, and a flip cannot close before it opens, so that is a
+                // sound ordering key even when the exact close time is lost. Exactness is reported
+                // separately (see closedAgoMinutes vs openedAgoMinutes) so the cell can mark the estimate.
                 .Select((p, index) => (Position: p, Index: index))
-                .OrderByDescending(x => x.Position.ClosedAt ?? DateTime.MinValue)
+                .OrderByDescending(x => EffectiveCloseTime(x.Position))
                 .ThenByDescending(x => x.Index)
                 .Select(x => x.Position)
                 .Select(p => new
@@ -2361,11 +2381,19 @@ public sealed class BazaarPortfolioTask(BazaarSession session, HttpClient api, A
                         : (double?)null
                 }).ToList(),
 
+            // Reported over the SAME effective time the table is ordered by. Reading only exact ClosedAt made
+            // the header contradict the rows underneath it — "last close 16h ago" above a row showing 30m,
+            // because the newer flips were the ones missing a timestamp. lastCloseExact says whether the
+            // figure is a recorded close or an estimate, so the page can mark it rather than overstate it.
             lastCloseAgoMinutes = closed
-                .Where(p => p.ClosedAt is not null)
-                .Select(p => (double?)(DateTime.UtcNow - p.ClosedAt!.Value).TotalMinutes)
+                .Select(p => (double?)(DateTime.UtcNow - EffectiveCloseTime(p)).TotalMinutes)
                 .DefaultIfEmpty(null)
                 .Min(),
+
+            lastCloseExact = closed
+                .OrderByDescending(EffectiveCloseTime)
+                .Select(p => p.ClosedAt is not null)
+                .FirstOrDefault(),
 
             pnlSeries = BuildPnlSeries(closed),
 

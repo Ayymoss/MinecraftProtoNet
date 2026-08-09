@@ -460,8 +460,6 @@ async function tick() {
     }).join('') || '<tr><td colspan="5" class="muted">no trade history yet</td></tr>';
 
     const sum = d.closed.reduce((a,p) => a + (p.profit || 0), 0);
-    document.getElementById('closedsum').innerHTML =
-      d.closed.length ? `<span class="${cls(sum)}">${coins(sum)} total</span>` : '';
     // Already newest-first from the server, so no reverse() here — reversing it again buried the newest
     // flip at the bottom, which is the one worth seeing without scrolling.
     document.querySelector('#closed tbody').innerHTML = d.closed.map(p =>
@@ -472,8 +470,13 @@ async function tick() {
       + `<td class="num muted">${closedCell(p)}</td></tr>`).join('')
       || '<tr><td colspan="7" class="muted">none yet</td></tr>';
 
+    // One assignment, not two. The total was being written here and then immediately overwritten by the
+    // last-close line, so the figure was computed every tick and never seen. Both belong in the hint.
+    // The ~ marks a last-close time derived from when the flip opened, matching how the rows are marked.
     document.getElementById('closedsum').innerHTML = d.closed.length
-      ? `last close ${ago(d.lastCloseAgoMinutes)}` : '';
+      ? `<span class="${cls(sum)}">${coins(sum)} total</span> · last close `
+        + `${d.lastCloseExact === false ? '~' : ''}${ago(d.lastCloseAgoMinutes)}`
+      : '';
 
     drawSpark(d.pnlSeries || []);
 
