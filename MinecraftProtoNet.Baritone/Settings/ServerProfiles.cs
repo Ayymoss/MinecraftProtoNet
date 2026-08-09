@@ -14,11 +14,21 @@ namespace MinecraftProtoNet.Baritone.Settings;
 /// <param name="Name">Shown in logs so it is obvious which profile a run picked up.</param>
 /// <param name="AllowBreak">Whether Baritone may plan routes that require breaking a block.</param>
 /// <param name="AllowPlace">Whether Baritone may plan routes that require placing a block.</param>
+/// <param name="AllowSprint">
+/// Whether Baritone may sprint. Off on Hypixel, and this is a MITIGATION rather than a fix.
+///
+/// Setback diagnostics on 2026-08-09 show the server rejecting our position purely horizontally
+/// (dy=0.0000 on every event, so nothing to do with slabs or stairs) and hardest while sprinting: the
+/// worst case pulled us 0.42 blocks BACKWARDS against our direction of travel with input=[F+SPR].
+/// That is the signature of covering more ground per tick than the server accepts. The real fix is to
+/// find why our sprint displacement diverges; until then, not sprinting removes the largest rejections.
+/// </param>
 /// <param name="HostSuffixes">Host suffixes this profile claims; empty means it is the fallback.</param>
 public sealed record ServerProfile(
     string Name,
     bool AllowBreak,
     bool AllowPlace,
+    bool AllowSprint,
     IReadOnlyList<string> HostSuffixes)
 {
     public bool Matches(string host) =>
@@ -40,11 +50,12 @@ public static class ServerProfiles
     /// </summary>
     public static readonly IReadOnlyList<ServerProfile> Known =
     [
-        new("hypixel", AllowBreak: false, AllowPlace: false, ["hypixel.net"])
+        new("hypixel", AllowBreak: false, AllowPlace: false, AllowSprint: false, ["hypixel.net"])
     ];
 
     /// <summary>Vanilla behaviour, used for local servers and anything not listed.</summary>
-    public static readonly ServerProfile Default = new("default", AllowBreak: true, AllowPlace: true, []);
+    public static readonly ServerProfile Default =
+        new("default", AllowBreak: true, AllowPlace: true, AllowSprint: true, []);
 
     public static ServerProfile For(string? host) =>
         string.IsNullOrWhiteSpace(host)
@@ -59,5 +70,6 @@ public static class ServerProfiles
         var settings = BaritoneSettings.Settings();
         settings.AllowBreak.Value = profile.AllowBreak;
         settings.AllowPlace.Value = profile.AllowPlace;
+        settings.AllowSprint.Value = profile.AllowSprint;
     }
 }
