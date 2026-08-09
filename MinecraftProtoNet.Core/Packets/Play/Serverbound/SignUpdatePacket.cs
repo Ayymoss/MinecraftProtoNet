@@ -24,6 +24,13 @@ public class SignUpdatePacket : IServerboundPacket
 
         for (var i = 0; i < 4; i++)
         {
+            // Deliberately NOT clamped here — see MinecraftFont.TypedSignLine and the note below.
+            //
+            // Vanilla's width filter applies to the line the player is TYPING, not to the packet: the edit
+            // screen loads all four lines from the sign and sends back untouched ones exactly as they were
+            // (AbstractSignEditScreen.java:58 filters the text field; the other lines are never re-filtered).
+            // Clamping every line here would rewrite text the server itself put on the sign, which is its own
+            // divergence — in the opposite direction. Authored text is clamped at the point it is authored.
             buffer.WriteString(i < Lines.Length ? Lines[i] : "");
         }
     }
